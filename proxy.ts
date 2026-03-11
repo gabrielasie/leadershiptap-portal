@@ -8,6 +8,7 @@ export default clerkMiddleware(async (auth, request) => {
   }
 });
 
+// @ts-ignore - runtime: 'nodejs' required for experimental.nodeMiddleware
 export const config = {
   runtime: 'nodejs',
   matcher: [
