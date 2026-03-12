@@ -1,10 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import Link from 'next/link'
 import type { Meeting } from '@/lib/types'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import MeetingDetailModal from '@/components/MeetingDetailModal'
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso)
@@ -17,17 +16,11 @@ function formatDateTime(iso: string): string {
   })
 }
 
-function MeetingRow({
-  meeting,
-  onView,
-}: {
-  meeting: Meeting
-  onView: (m: Meeting) => void
-}) {
+function MeetingRow({ meeting, userId }: { meeting: Meeting; userId: string }) {
   return (
     <div className="flex items-center justify-between py-3 px-4 border-b last:border-b-0 min-h-[56px]">
       <div className="space-y-0.5">
-        <p className="font-medium text-sm">{meeting.title}</p>
+        <p className="font-medium text-sm">{meeting.title || 'Untitled Event'}</p>
         <p className="text-xs text-muted-foreground">{formatDateTime(meeting.startTime)}</p>
       </div>
       <div className="flex items-center gap-3 shrink-0 ml-4">
@@ -35,26 +28,15 @@ function MeetingRow({
           {meeting.participantEmails.length} participant
           {meeting.participantEmails.length !== 1 ? 's' : ''}
         </span>
-        <Button
-          variant="outline"
-          size="sm"
-          className="min-h-[44px]"
-          onClick={() => onView(meeting)}
-        >
-          View
+        <Button asChild variant="outline" size="sm" className="min-h-[44px]">
+          <Link href={`/users/${userId}/meetings/${meeting.id}`}>View</Link>
         </Button>
       </div>
     </div>
   )
 }
 
-function MeetingList({
-  meetings,
-  onView,
-}: {
-  meetings: Meeting[]
-  onView: (m: Meeting) => void
-}) {
+function MeetingList({ meetings, userId }: { meetings: Meeting[]; userId: string }) {
   if (meetings.length === 0) {
     return (
       <p className="py-10 text-center text-muted-foreground text-sm">
@@ -65,7 +47,7 @@ function MeetingList({
   return (
     <div className="rounded-md border">
       {meetings.map((m) => (
-        <MeetingRow key={m.id} meeting={m} onView={onView} />
+        <MeetingRow key={m.id} meeting={m} userId={userId} />
       ))}
     </div>
   )
@@ -74,11 +56,10 @@ function MeetingList({
 interface MeetingsSectionProps {
   upcoming: Meeting[]
   past: Meeting[]
+  userId: string
 }
 
-export default function MeetingsSection({ upcoming, past }: MeetingsSectionProps) {
-  const [selected, setSelected] = useState<Meeting | null>(null)
-
+export default function MeetingsSection({ upcoming, past, userId }: MeetingsSectionProps) {
   return (
     <div>
       <h2 className="text-lg font-semibold mb-3">Meetings</h2>
@@ -92,14 +73,12 @@ export default function MeetingsSection({ upcoming, past }: MeetingsSectionProps
           </TabsTrigger>
         </TabsList>
         <TabsContent value="upcoming">
-          <MeetingList meetings={upcoming} onView={setSelected} />
+          <MeetingList meetings={upcoming} userId={userId} />
         </TabsContent>
         <TabsContent value="past">
-          <MeetingList meetings={past} onView={setSelected} />
+          <MeetingList meetings={past} userId={userId} />
         </TabsContent>
       </Tabs>
-
-      <MeetingDetailModal meeting={selected} onClose={() => setSelected(null)} />
     </div>
   )
 }

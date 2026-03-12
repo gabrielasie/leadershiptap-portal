@@ -60,8 +60,8 @@ export default function MeetingDetailModal({ meeting, onClose }: MeetingDetailMo
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
                   Transcript / Notes
                 </h3>
-                {meeting.syncedSummary ? (
-                  <p className="text-sm whitespace-pre-wrap">{meeting.syncedSummary}</p>
+                {meeting.notes ? (
+                  <p className="text-sm whitespace-pre-wrap">{meeting.notes}</p>
                 ) : (
                   <p className="text-sm text-muted-foreground italic">
                     Not yet available.

@@ -26,9 +26,17 @@ export interface Meeting {
   title: string;
   startTime: string; // ISO 8601
   endTime?: string;
+  senderEmail?: string;
   participantEmails: string[];
-  coachEmail?: string;
   notes?: string;
-  recordingUrl?: string;
-  syncedSummary?: string;
+}
+
+export interface Message {
+  id: string;
+  messageName: string;
+  subject?: string;
+  body?: string;
+  status: 'Pending' | 'Sent';
+  created?: string;
+  meetingId?: string; // first linked Calendar Events record ID
 }

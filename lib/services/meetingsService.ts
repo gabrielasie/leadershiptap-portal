@@ -1,4 +1,4 @@
-import { getMeetingsByUserEmail } from "@/lib/airtable/meetings";
+import { getMeetingsByUserEmail, getMeetingById, updateMeetingFields } from "@/lib/airtable/meetings";
 import type { Meeting } from "@/lib/types";
 
 interface SplitMeetings {
@@ -23,4 +23,12 @@ export async function getMeetingsForUser(userEmail: string): Promise<SplitMeetin
   }
 
   return { upcoming, past };
+}
+
+export async function getMeetingDetail(meetingId: string): Promise<Meeting | null> {
+  return getMeetingById(meetingId);
+}
+
+export async function updateMeetingNotes(meetingId: string, notes: string): Promise<void> {
+  return updateMeetingFields(meetingId, { Notes: notes });
 }
