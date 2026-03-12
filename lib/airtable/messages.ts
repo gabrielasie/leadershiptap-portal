@@ -11,6 +11,9 @@ function getCredentials() {
 
 function mapRecord(record: { id: string; fields: Record<string, unknown> }): Message {
   const meetingLinks = record.fields["Meeting"] as string[] | undefined;
+  // The linked Users field name is unconfirmed — capture whichever key holds an array of rec IDs
+  // that isn't "Meeting". Once the debug route reveals the exact name, update the key below.
+  const userLinks = (record.fields["Users"] ?? record.fields["User"] ?? []) as string[];
   return {
     id: record.id,
     messageName: (record.fields["Message Name"] as string) ?? "",
@@ -19,6 +22,7 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Mes
     status: ((record.fields["Status"] as string) === "Sent" ? "Sent" : "Pending"),
     created: record.fields["Created"] as string | undefined,
     meetingId: meetingLinks?.[0],
+    userIds: userLinks,
   };
 }
 
@@ -70,12 +74,9 @@ export async function updateMessage(
   return mapRecord(data);
 }
 
-export async function getMessagesByMeeting(meetingId: string): Promise<Message[]> {
-  const { apiKey, baseId } = getCredentials();
-  // Filter by the linked meeting record ID
-  const formula = encodeURIComponent(`SEARCH("${meetingId}", ARRAYJOIN({Meeting}))`)
+async function getAllMessages(apiKey: string, baseId: string): Promise<Message[]> {
   const res = await fetch(
-    `${API_BASE}/${baseId}/Messages?filterByFormula=${formula}&sort%5B0%5D%5Bfield%5D=Created&sort%5B0%5D%5Bdirection%5D=desc`,
+    `${API_BASE}/${baseId}/Messages?sort%5B0%5D%5Bfield%5D=Created&sort%5B0%5D%5Bdirection%5D=desc`,
     { headers: { Authorization: `Bearer ${apiKey}` } }
   );
   if (!res.ok) {
@@ -86,17 +87,14 @@ export async function getMessagesByMeeting(meetingId: string): Promise<Message[]
   return (data.records ?? []).map(mapRecord);
 }
 
+export async function getMessagesByMeeting(meetingId: string): Promise<Message[]> {
+  const { apiKey, baseId } = getCredentials();
+  const all = await getAllMessages(apiKey, baseId);
+  return all.filter((m) => m.meetingId === meetingId);
+}
+
 export async function getMessagesByUser(userId: string): Promise<Message[]> {
   const { apiKey, baseId } = getCredentials();
-  const formula = encodeURIComponent(`SEARCH("${userId}", ARRAYJOIN({Users}))`)
-  const res = await fetch(
-    `${API_BASE}/${baseId}/Messages?filterByFormula=${formula}&sort%5B0%5D%5Bfield%5D=Created&sort%5B0%5D%5Bdirection%5D=desc`,
-    { headers: { Authorization: `Bearer ${apiKey}` } }
-  );
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Airtable GET failed: ${text}`);
-  }
-  const data = await res.json();
-  return (data.records ?? []).map(mapRecord);
+  const all = await getAllMessages(apiKey, baseId);
+  return all.filter((m) => (m.userIds ?? []).includes(userId));
 }

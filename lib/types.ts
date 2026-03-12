@@ -39,4 +39,5 @@ export interface Message {
   status: 'Pending' | 'Sent';
   created?: string;
   meetingId?: string; // first linked Calendar Events record ID
+  userIds?: string[];  // linked Users record IDs
 }
