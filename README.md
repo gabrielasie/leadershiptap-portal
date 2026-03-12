@@ -1,36 +1,114 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LeadershipTap Portal
+
+An internal coaching portal for a small leadership team. Built with Next.js, Clerk authentication, and Airtable as the data source.
+
+## Stack
+
+- **Framework**: Next.js 16 (App Router, TypeScript)
+- **Auth**: Clerk (Microsoft 365 / Google SSO)
+- **Data**: Airtable (server-side only — API key never exposed to browser)
+- **UI**: Tailwind CSS + shadcn/ui
+- **Hosting**: Vercel
+
+## Prerequisites
+
+- Node.js 18+
+- A [Clerk](https://clerk.com) account with an application created
+- An [Airtable](https://airtable.com) account with the LeadershipTap base and a Personal Access Token
 
 ## Getting Started
 
-First, run the development server:
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/gabrielasie/leadershiptap-portal.git
+cd leadershiptap-portal
+```
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+### 3. Set up environment variables
+
+Create a `.env.local` file in the project root:
+
+```env
+# Airtable
+AIRTABLE_API_KEY=pat...          # Personal Access Token (starts with "pat")
+AIRTABLE_BASE_ID=app...          # Base ID from Airtable URL (starts with "app")
+
+# Clerk
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/users
+NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/users
+```
+
+**Where to find these values:**
+- Airtable token: [airtable.com/create/tokens](https://airtable.com/create/tokens) — create a token with `data.records:read`, `data.records:write`, `schema.bases:read` scopes
+- Airtable Base ID: found in your base URL → `airtable.com/YOUR_BASE_ID/...`
+- Clerk keys: Clerk Dashboard → your app → API Keys
+
+### 4. Run the development server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). You will be redirected to `/sign-in`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+app/
+├── (protected)/          # Auth-protected routes
+│   ├── layout.tsx        # Server-side auth check via Clerk
+│   ├── users/
+│   │   ├── page.tsx      # Users directory
+│   │   └── [id]/
+│   │       └── page.tsx  # User detail + meetings
+├── sign-in/[[...sign-in]]/
+│   └── page.tsx
+├── sign-up/[[...sign-up]]/
+│   └── page.tsx
+└── page.tsx              # Redirects to /users
 
-## Learn More
+lib/
+├── airtable/             # Low-level Airtable fetch functions
+│   ├── users.ts
+│   └── meetings.ts
+└── services/             # Business logic layer
+    ├── usersService.ts
+    └── meetingsService.ts
 
-To learn more about Next.js, take a look at the following resources:
+proxy.ts                  # Clerk auth middleware
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## What's Working (Week 3)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- ✅ Clerk authentication (sign in / sign out)
+- ✅ Protected routes — unauthenticated users redirected to sign-in
+- ✅ Users Directory page — pulls live data from Airtable
+- ✅ User Detail page — shows profile fields from Airtable
+- ✅ Meetings section — fetches Calendar Events from Airtable
+- ✅ Deployed to Vercel (staging)
 
-## Deploy on Vercel
+## What's Next (Week 4)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Meeting Detail view
+- Filter/search on Users Directory
+- Microsoft 365 SSO configuration
+- Polish UI with shadcn/ui components
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deployment
+
+The app is deployed to Vercel and auto-deploys on every push to `main`.
+
+Staging URL: [leadershiptap-portal.vercel.app](https://leadershiptap-portal.vercel.app)
+
+Remember to add all `.env.local` variables to Vercel → Settings → Environment Variables.
