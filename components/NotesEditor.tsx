@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
 
 interface NotesEditorProps {
   meetingId: string
@@ -30,36 +29,52 @@ export default function NotesEditor({ meetingId, userId, initialNotes, saveActio
 
   if (!editing && value) {
     return (
-      <div className="space-y-2">
-        <div className="rounded-md border bg-muted/40 p-4 text-sm whitespace-pre-wrap">
-          {value}
+      <div className="space-y-3">
+        <div className="relative">
+          <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+            {value}
+          </div>
+          <button
+            onClick={() => { setEditing(true); setStatus('idle') }}
+            className="absolute top-2 right-2 text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+          >
+            Edit
+          </button>
         </div>
-        <Button variant="outline" size="sm" onClick={() => { setEditing(true); setStatus('idle') }}>
-          Edit
-        </Button>
       </div>
     )
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <textarea
-        className="w-full rounded-md border bg-background p-3 text-sm resize-y min-h-[160px] focus:outline-none focus:ring-2 focus:ring-ring"
+        className="w-full rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm resize-y min-h-[160px] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
         placeholder="Paste transcript or notes here..."
         value={value}
         onChange={(e) => setValue(e.target.value)}
       />
       <div className="flex items-center gap-3">
-        <Button size="sm" onClick={handleSave} disabled={status === 'saving'}>
+        <button
+          onClick={handleSave}
+          disabled={status === 'saving'}
+          className="bg-slate-900 text-white hover:bg-slate-800 h-9 px-4 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+        >
           {status === 'saving' ? 'Saving…' : 'Save Notes'}
-        </Button>
+        </button>
         {initialNotes && (
-          <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setValue(initialNotes); setStatus('idle') }}>
+          <button
+            onClick={() => { setEditing(false); setValue(initialNotes); setStatus('idle') }}
+            className="text-gray-500 hover:text-gray-700 h-9 px-3 rounded-lg text-sm transition-colors"
+          >
             Cancel
-          </Button>
+          </button>
         )}
-        {status === 'saved' && <span className="text-sm text-green-600">Saved ✓</span>}
-        {status === 'error' && <span className="text-sm text-destructive">{errorMsg}</span>}
+        {status === 'saved' && (
+          <span className="text-sm text-emerald-600 font-medium">Saved ✓</span>
+        )}
+        {status === 'error' && (
+          <span className="text-sm text-red-500">{errorMsg}</span>
+        )}
       </div>
     </div>
   )

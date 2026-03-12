@@ -1,6 +1,6 @@
 import Link from 'next/link'
+import { Mail } from 'lucide-react'
 import type { Message } from '@/lib/types'
-import { Badge } from '@/components/ui/badge'
 
 interface MessageHistoryProps {
   messages: Message[]
@@ -15,30 +15,39 @@ function formatDate(iso: string): string {
   })
 }
 
+function StatusBadge({ status }: { status: 'Pending' | 'Sent' }) {
+  if (status === 'Sent') {
+    return (
+      <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200 shrink-0">
+        Sent
+      </span>
+    )
+  }
+  return (
+    <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200 shrink-0">
+      Pending
+    </span>
+  )
+}
+
 function MessageRow({ msg, userId }: { msg: Message; userId: string }) {
+  const subject = msg.subject ?? msg.messageName
+  const preview = msg.body ? msg.body.slice(0, 120) + (msg.body.length > 120 ? '…' : '') : null
+
   const inner = (
-    <div className="px-4 py-3 space-y-1">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium truncate">{msg.subject ?? msg.messageName}</p>
-        <Badge
-          variant="secondary"
-          className={
-            msg.status === 'Sent'
-              ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-100 shrink-0'
-              : 'bg-gray-100 text-gray-600 border-gray-200 shrink-0'
-          }
-        >
-          {msg.status}
-        </Badge>
+    <div className="px-4 py-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-gray-900 truncate">{subject}</p>
+          {msg.created && (
+            <p className="text-xs text-gray-400 mt-0.5">{formatDate(msg.created)}</p>
+          )}
+          {preview && (
+            <p className="text-xs text-gray-500 mt-1 line-clamp-1">{preview}</p>
+          )}
+        </div>
+        <StatusBadge status={msg.status} />
       </div>
-      {msg.created && (
-        <p className="text-xs text-muted-foreground">{formatDate(msg.created)}</p>
-      )}
-      {msg.body && (
-        <p className="text-xs text-muted-foreground">
-          {msg.body.slice(0, 80)}{msg.body.length > 80 ? '…' : ''}
-        </p>
-      )}
     </div>
   )
 
@@ -46,7 +55,7 @@ function MessageRow({ msg, userId }: { msg: Message; userId: string }) {
     return (
       <Link
         href={`/users/${userId}/meetings/${msg.meetingId}`}
-        className="block hover:bg-muted/40 transition-colors"
+        className="block"
       >
         {inner}
       </Link>
@@ -59,11 +68,14 @@ function MessageRow({ msg, userId }: { msg: Message; userId: string }) {
 export default function MessageHistory({ messages, userId }: MessageHistoryProps) {
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-3">Message History</h2>
+      <h2 className="text-lg font-semibold text-gray-900 mb-4">Message History</h2>
       {messages.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No messages yet.</p>
+        <div className="bg-white rounded-xl border border-gray-200 py-10 text-center">
+          <Mail className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+          <p className="text-sm text-gray-400">No messages yet.</p>
+        </div>
       ) : (
-        <div className="rounded-md border divide-y">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {messages.map((msg) => (
             <MessageRow key={msg.id} msg={msg} userId={userId} />
           ))}

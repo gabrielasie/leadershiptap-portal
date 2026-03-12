@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
 import MessageEditor from '@/components/MessageEditor'
 import type { Message } from '@/lib/types'
 
@@ -59,10 +58,14 @@ export default function FollowUpSection({
   if (!message) {
     return (
       <div className="space-y-2">
-        <Button size="sm" onClick={handleCreate} disabled={creating}>
+        <button
+          onClick={handleCreate}
+          disabled={creating}
+          className="bg-slate-900 text-white hover:bg-slate-800 h-9 px-4 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+        >
           {creating ? 'Creating…' : 'Create follow-up draft'}
-        </Button>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        </button>
+        {error && <p className="text-sm text-red-500">{error}</p>}
       </div>
     )
   }

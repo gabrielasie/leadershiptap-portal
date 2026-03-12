@@ -15,8 +15,8 @@ export default async function UserDetailPage({ params }: Props) {
 
   if (!user) {
     return (
-      <div className="p-6 max-w-5xl mx-auto">
-        <p className="text-muted-foreground">User not found.</p>
+      <div className="p-8 max-w-5xl mx-auto">
+        <p className="text-gray-500">User not found.</p>
       </div>
     )
   }
@@ -28,7 +28,7 @@ export default async function UserDetailPage({ params }: Props) {
   ])
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-8 max-w-5xl mx-auto space-y-6">
       <UserProfile user={user} />
       <MeetingsSection upcoming={upcoming} past={past} userId={id} />
       <MessageHistory messages={messages} userId={id} />

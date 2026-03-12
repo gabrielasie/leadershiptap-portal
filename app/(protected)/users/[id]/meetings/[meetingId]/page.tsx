@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 import { notFound } from 'next/navigation'
 import { getUserById } from '@/lib/services/usersService'
 import { getMeetingDetail } from '@/lib/services/meetingsService'
@@ -35,46 +36,46 @@ export default async function MeetingDetailPage({ params }: Props) {
   const userName = user?.fullName ?? user?.preferredName ?? user?.firstName ?? 'User'
   const existingMessage = messages[0] ?? null
 
+  const formattedDate = meeting.endTime
+    ? `${formatDateTime(meeting.startTime)} – ${new Date(meeting.endTime).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
+    : formatDateTime(meeting.startTime)
+
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-8">
+    <div className="p-8 max-w-3xl mx-auto">
       {/* Back link */}
       <Link
         href={`/users/${id}`}
-        className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors mb-6"
       >
-        ← Back to {userName}
+        <ArrowLeft className="h-4 w-4" />
+        Back to {userName}
       </Link>
 
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">{meeting.title || 'Untitled Event'}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {meeting.endTime
-            ? `${formatDateTime(meeting.startTime)} – ${new Date(meeting.endTime).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
-            : formatDateTime(meeting.startTime)}
-        </p>
-      </div>
-
-      {/* Participants */}
-      <section>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-          Participants
-        </h2>
-        {meeting.participantEmails.length > 0 ? (
-          <p className="text-sm">{meeting.participantEmails.join(', ')}</p>
-        ) : (
-          <p className="text-sm text-muted-foreground">No participants listed.</p>
+      {/* Meeting header card */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+        <h1 className="text-xl font-bold text-gray-900">{meeting.title || 'Untitled Event'}</h1>
+        <p className="text-sm text-gray-500 mt-1">{formattedDate}</p>
+        {/* Participant chips */}
+        {meeting.participantEmails.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-4">
+            {meeting.participantEmails.map((email) => (
+              <span
+                key={email}
+                className="inline-flex items-center px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 text-xs"
+              >
+                {email}
+              </span>
+            ))}
+          </div>
         )}
         {meeting.senderEmail && (
-          <p className="text-xs text-muted-foreground mt-2">
-            Organiser: {meeting.senderEmail}
-          </p>
+          <p className="text-xs text-gray-400 mt-3">Organiser: {meeting.senderEmail}</p>
         )}
-      </section>
+      </div>
 
-      {/* Notes & Transcript */}
-      <section>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+      {/* Notes section */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
           Notes &amp; Transcript
         </h2>
         <NotesEditor
@@ -83,11 +84,11 @@ export default async function MeetingDetailPage({ params }: Props) {
           initialNotes={meeting.notes}
           saveAction={saveNotes}
         />
-      </section>
+      </div>
 
-      {/* Follow-up Message */}
-      <section>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+      {/* Follow-up Message section */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
           Follow-up Message
         </h2>
         <FollowUpSection
@@ -101,7 +102,7 @@ export default async function MeetingDetailPage({ params }: Props) {
           updateDraftAction={updateDraft}
           markSentAction={markSent}
         />
-      </section>
+      </div>
     </div>
   )
 }
