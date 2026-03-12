@@ -62,7 +62,7 @@ export default function UserProfile({ user }: UserProfileProps) {
             {initStr}
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{name}</h1>
+            <h1 className="text-2xl font-bold text-gray-900" style={{ fontFamily: 'var(--font-plus-jakarta-sans)' }}>{name}</h1>
             {user.jobTitle && (
               <p className="text-gray-500 mt-0.5">{user.jobTitle}</p>
             )}

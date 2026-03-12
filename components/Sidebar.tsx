@@ -18,7 +18,7 @@ export default function Sidebar() {
           <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
             L
           </div>
-          <span className="font-bold text-gray-900 text-sm">LeadershipTap</span>
+          <span className="font-bold text-gray-900 text-lg" style={{ fontFamily: 'var(--font-plus-jakarta-sans)' }}>LeadershipTap</span>
         </Link>
       </div>
 

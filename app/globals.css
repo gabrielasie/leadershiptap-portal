@@ -122,8 +122,12 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-inter), sans-serif;
   }
   html {
     @apply font-sans;
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-plus-jakarta-sans), sans-serif;
   }
 }

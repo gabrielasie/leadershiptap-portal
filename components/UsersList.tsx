@@ -97,7 +97,7 @@ export default function UsersList({ users }: UsersListProps) {
                   </div>
                 </div>
                 <div className="mt-4 flex justify-end">
-                  <span className="text-xs text-indigo-600 font-medium group-hover:underline">
+                  <span className="text-xs text-indigo-600 font-semibold group-hover:underline tracking-wide">
                     View Profile →
                   </span>
                 </div>
