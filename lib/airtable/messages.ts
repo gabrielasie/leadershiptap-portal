@@ -21,6 +21,7 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Mes
     body: record.fields["AI Generated Message Content"] as string | undefined,
     status: ((record.fields["Status"] as string) === "Sent" ? "Sent" : "Pending"),
     created: record.fields["Created"] as string | undefined,
+    sentAt: record.fields["Sent At"] as string | undefined,
     meetingId: meetingLinks?.[0],
     userIds: userLinks,
   };
@@ -55,6 +56,7 @@ export async function updateMessage(
     Subject?: string;
     "AI Generated Message Content"?: string;
     Status?: "Pending" | "Sent";
+    "Sent At"?: string;
   }
 ): Promise<Message> {
   const { apiKey, baseId } = getCredentials();

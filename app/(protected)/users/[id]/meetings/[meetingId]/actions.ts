@@ -38,30 +38,26 @@ export async function createDraft(
 }
 
 export async function updateDraft(
-  userId: string,
-  meetingId: string,
   messageId: string,
   subject: string,
   body: string
-): Promise<ActionResult<Message>> {
+): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    const message = await updateDraftContent(messageId, subject, body)
-    revalidatePath(`/users/${userId}/meetings/${meetingId}`)
-    return { ok: true, data: message }
+    await updateDraftContent(messageId, subject, body)
+    revalidatePath('/users', 'layout')
+    return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Unknown error' }
   }
 }
 
 export async function markSent(
-  userId: string,
-  meetingId: string,
   messageId: string
-): Promise<ActionResult<Message>> {
+): Promise<{ ok: true; sentAt: string } | { ok: false; error: string }> {
   try {
     const message = await markMessageSent(messageId)
-    revalidatePath(`/users/${userId}/meetings/${meetingId}`)
-    return { ok: true, data: message }
+    revalidatePath('/users', 'layout')
+    return { ok: true, sentAt: message.sentAt ?? new Date().toISOString() }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Unknown error' }
   }

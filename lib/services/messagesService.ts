@@ -52,5 +52,5 @@ export async function updateDraftContent(
 }
 
 export async function markMessageSent(messageId: string): Promise<Message> {
-  return updateMessage(messageId, { Status: "Sent" });
+  return updateMessage(messageId, { Status: "Sent", "Sent At": new Date().toISOString() });
 }

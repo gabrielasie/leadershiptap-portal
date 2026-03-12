@@ -19,18 +19,14 @@ interface FollowUpSectionProps {
     startTime: string,
     participantEmails: string[]
   ) => Promise<{ ok: true; data: Message } | { ok: false; error: string }>
-  updateAction: (
-    userId: string,
-    meetingId: string,
+  updateDraftAction: (
     messageId: string,
     subject: string,
     body: string
-  ) => Promise<{ ok: true; data: Message } | { ok: false; error: string }>
+  ) => Promise<{ ok: true } | { ok: false; error: string }>
   markSentAction: (
-    userId: string,
-    meetingId: string,
     messageId: string
-  ) => Promise<{ ok: true; data: Message } | { ok: false; error: string }>
+  ) => Promise<{ ok: true; sentAt: string } | { ok: false; error: string }>
 }
 
 export default function FollowUpSection({
@@ -41,7 +37,7 @@ export default function FollowUpSection({
   startTime,
   participantEmails,
   createAction,
-  updateAction,
+  updateDraftAction,
   markSentAction,
 }: FollowUpSectionProps) {
   const [message, setMessage] = useState<Message | null>(initialMessage)
@@ -73,10 +69,12 @@ export default function FollowUpSection({
 
   return (
     <MessageEditor
-      message={message}
-      userId={userId}
-      meetingId={meetingId}
-      updateAction={updateAction}
+      messageId={message.id}
+      initialSubject={message.subject ?? ''}
+      initialBody={message.body ?? ''}
+      initialStatus={message.status}
+      initialSentAt={message.sentAt}
+      updateDraftAction={updateDraftAction}
       markSentAction={markSentAction}
     />
   )

@@ -11,15 +11,15 @@ interface Props {
   params: Promise<{ id: string; meetingId: string }>
 }
 
+// Formats as "Mon 14 Apr 2025, 22:00"
 function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+  const d = new Date(iso)
+  const weekday = d.toLocaleString('en-GB', { weekday: 'short' })
+  const day = d.getDate()
+  const month = d.toLocaleString('en-GB', { month: 'short' })
+  const year = d.getFullYear()
+  const time = d.toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
+  return `${weekday} ${day} ${month} ${year}, ${time}`
 }
 
 export default async function MeetingDetailPage({ params }: Props) {
@@ -32,7 +32,7 @@ export default async function MeetingDetailPage({ params }: Props) {
 
   if (!meeting) notFound()
 
-  const userName = user?.preferredName ?? user?.firstName ?? user?.fullName ?? 'User'
+  const userName = user?.fullName ?? user?.preferredName ?? user?.firstName ?? 'User'
   const existingMessage = messages[0] ?? null
 
   return (
@@ -49,8 +49,9 @@ export default async function MeetingDetailPage({ params }: Props) {
       <div>
         <h1 className="text-2xl font-bold">{meeting.title || 'Untitled Event'}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {formatDateTime(meeting.startTime)}
-          {meeting.endTime && ` — ${formatDateTime(meeting.endTime)}`}
+          {meeting.endTime
+            ? `${formatDateTime(meeting.startTime)} – ${new Date(meeting.endTime).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
+            : formatDateTime(meeting.startTime)}
         </p>
       </div>
 
@@ -60,11 +61,7 @@ export default async function MeetingDetailPage({ params }: Props) {
           Participants
         </h2>
         {meeting.participantEmails.length > 0 ? (
-          <ul className="space-y-1">
-            {meeting.participantEmails.map((email) => (
-              <li key={email} className="text-sm">{email}</li>
-            ))}
-          </ul>
+          <p className="text-sm">{meeting.participantEmails.join(', ')}</p>
         ) : (
           <p className="text-sm text-muted-foreground">No participants listed.</p>
         )}
@@ -101,7 +98,7 @@ export default async function MeetingDetailPage({ params }: Props) {
           startTime={meeting.startTime}
           participantEmails={meeting.participantEmails}
           createAction={createDraft}
-          updateAction={updateDraft}
+          updateDraftAction={updateDraft}
           markSentAction={markSent}
         />
       </section>
