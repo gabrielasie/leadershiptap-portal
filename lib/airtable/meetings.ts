@@ -29,6 +29,13 @@ function mapRecord(record: { id: string; fields: MeetingFields }): Meeting {
   };
 }
 
+export async function getAllMeetings(): Promise<Meeting[]> {
+  const records = await base<MeetingFields>("Calendar Events")
+    .select({ sort: [{ field: "StartTime", direction: "desc" }] })
+    .all();
+  return records.map(mapRecord);
+}
+
 export async function getMeetingsByUserEmail(email: string): Promise<Meeting[]> {
   const records = await base<MeetingFields>("Calendar Events")
     .select({

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Users } from 'lucide-react'
+import { Users, Calendar } from 'lucide-react'
 import { UserButton } from '@clerk/nextjs'
 
 export default function Sidebar() {
@@ -24,6 +24,17 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1">
+        <Link
+          href="/meetings"
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+            isActive('/meetings')
+              ? 'bg-indigo-50 text-indigo-700 font-medium'
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <Calendar className="h-4 w-4 flex-shrink-0" />
+          Meetings
+        </Link>
         <Link
           href="/users"
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
