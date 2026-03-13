@@ -29,18 +29,24 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Mes
 
 export async function createMessage(fields: {
   "Message Name": string;
-  Subject?: string;
-  "AI Generated Message Content"?: string;
-  Status?: "Pending" | "Sent";
+  Subject: string;
+  "AI Generated Message Content": string;
+  Status: "Pending" | "Sent";
 }): Promise<Message> {
   const { apiKey, baseId } = getCredentials();
+  // Ensure body is always a plain string — never undefined or a complex template
+  const safeFields = {
+    ...fields,
+    "AI Generated Message Content": fields["AI Generated Message Content"] ?? "",
+    Status: fields.Status ?? "Pending",
+  };
   const res = await fetch(`${API_BASE}/${baseId}/Messages`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ fields }),
+    body: JSON.stringify({ fields: safeFields }),
   });
   if (!res.ok) {
     const text = await res.text();

@@ -27,7 +27,7 @@ export async function createFollowUpDraft(
   return createMessage({
     "Message Name": messageName,
     Subject: `Follow-up: ${eventName}`,
-    "AI Generated Message Content": `Hi ${firstName},\n\nThank you for our meeting on ${date}.\n\nKey takeaways:\n- \n\nNext steps:\n- \n\nBest regards`,
+    "AI Generated Message Content": "",
     Status: "Pending",
   });
 }
