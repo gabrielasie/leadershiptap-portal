@@ -3,7 +3,12 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Users, Calendar } from 'lucide-react'
-import { UserButton } from '@clerk/nextjs'
+import dynamic from 'next/dynamic'
+
+const UserButton = dynamic(
+  () => import('@clerk/nextjs').then((mod) => mod.UserButton),
+  { ssr: false }
+)
 
 export default function Sidebar() {
   const pathname = usePathname()
