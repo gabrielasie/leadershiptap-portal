@@ -81,7 +81,7 @@ export async function updateMessage(
 async function getAllMessages(apiKey: string, baseId: string): Promise<Message[]> {
   const res = await fetch(
     `${API_BASE}/${baseId}/Messages?sort%5B0%5D%5Bfield%5D=Created&sort%5B0%5D%5Bdirection%5D=desc`,
-    { headers: { Authorization: `Bearer ${apiKey}` } }
+    { headers: { Authorization: `Bearer ${apiKey}` }, next: { revalidate: 60 } }
   );
   if (!res.ok) {
     const text = await res.text();

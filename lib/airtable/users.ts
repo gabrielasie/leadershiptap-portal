@@ -1,52 +1,54 @@
-import base from "./client";
 import type { User } from "@/lib/types";
-import type { FieldSet } from "airtable";
 
-interface UserFields extends FieldSet {
-  "Full Name"?: string;
-  "Preferred Name"?: string;
-  "First Name"?: string;
-  "Last Name"?: string;
-  Email: string;
-  "Work Email"?: string;
-  "Job Title"?: string;
-  Role?: string;
-  "Company ID"?: string;
-  "Company Name"?: string;
-  "Avatar URL"?: string;
-  Enneagram?: string;
-  MBTI?: string;
+const API_BASE = "https://api.airtable.com/v0";
+
+function getCredentials() {
+  const apiKey = process.env.AIRTABLE_API_KEY;
+  const baseId = process.env.AIRTABLE_BASE_ID;
+  if (!apiKey || !baseId) throw new Error("Missing Airtable credentials");
+  return { apiKey, baseId };
 }
 
-function mapRecord(record: { id: string; fields: UserFields }): User {
+function mapRecord(record: { id: string; fields: Record<string, unknown> }): User {
   return {
     id: record.id,
-    fullName: record.fields["Full Name"],
-    preferredName: record.fields["Preferred Name"],
-    firstName: record.fields["First Name"],
-    lastName: record.fields["Last Name"],
-    email: record.fields["Email"] ?? "",
-    workEmail: record.fields["Work Email"],
-    jobTitle: record.fields["Job Title"],
-    role: record.fields["Role"],
-    companyId: record.fields["Company ID"],
-    companyName: record.fields["Company Name"],
-    avatarUrl: record.fields["Avatar URL"],
-    enneagram: record.fields["Enneagram"],
-    mbti: record.fields["MBTI"],
+    fullName: record.fields["Full Name"] as string | undefined,
+    preferredName: record.fields["Preferred Name"] as string | undefined,
+    firstName: record.fields["First Name"] as string | undefined,
+    lastName: record.fields["Last Name"] as string | undefined,
+    email: (record.fields["Email"] as string) ?? "",
+    workEmail: record.fields["Work Email"] as string | undefined,
+    jobTitle: record.fields["Job Title"] as string | undefined,
+    role: record.fields["Role"] as string | undefined,
+    companyId: record.fields["Company ID"] as string | undefined,
+    companyName: record.fields["Company Name"] as string | undefined,
+    avatarUrl: record.fields["Avatar URL"] as string | undefined,
+    enneagram: record.fields["Enneagram"] as string | undefined,
+    mbti: record.fields["MBTI"] as string | undefined,
   };
 }
 
 export async function getAllUsers(): Promise<User[]> {
-  const records = await base<UserFields>("Users").select().all();
-  return records.map(mapRecord);
+  const { apiKey, baseId } = getCredentials();
+  const res = await fetch(`${API_BASE}/${baseId}/Users`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    next: { revalidate: 60 },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Airtable GET failed: ${text}`);
+  }
+  const data = await res.json();
+  return (data.records ?? []).map(mapRecord);
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  try {
-    const record = await base<UserFields>("Users").find(id);
-    return mapRecord(record);
-  } catch {
-    return null;
-  }
+  const { apiKey, baseId } = getCredentials();
+  const res = await fetch(`${API_BASE}/${baseId}/Users/${id}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    next: { revalidate: 60 },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return mapRecord(data);
 }
