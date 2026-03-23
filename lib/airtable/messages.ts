@@ -11,17 +11,15 @@ function getCredentials() {
 
 function mapRecord(record: { id: string; fields: Record<string, unknown> }): Message {
   const meetingLinks = record.fields["Meeting"] as string[] | undefined;
-  // The linked Users field name is unconfirmed — capture whichever key holds an array of rec IDs
-  // that isn't "Meeting". Once the debug route reveals the exact name, update the key below.
-  const userLinks = (record.fields["Users"] ?? record.fields["User"] ?? []) as string[];
+  const userLinks = (record.fields["Client"] ?? []) as string[];
   return {
     id: record.id,
     messageName: (record.fields["Message Name"] as string) ?? "",
     subject: record.fields["Subject"] as string | undefined,
-    body: record.fields["AI Generated Message Content"] as string | undefined,
+    body: record.fields["Draft Content"] as string | undefined,
     status: ((record.fields["Status"] as string) === "Sent" ? "Sent" : "Pending"),
     created: record.fields["Created"] as string | undefined,
-    sentAt: record.fields["Sent At"] as string | undefined,
+    sentAt: record.fields["Sent Date"] as string | undefined,
     meetingId: meetingLinks?.[0],
     userIds: userLinks,
   };
@@ -31,10 +29,11 @@ export async function createMessage(fields: {
   "Message Name": string;
   Subject: string;
   Status: "Pending" | "Sent";
+  "Client"?: string[];
 }): Promise<Message> {
   const { apiKey, baseId } = getCredentials();
   // Only send writable scalar fields on creation.
-  // "AI Generated Message Content" is omitted — Airtable rejects empty strings
+  // "Draft Content" is omitted — Airtable rejects empty strings
   // for this field type. Coaches fill it in via updateMessage (PATCH) after creation.
   const res = await fetch(`${API_BASE}/${baseId}/Messages`, {
     method: "POST",
@@ -56,19 +55,29 @@ export async function updateMessage(
   messageId: string,
   fields: {
     Subject?: string;
-    "AI Generated Message Content"?: string;
+    "Draft Content"?: string;
     Status?: "Pending" | "Sent";
-    "Sent At"?: string;
+    "Sent Date"?: string;
   }
 ): Promise<Message> {
   const { apiKey, baseId } = getCredentials();
+
+  // Airtable rejects non-string values for this long-text field.
+  // Coerce to a plain string so undefined/null never reaches the API.
+  const sanitisedFields = {
+    ...fields,
+    ...("Draft Content" in fields
+      ? { "Draft Content": String(fields["Draft Content"] ?? "") }
+      : {}),
+  };
+
   const res = await fetch(`${API_BASE}/${baseId}/Messages/${messageId}`, {
     method: "PATCH",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ fields }),
+    body: JSON.stringify({ fields: sanitisedFields }),
   });
   if (!res.ok) {
     const text = await res.text();

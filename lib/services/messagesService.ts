@@ -46,10 +46,33 @@ export async function updateDraftContent(
 ): Promise<Message> {
   return updateMessage(messageId, {
     Subject: subject,
-    "AI Generated Message Content": body,
+    "Draft Content": body,
   });
 }
 
 export async function markMessageSent(messageId: string): Promise<Message> {
-  return updateMessage(messageId, { Status: "Sent", "Sent At": new Date().toISOString() });
+  return updateMessage(messageId, { Status: "Sent", "Sent Date": new Date().toISOString() });
+}
+
+export async function createUserFollowUpDraft(
+  userId: string,
+  subject: string,
+  body: string
+): Promise<Message> {
+  const date = formatDate(new Date().toISOString());
+  const messageName = `${date} // ${subject} // Draft`;
+
+  const draft = await createMessage({
+    "Message Name": messageName,
+    Subject: subject,
+    Status: "Pending",
+    "Client": [userId],
+  });
+
+  if (!body.trim()) return draft;
+
+  return updateMessage(draft.id, {
+    Subject: subject,
+    "Draft Content": body,
+  });
 }
