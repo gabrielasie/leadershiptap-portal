@@ -19,6 +19,14 @@ export interface User {
   avatarUrl?: string;
   enneagram?: string;
   mbti?: string;
+  // Week 6 fields
+  department?: string;
+  title?: string;        // maps to Airtable "Title" (distinct from "Job Title")
+  startDate?: string;    // ISO date string
+  engagementLevel?: string;
+  coachNotes?: string;
+  managerIds?: string[];       // linked record IDs — first element is the manager
+  directReportIds?: string[];  // linked record IDs — all direct reports
 }
 
 export interface Meeting {
@@ -29,6 +37,14 @@ export interface Meeting {
   senderEmail?: string;
   participantEmails: string[];
   notes?: string;
+}
+
+export interface Note {
+  id: string;
+  content: string;
+  date?: string;       // YYYY-MM-DD
+  clientIds?: string[]; // linked record IDs → Users
+  created?: string;    // ISO — Airtable auto-created time
 }
 
 export interface Message {

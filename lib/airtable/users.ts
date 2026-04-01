@@ -25,6 +25,18 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Use
     avatarUrl: record.fields["Avatar URL"] as string | undefined,
     enneagram: record.fields["Enneagram"] as string | undefined,
     mbti: record.fields["MBTI"] as string | undefined,
+    department: record.fields["Department"] as string | undefined,
+    title: record.fields["Title"] as string | undefined,
+    startDate: record.fields["Start Date"] as string | undefined,
+    engagementLevel: record.fields["Engagement Level"] as string | undefined,
+    coachNotes: record.fields["Coach Notes"] as string | undefined,
+    // Linked record fields — Airtable returns string[] of record IDs
+    managerIds: Array.isArray(record.fields["Manager"])
+      ? (record.fields["Manager"] as string[])
+      : [],
+    directReportIds: Array.isArray(record.fields["Direct Reports"])
+      ? (record.fields["Direct Reports"] as string[])
+      : [],
   };
 }
 
@@ -40,6 +52,22 @@ export async function getAllUsers(): Promise<User[]> {
   }
   const data = await res.json();
   return (data.records ?? []).map(mapRecord);
+}
+
+export async function updateUserCoachNotes(userId: string, notes: string): Promise<void> {
+  const { apiKey, baseId } = getCredentials();
+  const res = await fetch(`${API_BASE}/${baseId}/Users/${userId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ fields: { 'Coach Notes': notes } }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Airtable PATCH failed: ${text}`);
+  }
 }
 
 export async function getUserById(id: string): Promise<User | null> {

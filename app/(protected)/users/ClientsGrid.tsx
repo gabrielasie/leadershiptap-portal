@@ -47,7 +47,7 @@ export default function ClientsGrid({ users }: { users: User[] }) {
     : users
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       {/* Search */}
       <div className="w-full max-w-sm">
         <input

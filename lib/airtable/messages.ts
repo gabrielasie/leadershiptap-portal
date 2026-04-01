@@ -87,6 +87,11 @@ export async function updateMessage(
   return mapRecord(data);
 }
 
+export async function fetchAllMessages(): Promise<Message[]> {
+  const { apiKey, baseId } = getCredentials();
+  return getAllMessages(apiKey, baseId);
+}
+
 async function getAllMessages(apiKey: string, baseId: string): Promise<Message[]> {
   const res = await fetch(
     `${API_BASE}/${baseId}/Messages?sort%5B0%5D%5Bfield%5D=Created&sort%5B0%5D%5Bdirection%5D=desc`,

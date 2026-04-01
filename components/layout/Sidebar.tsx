@@ -7,7 +7,7 @@ import { Users, LayoutDashboard, Settings, LogOut } from 'lucide-react'
 
 const navItems = [
   { href: '/users', icon: Users, label: 'Clients', enabled: true },
-  { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', enabled: false },
+  { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', enabled: true },
   { href: '/settings', icon: Settings, label: 'Settings', enabled: false },
 ]
 
@@ -17,6 +17,50 @@ export default function Sidebar() {
   const { signOut } = useClerk()
 
   return (
+    <>
+    {/* ── Mobile bottom navigation bar ── */}
+    <nav className="flex md:hidden fixed bottom-0 inset-x-0 z-50 bg-white border-t border-slate-200 h-16">
+      <div className="flex w-full items-stretch">
+        {navItems.map(({ href, icon: Icon, label, enabled }) => {
+          const active = enabled && pathname.startsWith(href)
+          if (!enabled) {
+            return (
+              <div
+                key={href}
+                className="flex flex-1 flex-col items-center justify-center gap-0.5 text-slate-300 cursor-not-allowed select-none"
+                title="Coming soon"
+              >
+                <Icon className="h-5 w-5" />
+                <span className="text-[10px] font-medium">{label}</span>
+              </div>
+            )
+          }
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={`flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors ${
+                active
+                  ? 'text-[hsl(213,70%,30%)]'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <Icon className="h-5 w-5" />
+              <span className="text-[10px] font-medium">{label}</span>
+            </Link>
+          )
+        })}
+        <button
+          onClick={() => signOut({ redirectUrl: '/sign-in' })}
+          className="flex flex-1 flex-col items-center justify-center gap-0.5 text-slate-500 hover:text-slate-900 transition-colors"
+        >
+          <LogOut className="h-5 w-5" />
+          <span className="text-[10px] font-medium">Sign out</span>
+        </button>
+      </div>
+    </nav>
+
+    {/* ── Desktop sidebar ── */}
     <aside className="hidden md:flex fixed inset-y-0 left-0 w-60 flex-col bg-slate-50 border-r border-slate-200 z-40">
       {/* Logo */}
       <div className="px-5 py-5 border-b border-slate-200">
@@ -95,5 +139,6 @@ export default function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   )
 }
