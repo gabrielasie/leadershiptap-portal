@@ -1,7 +1,9 @@
 import Link from 'next/link'
 import { Calendar, Users, ChevronRight, MessageSquare } from 'lucide-react'
 import { getUsers } from '@/lib/services/usersService'
+import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getAllMeetings } from '@/lib/airtable/meetings'
+import { buildEmailToUserMap, findClientForMeeting, groupMeetingsByUser } from '@/lib/services/meetingsService'
 import { fetchAllMessages } from '@/lib/airtable/messages'
 import PageHeader from '@/components/layout/PageHeader'
 import type { User, Meeting, Message } from '@/lib/types'
@@ -53,18 +55,16 @@ function formatDateShort(iso: string): string {
 // ── page ──────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
+  const sessionUser = await getSessionUser()
+
   const [users, allMeetings, allMessages] = await Promise.all([
-    getUsers(),
+    getUsers(sessionUser),
     getAllMeetings(),
     fetchAllMessages(),
   ])
 
-  // Build email → user lookup (matches both email and workEmail)
-  const emailToUser = new Map<string, User>()
-  for (const user of users) {
-    if (user.email) emailToUser.set(user.email.toLowerCase(), user)
-    if (user.workEmail) emailToUser.set(user.workEmail.toLowerCase(), user)
-  }
+  // Build email → user lookup (matches both email and workEmail, normalised)
+  const emailToUser = buildEmailToUserMap(users)
 
   // ── Upcoming meetings: now → +7 days ──────────────────────────────────────
   const now = new Date()
@@ -80,27 +80,15 @@ export default async function DashboardPage() {
 
   // Attach matched client to each upcoming meeting
   interface MeetingWithClient { meeting: Meeting; client: User | null }
-  const upcomingWithClients: MeetingWithClient[] = upcomingMeetings.map((meeting) => {
-    const client =
-      meeting.participantEmails
-        .map((e) => emailToUser.get(e.toLowerCase()))
-        .find((u): u is User => u !== undefined) ?? null
-    return { meeting, client }
-  })
+  const upcomingWithClients: MeetingWithClient[] = upcomingMeetings.map((meeting) => ({
+    meeting,
+    client: findClientForMeeting(meeting, emailToUser),
+  }))
 
   // ── Client activity ────────────────────────────────────────────────────────
 
-  // Group meetings by user.id (via email match)
-  const meetingsByUser = new Map<string, Meeting[]>()
-  for (const meeting of allMeetings) {
-    for (const email of meeting.participantEmails) {
-      const user = emailToUser.get(email.toLowerCase())
-      if (user) {
-        if (!meetingsByUser.has(user.id)) meetingsByUser.set(user.id, [])
-        meetingsByUser.get(user.id)!.push(meeting)
-      }
-    }
-  }
+  // Group meetings by user.id (via normalised email match, service layer)
+  const meetingsByUser = groupMeetingsByUser(allMeetings, users)
 
   // Group messages by user.id (via linked record IDs)
   const messagesByUser = new Map<string, Message[]>()

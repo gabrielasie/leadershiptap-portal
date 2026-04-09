@@ -1,39 +1,30 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { getUserById } from '@/lib/services/usersService'
-import { updateUserCoachNotes } from '@/lib/airtable/users'
+import { createNote } from '@/lib/airtable/notes'
 import { createTask } from '@/lib/airtable/tasks'
+import { getSessionUser } from '@/lib/auth/getSessionUser'
 
 // ── Log a Note ────────────────────────────────────────────────────────────────
-// Prepends a dated entry to the user's Coach Notes field in Airtable.
-// A dedicated Notes table is not yet provisioned; this keeps history intact
-// by prepending rather than overwriting.
+// Resolves the Clerk session server-side and passes it to createNote so the
+// write is authorisation-checked before it reaches Airtable.
 
 export async function saveNoteAction(
   userId: string,
   content: string,
   date: string,         // YYYY-MM-DD from the date input
-  coachName: string,
 ): Promise<void> {
-  const user = await getUserById(userId)
-  if (!user) throw new Error('User not found')
-
-  const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  })
-
-  const header = coachName
-    ? `[${dateLabel} — ${coachName}]`
-    : `[${dateLabel}]`
-
-  const newEntry = `${header}\n${content.trim()}`
-  const existing = user.coachNotes?.trim()
-  const combined = existing ? `${newEntry}\n\n---\n\n${existing}` : newEntry
-
-  await updateUserCoachNotes(userId, combined)
+  const sessionUser = await getSessionUser()
+  try {
+    await createNote(userId, content.trim(), date, sessionUser)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg === 'NOT_AUTHORIZED') throw new Error('NOT_AUTHORIZED')
+    if (msg.includes('TABLE_NOT_FOUND') || msg.includes('Could not find table')) {
+      throw new Error('NOTES_TABLE_MISSING')
+    }
+    throw new Error('SAVE_FAILED')
+  }
   revalidatePath(`/users/${userId}`)
 }
 

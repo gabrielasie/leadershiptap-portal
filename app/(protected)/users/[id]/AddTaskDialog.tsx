@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -29,6 +30,7 @@ interface AddTaskDialogProps {
 }
 
 export default function AddTaskDialog({ userId }: AddTaskDialogProps) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [taskName, setTaskName] = useState('')
   const [dueDate, setDueDate] = useState('')
@@ -52,6 +54,7 @@ export default function AddTaskDialog({ userId }: AddTaskDialogProps) {
       setTaskName('')
       setDueDate('')
       setPriority('Medium')
+      router.refresh()
     } catch (err) {
       console.error(err)
       toast.error('Failed to add task', {

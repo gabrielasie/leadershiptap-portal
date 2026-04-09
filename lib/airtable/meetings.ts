@@ -11,9 +11,12 @@ function getCredentials() {
 
 function parseEmails(raw: unknown): string[] {
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw;
-  if (typeof raw === "string") return raw.split(",").map((e) => e.trim()).filter(Boolean);
-  return [];
+  const items: string[] = Array.isArray(raw)
+    ? raw.map(String)
+    : typeof raw === "string"
+    ? raw.split(",")
+    : [];
+  return items.map((e) => e.trim()).filter(Boolean);
 }
 
 function mapRecord(record: { id: string; fields: Record<string, unknown> }): Meeting {

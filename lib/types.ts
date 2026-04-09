@@ -42,9 +42,17 @@ export interface Meeting {
 export interface Note {
   id: string;
   content: string;
-  date?: string;       // YYYY-MM-DD
-  clientIds?: string[]; // linked record IDs → Users
-  created?: string;    // ISO — Airtable auto-created time
+  date: string;         // YYYY-MM-DD
+  userId: string;       // first linked Users record ID
+}
+
+export interface Task {
+  id: string;
+  name: string;
+  dueDate?: string;    // YYYY-MM-DD
+  priority?: 'Low' | 'Medium' | 'High';
+  status?: 'To Do' | 'In Progress' | 'Done';
+  userId?: string;     // first linked Users record ID
 }
 
 export interface Message {

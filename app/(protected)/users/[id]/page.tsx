@@ -15,9 +15,12 @@ import {
 import { getUserById } from '@/lib/services/usersService'
 import { getMeetingsForUser } from '@/lib/services/meetingsService'
 import { getUserMessages } from '@/lib/services/messagesService'
+import { getNotesByUser } from '@/lib/airtable/notes'
+import { getTasksByUser } from '@/lib/airtable/tasks'
+import { getSessionUser } from '@/lib/auth/getSessionUser'
 import PlaceholderSection from '@/components/ui/PlaceholderSection'
 import UserActionsBar from './UserActionsBar'
-import type { User, Meeting, Message } from '@/lib/types'
+import type { User, Meeting, Message, Note, Task } from '@/lib/types'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -84,6 +87,82 @@ function relativeDays(iso: string): string {
 }
 
 // ── sub-components (server-safe) ──────────────────────────────────────────────
+
+const PRIORITY_STYLES: Record<string, string> = {
+  High:   'bg-rose-50 text-rose-700 border-rose-200',
+  Medium: 'bg-amber-50 text-amber-700 border-amber-200',
+  Low:    'bg-slate-100 text-slate-500 border-slate-200',
+}
+
+const STATUS_STYLES: Record<string, string> = {
+  'To Do':       'bg-slate-100 text-slate-500',
+  'In Progress': 'bg-blue-50 text-blue-700',
+  'Done':        'bg-emerald-50 text-emerald-700',
+}
+
+function formatTaskDueDate(dateStr: string): string {
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+function TaskRow({ task }: { task: Task }) {
+  const isOverdue =
+    task.dueDate &&
+    task.status !== 'Done' &&
+    new Date(task.dueDate + 'T23:59:59') < new Date()
+
+  return (
+    <div className="flex items-start gap-3 px-3 py-2.5 rounded-lg border border-slate-100 hover:border-slate-200 transition-colors">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-slate-900">{task.name}</p>
+        {task.dueDate && (
+          <p className={`text-xs mt-0.5 ${isOverdue ? 'text-rose-500 font-medium' : 'text-slate-400'}`}>
+            {isOverdue ? 'Overdue · ' : 'Due '}{formatTaskDueDate(task.dueDate)}
+          </p>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+        {task.status && (
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[task.status] ?? 'bg-slate-100 text-slate-500'}`}>
+            {task.status}
+          </span>
+        )}
+        {task.priority && (
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${PRIORITY_STYLES[task.priority] ?? 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+            {task.priority}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function formatNoteDate(dateStr: string): string {
+  if (!dateStr) return ''
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+function NoteCard({ note }: { note: Note }) {
+  return (
+    <div className="rounded-lg border border-slate-100 p-4">
+      {note.date && (
+        <p className="text-xs font-semibold text-slate-500 mb-2">
+          {formatNoteDate(note.date)}
+        </p>
+      )}
+      <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+        {note.content}
+      </p>
+    </div>
+  )
+}
 
 function SectionHeading({ icon: Icon, title }: { icon: React.ElementType; title: string }) {
   return (
@@ -157,7 +236,10 @@ function StatusBadge({ status }: { status: 'Pending' | 'Sent' }) {
 
 function MessageRow({ msg, userId }: { msg: Message; userId: string }) {
   const subject = msg.subject ?? msg.messageName
-  const preview = msg.body ? msg.body.slice(0, 120) + (msg.body.length > 120 ? '…' : '') : null
+  const bodyText = msg.body?.trim()
+  const preview = bodyText
+    ? bodyText.slice(0, 120) + (bodyText.length > 120 ? '…' : '')
+    : null
 
   const inner = (
     <div className="px-4 py-3 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
@@ -167,8 +249,10 @@ function MessageRow({ msg, userId }: { msg: Message; userId: string }) {
           {msg.created && (
             <p className="text-xs text-slate-400 mt-0.5">{formatMessageDate(msg.created)}</p>
           )}
-          {preview && (
+          {preview ? (
             <p className="text-xs text-slate-500 mt-1 line-clamp-1">{preview}</p>
+          ) : (
+            <p className="text-xs text-slate-300 mt-1 italic">No content yet</p>
           )}
         </div>
         <StatusBadge status={msg.status} />
@@ -190,7 +274,7 @@ function MessageRow({ msg, userId }: { msg: Message; userId: string }) {
 
 export default async function UserDetailPage({ params }: Props) {
   const { id } = await params
-  const user = await getUserById(id)
+  const [user, sessionUser] = await Promise.all([getUserById(id), getSessionUser()])
 
   if (!user) {
     return (
@@ -204,9 +288,11 @@ export default async function UserDetailPage({ params }: Props) {
   const managerId = user.managerIds?.[0] ?? null
   const reportIds = user.directReportIds ?? []
 
-  const [{ upcoming, past }, messages, manager, reportResults] = await Promise.all([
-    getMeetingsForUser(contactEmail),
+  const [{ upcoming, past }, messages, sessionNotes, tasks, manager, reportResults] = await Promise.all([
+    getMeetingsForUser(contactEmail, sessionUser, id),
     getUserMessages(id),
+    getNotesByUser(id, sessionUser),
+    getTasksByUser(id),
     managerId ? getUserById(managerId) : Promise.resolve(null),
     Promise.all(reportIds.map((rid) => getUserById(rid))),
   ])
@@ -228,10 +314,20 @@ export default async function UserDetailPage({ params }: Props) {
   const name = getDisplayName(user)
   const initials = getInitials(user)
 
+  // Airtable returns raw record IDs (e.g. "recXxx…") when a linked-record field
+  // hasn't been expanded. Never show those to the user.
+  const isRecordId = (v: string) => /^rec[A-Za-z0-9]{8,}$/.test(v)
+
   const badges = [
-    user.enneagram ? { label: `Enneagram ${user.enneagram}`, className: 'bg-blue-50 text-blue-700' } : null,
-    user.mbti       ? { label: user.mbti,                      className: 'bg-violet-50 text-violet-700' } : null,
-    user.role       ? { label: user.role,                      className: 'bg-slate-100 text-slate-600' } : null,
+    user.enneagram && !isRecordId(user.enneagram)
+      ? { label: `Enneagram ${user.enneagram}`, className: 'bg-blue-50 text-blue-700' }
+      : null,
+    user.mbti && !isRecordId(user.mbti)
+      ? { label: user.mbti, className: 'bg-violet-50 text-violet-700' }
+      : null,
+    user.role && !isRecordId(user.role)
+      ? { label: user.role, className: 'bg-slate-100 text-slate-600' }
+      : null,
   ].filter((b): b is { label: string; className: string } => b !== null)
 
   return (
@@ -550,14 +646,18 @@ export default async function UserDetailPage({ params }: Props) {
         )}
       </div>
 
-      {/* ── Notes & Transcripts ──────────────────────────────────────────── */}
+      {/* ── Session Notes ─────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-        <SectionHeading icon={FileText} title="Notes & Transcripts" />
-        <PlaceholderSection
-          icon={<FileText />}
-          title="No notes yet"
-          message="Transcript and session notes will appear here once meetings are completed."
-        />
+        <SectionHeading icon={FileText} title="Session Notes" />
+        {sessionNotes.length === 0 ? (
+          <p className="text-sm text-slate-400">No notes logged yet — use the Log a Note button above.</p>
+        ) : (
+          <div className="space-y-4">
+            {sessionNotes.map((note) => (
+              <NoteCard key={note.id} note={note} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Messages & Follow-ups ────────────────────────────────────────── */}
@@ -576,9 +676,11 @@ export default async function UserDetailPage({ params }: Props) {
         </div>
 
         {messages.length === 0 ? (
-          <p className="text-sm text-slate-400">
-            No messages yet. Use the button above to draft a follow-up.
-          </p>
+          <PlaceholderSection
+            icon={<MessageSquare />}
+            title="No messages yet"
+            message="Use the button above to draft a follow-up for this client."
+          />
         ) : (
           <div className="rounded-lg border border-slate-100 overflow-hidden">
             {messages.map((msg) => (
@@ -591,11 +693,19 @@ export default async function UserDetailPage({ params }: Props) {
       {/* ── Tasks ────────────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
         <SectionHeading icon={CheckSquare} title="Tasks" />
-        <PlaceholderSection
-          icon={<CheckSquare />}
-          title="No tasks yet"
-          message="Todoist tasks will appear here once syncing is finalized."
-        />
+        {tasks.length === 0 ? (
+          <PlaceholderSection
+            icon={<CheckSquare />}
+            title="No tasks yet"
+            message="Use the Add Task button above to create a task for this client."
+          />
+        ) : (
+          <div className="space-y-2">
+            {tasks.map((task) => (
+              <TaskRow key={task.id} task={task} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Resources ────────────────────────────────────────────────────── */}
