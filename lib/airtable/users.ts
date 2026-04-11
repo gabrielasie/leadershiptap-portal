@@ -2,13 +2,6 @@ import type { User } from "@/lib/types";
 
 const API_BASE = "https://api.airtable.com/v0";
 
-// Minimal scope descriptor — avoids importing from the auth layer.
-// SessionUser in lib/auth/getSessionUser.ts satisfies this structurally.
-interface UserScope {
-  role: 'admin' | 'coach'
-  email: string
-}
-
 function getCredentials() {
   const apiKey = process.env.AIRTABLE_API_KEY;
   const baseId = process.env.AIRTABLE_BASE_ID;
@@ -47,42 +40,16 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Use
   };
 }
 
-export async function getAllUsers(scope?: UserScope): Promise<User[]> {
+export async function getAllUsers(): Promise<User[]> {
   const { apiKey, baseId } = getCredentials();
 
-  if (!scope) {
-    console.warn('[getAllUsers] No session scope — returning all users (open access). See PERMISSIONS.md.');
-  }
-
-  // Admins (and the no-scope fallback) receive the full list.
-  // Coaches receive only clients where the "Coach Email" field matches their email.
-  const isCoachScoped = scope?.role === 'coach' && !!scope.email;
-  const formula = isCoachScoped
-    ? `?filterByFormula=${encodeURIComponent(`{Coach Email} = "${scope!.email}"`)}`
-    : '';
-
-  const res = await fetch(`${API_BASE}/${baseId}/Users${formula}`, {
+  const res = await fetch(`${API_BASE}/${baseId}/Users`, {
     headers: { Authorization: `Bearer ${apiKey}` },
     next: { revalidate: 60 },
   });
 
   if (!res.ok) {
     const text = await res.text();
-    // "Coach Email" field not yet added to Airtable — fall back to all users
-    // and warn so the developer knows what to fix. See PERMISSIONS.md.
-    if (isCoachScoped && text.includes('UNKNOWN_FIELD_NAME')) {
-      console.warn(
-        '[getAllUsers] "Coach Email" field missing in Airtable — open access fallback.' +
-        ' Add the field per PERMISSIONS.md to enable coach scoping.'
-      );
-      const fallback = await fetch(`${API_BASE}/${baseId}/Users`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-        next: { revalidate: 60 },
-      });
-      if (!fallback.ok) throw new Error(`Airtable GET failed: ${await fallback.text()}`);
-      const fd = await fallback.json();
-      return (fd.records ?? []).map(mapRecord);
-    }
     throw new Error(`Airtable GET failed: ${text}`);
   }
 

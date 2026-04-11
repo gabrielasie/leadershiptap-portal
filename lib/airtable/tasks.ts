@@ -22,22 +22,35 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Tas
 }
 
 export async function getTasksByUser(userId: string): Promise<Task[]> {
-  const { apiKey, baseId } = getCredentials();
-  const formula = encodeURIComponent(`FIND("${userId}", ARRAYJOIN({Client}))`);
-  const sort = 'sort%5B0%5D%5Bfield%5D=Due%20Date&sort%5B0%5D%5Bdirection%5D=asc';
-  const res = await fetch(
-    `${API_BASE}/${baseId}/Tasks?filterByFormula=${formula}&${sort}`,
-    {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      next: { revalidate: 60 },
+  try {
+    const { apiKey, baseId } = getCredentials();
+    const formula = encodeURIComponent(`FIND("${userId}", ARRAYJOIN({Client}))`);
+    const sort = 'sort%5B0%5D%5Bfield%5D=Due%20Date&sort%5B0%5D%5Bdirection%5D=asc';
+    const res = await fetch(
+      `${API_BASE}/${baseId}/Tasks?filterByFormula=${formula}&${sort}`,
+      {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        next: { revalidate: 60 },
+      }
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      if (
+        text.includes('INVALID_PERMISSIONS') ||
+        text.includes('MODEL_NOT_FOUND') ||
+        text.includes('NOT_FOUND')
+      ) {
+        return [];
+      }
+      console.warn('getTasksByUser: Airtable GET failed:', text);
+      return [];
     }
-  );
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Airtable GET failed: ${text}`);
+    const data = await res.json();
+    return (data.records ?? []).map(mapRecord);
+  } catch (err) {
+    console.warn('getTasksByUser: unexpected error:', err);
+    return [];
   }
-  const data = await res.json();
-  return (data.records ?? []).map(mapRecord);
 }
 
 export async function createTask(fields: {

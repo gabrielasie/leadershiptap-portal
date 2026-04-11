@@ -17,6 +17,7 @@ export async function canAccessUser(
   sessionUser: SessionUser,
 ): Promise<boolean> {
   if (sessionUser.role === 'admin') return true
-  const clients = await getAllUsers({ role: 'coach', email: sessionUser.email })
+  // TODO: re-enable coach scoping once "Coach Email" field is confirmed in Airtable
+  const clients = await getAllUsers()
   return clients.some((c) => c.id === userId)
 }

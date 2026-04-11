@@ -58,7 +58,7 @@ export default async function DashboardPage() {
   const sessionUser = await getSessionUser()
 
   const [users, allMeetings, allMessages] = await Promise.all([
-    getUsers(sessionUser),
+    getUsers(),
     getAllMeetings(),
     fetchAllMessages(),
   ])

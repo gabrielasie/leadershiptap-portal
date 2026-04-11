@@ -291,8 +291,8 @@ export default async function UserDetailPage({ params }: Props) {
   const [{ upcoming, past }, messages, sessionNotes, tasks, manager, reportResults] = await Promise.all([
     getMeetingsForUser(contactEmail, sessionUser, id),
     getUserMessages(id),
-    getNotesByUser(id, sessionUser),
-    getTasksByUser(id),
+    getNotesByUser(id, sessionUser).catch(() => [] as import('@/lib/types').Note[]),
+    getTasksByUser(id).catch(() => [] as import('@/lib/types').Task[]),
     managerId ? getUserById(managerId) : Promise.resolve(null),
     Promise.all(reportIds.map((rid) => getUserById(rid))),
   ])
