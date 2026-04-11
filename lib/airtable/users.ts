@@ -41,20 +41,32 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Use
 }
 
 export async function getAllUsers(): Promise<User[]> {
-  const { apiKey, baseId } = getCredentials();
-
-  const res = await fetch(`${API_BASE}/${baseId}/Users`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-    next: { revalidate: 60 },
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Airtable GET failed: ${text}`);
+  let apiKey: string, baseId: string;
+  try {
+    ({ apiKey, baseId } = getCredentials());
+  } catch (e) {
+    console.error('[getAllUsers] Missing Airtable credentials:', e);
+    return [];
   }
 
-  const data = await res.json();
-  return (data.records ?? []).map(mapRecord);
+  try {
+    const res = await fetch(`${API_BASE}/${baseId}/Users`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      next: { revalidate: 60 },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error(`[getAllUsers] Airtable GET failed: ${text}`);
+      return [];
+    }
+
+    const data = await res.json();
+    return (data.records ?? []).map(mapRecord);
+  } catch (e) {
+    console.error('[getAllUsers] Unexpected error fetching users:', e);
+    return [];
+  }
 }
 
 export async function updateUserCoachNotes(userId: string, notes: string): Promise<void> {
