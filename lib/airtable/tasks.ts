@@ -24,13 +24,14 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Tas
 export async function getTasksByUser(userId: string): Promise<Task[]> {
   try {
     const { apiKey, baseId } = getCredentials();
+    console.log('[getTasksByUser] userId:', userId);
     const formula = encodeURIComponent(`FIND("${userId}", ARRAYJOIN({Client}))`);
     const sort = 'sort%5B0%5D%5Bfield%5D=Due%20Date&sort%5B0%5D%5Bdirection%5D=asc';
     const res = await fetch(
       `${API_BASE}/${baseId}/Tasks?filterByFormula=${formula}&${sort}`,
       {
         headers: { Authorization: `Bearer ${apiKey}` },
-        next: { revalidate: 60 },
+        cache: 'no-store',
       }
     );
     if (!res.ok) {
@@ -46,6 +47,7 @@ export async function getTasksByUser(userId: string): Promise<Task[]> {
       return [];
     }
     const data = await res.json();
+    console.log('[getTasksByUser] records returned:', data.records?.length ?? 0);
     return (data.records ?? []).map(mapRecord);
   } catch (err) {
     console.warn('getTasksByUser: unexpected error:', err);
