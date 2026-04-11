@@ -13,7 +13,7 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Tas
   const clientIds = record.fields['Client'];
   return {
     id: record.id,
-    name: (record.fields['Name'] as string) ?? '',
+    name: (record.fields['Title'] as string) ?? '',
     dueDate: record.fields['Due Date'] as string | undefined,
     priority: record.fields['Priority'] as Task['priority'],
     status: (record.fields['Status'] as Task['status']) ?? 'To Do',
@@ -54,22 +54,33 @@ export async function getTasksByUser(userId: string): Promise<Task[]> {
 }
 
 export async function createTask(fields: {
-  Name: string;
+  Title: string;
   'Due Date'?: string;   // YYYY-MM-DD
   Priority?: 'Low' | 'Medium' | 'High';
+  Status?: string;
   Client?: string[];     // linked record IDs → Users table
 }): Promise<void> {
-  const { apiKey, baseId } = getCredentials();
-  const res = await fetch(`${API_BASE}/${baseId}/Tasks`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ fields }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Airtable POST failed: ${text}`);
+  let apiKey: string, baseId: string;
+  try {
+    ({ apiKey, baseId } = getCredentials());
+  } catch (e) {
+    console.error('[createTask] Missing Airtable credentials:', e);
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/${baseId}/Tasks`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fields }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('[createTask] Airtable POST failed:', text);
+    }
+  } catch (e) {
+    console.error('[createTask] Unexpected error:', e);
   }
 }

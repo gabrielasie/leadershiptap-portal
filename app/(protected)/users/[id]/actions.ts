@@ -39,7 +39,7 @@ export async function saveTaskAction(
   priority: 'Low' | 'Medium' | 'High',
 ): Promise<void> {
   await createTask({
-    Name: taskName,
+    Title: taskName,
     ...(dueDate ? { 'Due Date': dueDate } : {}),
     Priority: priority,
     Client: [userId],

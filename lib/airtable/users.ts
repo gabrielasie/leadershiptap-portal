@@ -70,28 +70,49 @@ export async function getAllUsers(): Promise<User[]> {
 }
 
 export async function updateUserCoachNotes(userId: string, notes: string): Promise<void> {
-  const { apiKey, baseId } = getCredentials();
-  const res = await fetch(`${API_BASE}/${baseId}/Users/${userId}`, {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ fields: { 'Coach Notes': notes } }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Airtable PATCH failed: ${text}`);
+  let apiKey: string, baseId: string;
+  try {
+    ({ apiKey, baseId } = getCredentials());
+  } catch (e) {
+    console.error('[updateUserCoachNotes] Missing Airtable credentials:', e);
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/${baseId}/Users/${userId}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fields: { 'Coach Notes': notes } }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('[updateUserCoachNotes] Airtable PATCH failed:', text);
+    }
+  } catch (e) {
+    console.error('[updateUserCoachNotes] Unexpected error:', e);
   }
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  const { apiKey, baseId } = getCredentials();
-  const res = await fetch(`${API_BASE}/${baseId}/Users/${id}`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-    next: { revalidate: 60 },
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return mapRecord(data);
+  let apiKey: string, baseId: string;
+  try {
+    ({ apiKey, baseId } = getCredentials());
+  } catch (e) {
+    console.error('[getUserById] Missing Airtable credentials:', e);
+    return null;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/${baseId}/Users/${id}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return mapRecord(data);
+  } catch (e) {
+    console.error('[getUserById] Unexpected error:', e);
+    return null;
+  }
 }
