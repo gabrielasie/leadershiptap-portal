@@ -9,6 +9,25 @@ function getCredentials() {
   return { apiKey, baseId };
 }
 
+// Airtable lookup fields return either a string[] or a plain string.
+// This helper normalises both to a single string value.
+function readLookup(val: unknown): string | undefined {
+  if (!val) return undefined;
+  if (Array.isArray(val)) return (val[0] as string) || undefined;
+  if (typeof val === "string") return val || undefined;
+  return undefined;
+}
+
+// Zip two lookup arrays into strength objects
+function readStrengths(
+  names: unknown,
+  domains: unknown
+): Array<{ name: string; domain?: string }> {
+  const ns = Array.isArray(names) ? (names as string[]) : [];
+  const ds = Array.isArray(domains) ? (domains as string[]) : [];
+  return ns.filter(Boolean).map((name, i) => ({ name, domain: ds[i] || undefined }));
+}
+
 function mapRecord(record: { id: string; fields: Record<string, unknown> }): User {
   return {
     id: record.id,
@@ -26,6 +45,43 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Use
     profilePhoto: Array.isArray(record.fields["Profile Photo"])
       ? (record.fields["Profile Photo"] as Array<{ url: string }>)[0]?.url
       : undefined,
+    timeAtCompany: record.fields["Time at Company"] as string | undefined,
+    // Linked record IDs for Coach and Team Lead
+    coachIds: Array.isArray(record.fields["Coach"])
+      ? (record.fields["Coach"] as string[])
+      : [],
+    teamLeadIds: Array.isArray(record.fields["Team Lead"])
+      ? (record.fields["Team Lead"] as string[])
+      : [],
+    // Coaching context
+    quickNotes: record.fields["Quick Notes"] as string | undefined,
+    familyDetails: record.fields["Family Details"] as string | undefined,
+    // Personality — lookup fields from linked tables (read only)
+    enneagramType: readLookup(record.fields["Enneagram Type (from Enneagram)"]),
+    enneagramDescriptor: readLookup(record.fields["Descriptor (from Enneagram)"]),
+    mbtiType: readLookup(record.fields["MBTI (from MBTI)"]),
+    mbtiDescriptor: readLookup(record.fields["Descriptor (from MBTI)"]),
+    conflictPosture: readLookup(record.fields["Conflict Posture"]) ??
+      readLookup(record.fields["Conflict Posture (from Conflict Posture)"]),
+    conflictPostureDescriptor: readLookup(record.fields["Descriptor (from Conflict Posture)"]),
+    apologyLanguage: readLookup(record.fields["Apology Language"]) ??
+      readLookup(record.fields["Apology Language (from Apology Language)"]),
+    apologyLanguageDescriptor: readLookup(record.fields["Descriptor (from Apology Language)"]),
+    strengths: readStrengths(
+      record.fields["Strength Name (from Strengths)"],
+      record.fields["Domain (from Strengths)"]
+    ),
+    // Org / Team — linked record IDs
+    managerIds: Array.isArray(record.fields["Manager"])
+      ? (record.fields["Manager"] as string[])
+      : [],
+    directReportIds: Array.isArray(record.fields["Direct Reports"])
+      ? (record.fields["Direct Reports"] as string[])
+      : [],
+    teamMemberIds: Array.isArray(record.fields["Team Members"])
+      ? (record.fields["Team Members"] as string[])
+      : [],
+    // Legacy
     enneagram: record.fields["Enneagram"] as string | undefined,
     mbti: record.fields["MBTI"] as string | undefined,
     department: record.fields["Department"] as string | undefined,
@@ -33,13 +89,6 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Use
     startDate: record.fields["Start Date"] as string | undefined,
     engagementLevel: record.fields["Engagement Level"] as string | undefined,
     coachNotes: record.fields["Coach Notes"] as string | undefined,
-    // Linked record fields — Airtable returns string[] of record IDs
-    managerIds: Array.isArray(record.fields["Manager"])
-      ? (record.fields["Manager"] as string[])
-      : [],
-    directReportIds: Array.isArray(record.fields["Direct Reports"])
-      ? (record.fields["Direct Reports"] as string[])
-      : [],
   };
 }
 

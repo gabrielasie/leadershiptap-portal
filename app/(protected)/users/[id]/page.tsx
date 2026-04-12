@@ -11,6 +11,10 @@ import {
   BookOpen,
   ExternalLink,
   Network,
+  Brain,
+  Heart,
+  Clock,
+  UserCheck,
 } from 'lucide-react'
 import { getUserById } from '@/lib/services/usersService'
 import { getMeetingsForUser } from '@/lib/services/meetingsService'
@@ -51,7 +55,6 @@ function formatMeetingDate(iso: string): string {
     minute: '2-digit',
     hour12: true,
   }).replace(',', '').replace(/(\d{4}),/, '$1 at')
-  // produces e.g. "Mon Mar 25 2026 at 2:00 PM"
 }
 
 function formatMessageDate(iso: string): string {
@@ -75,7 +78,6 @@ function formatMeetingDay(iso: string): { weekday: string; day: number; month: s
 function relativeDays(iso: string): string {
   const now = new Date()
   const target = new Date(iso)
-  // compare at day granularity
   const nowDay = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
   const targetDay = Date.UTC(target.getFullYear(), target.getMonth(), target.getDate())
   const diff = Math.round((targetDay - nowDay) / 86_400_000)
@@ -86,7 +88,7 @@ function relativeDays(iso: string): string {
   return `${-diff} days ago`
 }
 
-// ── sub-components (server-safe) ──────────────────────────────────────────────
+// ── sub-components ────────────────────────────────────────────────────────────
 
 const PRIORITY_STYLES: Record<string, string> = {
   High:   'bg-rose-50 text-rose-700 border-rose-200',
@@ -174,6 +176,23 @@ function SectionHeading({ icon: Icon, title }: { icon: React.ElementType; title:
   )
 }
 
+// Server-safe expandable descriptor using native <details>/<summary>
+function DescriptorText({ text, maxChars = 200 }: { text: string; maxChars?: number }) {
+  if (text.length <= maxChars) {
+    return <p className="text-sm text-slate-600 leading-relaxed mt-1">{text}</p>
+  }
+  return (
+    <details className="mt-1 group">
+      <summary className="list-none cursor-pointer">
+        <p className="text-sm text-slate-600 leading-relaxed inline">
+          {text.slice(0, maxChars)}…{' '}
+        </p>
+        <span className="text-xs text-[hsl(213,70%,30%)] group-open:hidden">read more</span>
+      </summary>
+      <p className="text-sm text-slate-600 leading-relaxed mt-1">{text}</p>
+    </details>
+  )
+}
 
 function OrgPersonLink({ user }: { user: User }) {
   return (
@@ -288,19 +307,35 @@ export default async function UserDetailPage({ params }: Props) {
   const contactEmail = user.workEmail ?? user.email
   const managerId = user.managerIds?.[0] ?? null
   const reportIds = user.directReportIds ?? []
+  const coachId = user.coachIds?.[0] ?? null
+  const teamLeadId = user.teamLeadIds?.[0] ?? null
+  const teamMemberIdList = user.teamMemberIds ?? []
 
-  const [{ upcoming, past }, messages, sessionNotes, tasks, manager, reportResults] = await Promise.all([
+  const [
+    { upcoming, past },
+    messages,
+    sessionNotes,
+    tasks,
+    manager,
+    reportResults,
+    coach,
+    teamLead,
+    teamMemberResults,
+  ] = await Promise.all([
     getMeetingsForUser(contactEmail, sessionUser, id),
     getUserMessages(id),
-    getNotesByUser(id, sessionUser).catch(() => [] as import('@/lib/types').Note[]),
-    getTasksByUser(id).catch(() => [] as import('@/lib/types').Task[]),
+    getNotesByUser(id, sessionUser).catch(() => [] as Note[]),
+    getTasksByUser(id).catch(() => [] as Task[]),
     managerId ? getUserById(managerId) : Promise.resolve(null),
     Promise.all(reportIds.map((rid) => getUserById(rid))),
+    coachId ? getUserById(coachId) : Promise.resolve(null),
+    teamLeadId ? getUserById(teamLeadId) : Promise.resolve(null),
+    Promise.all(teamMemberIdList.map((tid) => getUserById(tid))),
   ])
 
   const directReports = reportResults.filter((u): u is User => u !== null)
+  const teamMembers = teamMemberResults.filter((u): u is User => u !== null)
 
-  // ensure sort order
   const upcomingSorted = [...upcoming].sort(
     (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
   )
@@ -310,31 +345,45 @@ export default async function UserDetailPage({ params }: Props) {
   const allMeetings = upcomingSorted.length + pastSorted.length
   const nextMeeting = upcomingSorted[0] ?? null
   const lastMeeting = pastSorted[0] ?? null
-  const recentMeetings = pastSorted.slice(1, 4) // up to 3 more past meetings
+  const recentMeetings = pastSorted.slice(1, 4)
 
   const name = getDisplayName(user)
   const initials = getInitials(user)
 
-  // Airtable returns raw record IDs (e.g. "recXxx…") when a linked-record field
-  // hasn't been expanded. Never show those to the user.
+  // Never show raw Airtable record IDs to the user
   const isRecordId = (v: string) => /^rec[A-Za-z0-9]{8,}$/.test(v)
 
-  // Safe title for profile header — skip raw linked-record IDs
   const displayTitle =
     user.jobTitle ??
     (user.role && !isRecordId(user.role) ? user.role : undefined)
 
+  // Show preferred name only when it differs from the display name
+  const showPreferredName =
+    user.preferredName &&
+    user.preferredName !== name &&
+    !isRecordId(user.preferredName)
+
   const badges = [
-    user.enneagram && !isRecordId(user.enneagram)
+    user.enneagramType
+      ? { label: user.enneagramType, className: 'bg-blue-50 text-blue-700' }
+      : user.enneagram && !isRecordId(user.enneagram)
       ? { label: `Enneagram ${user.enneagram}`, className: 'bg-blue-50 text-blue-700' }
       : null,
-    user.mbti && !isRecordId(user.mbti)
+    user.mbtiType
+      ? { label: user.mbtiType, className: 'bg-violet-50 text-violet-700' }
+      : user.mbti && !isRecordId(user.mbti)
       ? { label: user.mbti, className: 'bg-violet-50 text-violet-700' }
       : null,
     user.role && !isRecordId(user.role)
       ? { label: user.role, className: 'bg-slate-100 text-slate-600' }
       : null,
   ].filter((b): b is { label: string; className: string } => b !== null)
+
+  // Personality section: show only if at least one field has data
+  const hasPersonality =
+    !!(user.enneagramType || user.enneagram || user.mbtiType || user.mbti ||
+       user.conflictPosture || user.apologyLanguage ||
+       (user.strengths && user.strengths.length > 0))
 
   return (
     <div className="px-4 py-5 md:p-8 max-w-5xl mx-auto space-y-6">
@@ -373,6 +422,9 @@ export default async function UserDetailPage({ params }: Props) {
             >
               {name}
             </h1>
+            {showPreferredName && (
+              <p className="text-sm text-slate-400 mt-0.5">Goes by &ldquo;{user.preferredName}&rdquo;</p>
+            )}
             {displayTitle && (
               <p className="text-base text-slate-500 mt-0.5">{displayTitle}</p>
             )}
@@ -385,6 +437,28 @@ export default async function UserDetailPage({ params }: Props) {
                 {contactEmail}
               </p>
             )}
+
+            {/* Extra profile fields */}
+            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5">
+              {user.timeAtCompany && (
+                <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <Clock className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                  {user.timeAtCompany}
+                </span>
+              )}
+              {coach && (
+                <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <UserCheck className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                  Coach: {getDisplayName(coach)}
+                </span>
+              )}
+              {teamLead && (
+                <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <UserCheck className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                  Team Lead: {getDisplayName(teamLead)}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -398,6 +472,107 @@ export default async function UserDetailPage({ params }: Props) {
           </div>
         )}
       </div>
+
+      {/* ── Coaching Context ──────────────────────────────────────────────── */}
+      {(user.quickNotes || user.familyDetails) && (
+        <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
+          <SectionHeading icon={Heart} title="Coaching Context" />
+          <div className="space-y-4">
+            {user.quickNotes && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Quick Notes</p>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{user.quickNotes}</p>
+              </div>
+            )}
+            {user.familyDetails && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Family Details</p>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{user.familyDetails}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Personality & Strengths ───────────────────────────────────────── */}
+      {hasPersonality && (
+        <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
+          <SectionHeading icon={Brain} title="Personality & Strengths" />
+          <div className="space-y-5">
+
+            {/* Enneagram */}
+            {(user.enneagramType || user.enneagram) && (
+              <div className="border-b border-slate-100 pb-4 last:border-0 last:pb-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Enneagram</p>
+                <p className="text-sm font-medium text-slate-800">
+                  {user.enneagramType ?? user.enneagram}
+                </p>
+                {user.enneagramDescriptor && (
+                  <DescriptorText text={user.enneagramDescriptor} />
+                )}
+              </div>
+            )}
+
+            {/* MBTI */}
+            {(user.mbtiType || user.mbti) && (
+              <div className="border-b border-slate-100 pb-4 last:border-0 last:pb-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">MBTI</p>
+                <p className="text-sm font-medium text-slate-800">
+                  {user.mbtiType ?? user.mbti}
+                </p>
+                {user.mbtiDescriptor && (
+                  <DescriptorText text={user.mbtiDescriptor} />
+                )}
+              </div>
+            )}
+
+            {/* Conflict Posture */}
+            {user.conflictPosture && (
+              <div className="border-b border-slate-100 pb-4 last:border-0 last:pb-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Conflict Posture</p>
+                <p className="text-sm font-medium text-slate-800">{user.conflictPosture}</p>
+                {user.conflictPostureDescriptor && (
+                  <DescriptorText text={user.conflictPostureDescriptor} />
+                )}
+              </div>
+            )}
+
+            {/* Apology Language */}
+            {user.apologyLanguage && (
+              <div className="border-b border-slate-100 pb-4 last:border-0 last:pb-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Apology Language</p>
+                <p className="text-sm font-medium text-slate-800">{user.apologyLanguage}</p>
+                {user.apologyLanguageDescriptor && (
+                  <DescriptorText text={user.apologyLanguageDescriptor} />
+                )}
+              </div>
+            )}
+
+            {/* Strengths */}
+            {user.strengths && user.strengths.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Strengths</p>
+                <ol className="space-y-1.5">
+                  {user.strengths.map((s, i) => (
+                    <li key={i} className="flex items-center gap-2">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-100 text-slate-500 text-xs font-bold flex items-center justify-center">
+                        {i + 1}
+                      </span>
+                      <span className="text-sm text-slate-800 font-medium">{s.name}</span>
+                      {s.domain && (
+                        <span className="text-xs text-slate-400 px-1.5 py-0.5 bg-slate-50 rounded">
+                          {s.domain}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
 
       {/* ── Profile Details ──────────────────────────────────────────────── */}
       {(user.department || user.title || user.startDate || user.engagementLevel) && (
@@ -489,9 +664,9 @@ export default async function UserDetailPage({ params }: Props) {
         )}
       </div>
 
-      {/* ── Org Chart ────────────────────────────────────────────────────── */}
+      {/* ── Team ─────────────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-        <SectionHeading icon={Network} title="Org Chart" />
+        <SectionHeading icon={Network} title="Team" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
 
           {/* Manager */}
@@ -522,6 +697,20 @@ export default async function UserDetailPage({ params }: Props) {
             )}
           </div>
 
+          {/* Team Members */}
+          {teamMembers.length > 0 && (
+            <div className="sm:col-span-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+                Team Members ({teamMembers.length})
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {teamMembers.map((member) => (
+                  <OrgPersonLink key={member.id} user={member} />
+                ))}
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -540,7 +729,7 @@ export default async function UserDetailPage({ params }: Props) {
         ) : (
           <div className="space-y-6">
 
-            {/* NEXT SESSION ──────────────────────────────────────────── */}
+            {/* NEXT SESSION */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
                 Next Session
@@ -553,13 +742,11 @@ export default async function UserDetailPage({ params }: Props) {
                     href={`/users/${id}/meetings/${nextMeeting.id}`}
                     className="flex items-start gap-4 p-4 rounded-xl border-2 border-[hsl(213,60%,90%)] bg-[hsl(213,60%,97%)] hover:bg-[hsl(213,60%,95%)] transition-colors group"
                   >
-                    {/* Date block */}
                     <div className="flex-shrink-0 w-12 text-center bg-[hsl(213,70%,30%)] text-white rounded-lg py-2 px-1">
                       <p className="text-[10px] font-bold uppercase tracking-wide opacity-80">{weekday}</p>
                       <p className="text-2xl font-bold leading-none mt-0.5">{day}</p>
                       <p className="text-[10px] opacity-80 mt-0.5">{month}</p>
                     </div>
-                    {/* Details */}
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-slate-900 truncate">
                         {nextMeeting.title || 'Untitled Meeting'}
@@ -577,7 +764,7 @@ export default async function UserDetailPage({ params }: Props) {
               )}
             </div>
 
-            {/* LAST SESSION ───────────────────────────────────────────── */}
+            {/* LAST SESSION */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
                 Last Session
@@ -590,13 +777,11 @@ export default async function UserDetailPage({ params }: Props) {
                     href={`/users/${id}/meetings/${lastMeeting.id}`}
                     className="flex items-start gap-4 p-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors group"
                   >
-                    {/* Date block */}
                     <div className="flex-shrink-0 w-12 text-center bg-slate-200 text-slate-600 rounded-lg py-2 px-1">
                       <p className="text-[10px] font-bold uppercase tracking-wide">{weekday}</p>
                       <p className="text-2xl font-bold leading-none mt-0.5">{day}</p>
                       <p className="text-[10px] mt-0.5">{month}</p>
                     </div>
-                    {/* Details */}
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-800 truncate">
                         {lastMeeting.title || 'Untitled Meeting'}
@@ -619,7 +804,7 @@ export default async function UserDetailPage({ params }: Props) {
               )}
             </div>
 
-            {/* RECENT SESSIONS ────────────────────────────────────────── */}
+            {/* RECENT SESSIONS */}
             {recentMeetings.length > 0 && (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">

@@ -238,9 +238,9 @@ export default async function DashboardPage() {
                     className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 -mx-2 px-2 rounded-lg hover:bg-slate-50 transition-colors group"
                   >
                     {/* Avatar */}
-                    {user.avatarUrl ? (
+                    {(user.profilePhoto ?? user.avatarUrl) ? (
                       <img
-                        src={user.avatarUrl}
+                        src={(user.profilePhoto ?? user.avatarUrl)!}
                         alt={getDisplayName(user)}
                         className="w-9 h-9 rounded-full object-cover flex-shrink-0"
                       />

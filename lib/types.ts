@@ -17,17 +17,39 @@ export interface User {
   companyId?: string;
   companyName?: string;
   avatarUrl?: string;
-  profilePhoto?: string;   // Airtable "Profile Photo" attachment field (first thumbnail URL)
-  enneagram?: string;
-  mbti?: string;
-  // Week 6 fields
-  department?: string;
-  title?: string;        // maps to Airtable "Title" (distinct from "Job Title")
-  startDate?: string;    // ISO date string
-  engagementLevel?: string;
-  coachNotes?: string;
+  profilePhoto?: string;    // Airtable "Profile Photo" attachment (first URL)
+  timeAtCompany?: string;   // text field
+  coachIds?: string[];      // linked record IDs → Coach(es)
+  teamLeadIds?: string[];   // linked record IDs → Team Lead(s)
+
+  // Coaching context
+  quickNotes?: string;
+  familyDetails?: string;
+
+  // Personality & Strengths (lookup fields — read only)
+  enneagramType?: string;            // "Enneagram Type (from Enneagram)"
+  enneagramDescriptor?: string;      // "Descriptor (from Enneagram)"
+  mbtiType?: string;                 // "MBTI (from MBTI)" or similar lookup
+  mbtiDescriptor?: string;           // "Descriptor (from MBTI)"
+  conflictPosture?: string;
+  conflictPostureDescriptor?: string;
+  apologyLanguage?: string;
+  apologyLanguageDescriptor?: string;
+  strengths?: Array<{ name: string; domain?: string }>;
+
+  // Org / Team
   managerIds?: string[];       // linked record IDs — first element is the manager
   directReportIds?: string[];  // linked record IDs — all direct reports
+  teamMemberIds?: string[];    // linked record IDs — team members
+
+  // Legacy / misc
+  enneagram?: string;
+  mbti?: string;
+  department?: string;
+  title?: string;        // maps to Airtable "Title" (distinct from "Job Title")
+  startDate?: string;
+  engagementLevel?: string;
+  coachNotes?: string;
 }
 
 export interface Meeting {
