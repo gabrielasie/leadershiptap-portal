@@ -92,8 +92,21 @@ function MeetingList({ meetings, upcoming }: { meetings: Meeting[]; upcoming: bo
   )
 }
 
+function dedupe(meetings: Meeting[]): Meeting[] {
+  const seen = new Set<string>()
+  return meetings.filter((m) => {
+    const day = m.startTime ? new Date(m.startTime).toISOString().slice(0, 10) : ''
+    const key = `${m.title ?? ''}|${day}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 export default async function MeetingsPage() {
-  const { upcoming, past } = await getMeetings()
+  const { upcoming: rawUpcoming, past: rawPast } = await getMeetings()
+  const upcoming = dedupe(rawUpcoming)
+  const past = dedupe(rawPast)
 
   return (
     <div className="p-8 max-w-4xl mx-auto">
