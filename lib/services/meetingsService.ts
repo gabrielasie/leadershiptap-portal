@@ -8,8 +8,20 @@ interface SplitMeetings {
   past: Meeting[];
 }
 
+// Dedup by title+startTime until calendar pipeline provides stable unique IDs
+function deduplicateMeetings(meetings: Meeting[]): Meeting[] {
+  const seen = new Set<string>()
+  return meetings.filter((m) => {
+    const key = `${m.title ?? ''}|${m.startTime ?? ''}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 export async function getMeetings(): Promise<SplitMeetings> {
-  const all = await getAllMeetings();
+  const raw = await getAllMeetings();
+  const all = deduplicateMeetings(raw);
   const now = new Date();
 
   const upcoming = all
@@ -41,7 +53,7 @@ export async function getMeetingsForUser(
     if (!allowed) return { upcoming: [], past: [] };
   }
 
-  const meetings = await getMeetingsByUserEmail(userEmail);
+  const meetings = deduplicateMeetings(await getMeetingsByUserEmail(userEmail));
   const now = new Date();
 
   const upcoming: Meeting[] = [];

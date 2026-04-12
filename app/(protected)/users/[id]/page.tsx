@@ -109,15 +109,16 @@ function formatTaskDueDate(dateStr: string): string {
 }
 
 function TaskRow({ task }: { task: Task }) {
+  const isDone = task.status === 'Done'
   const isOverdue =
     task.dueDate &&
-    task.status !== 'Done' &&
+    !isDone &&
     new Date(task.dueDate + 'T23:59:59') < new Date()
 
   return (
     <div className="flex items-start gap-3 px-3 py-2.5 rounded-lg border border-slate-100 hover:border-slate-200 transition-colors">
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-900">{task.name}</p>
+        <p className={`text-sm font-medium ${isDone ? 'line-through text-slate-400' : 'text-slate-900'}`}>{task.name}</p>
         {task.dueDate && (
           <p className={`text-xs mt-0.5 ${isOverdue ? 'text-rose-500 font-medium' : 'text-slate-400'}`}>
             {isOverdue ? 'Overdue · ' : 'Due '}{formatTaskDueDate(task.dueDate)}
@@ -318,6 +319,11 @@ export default async function UserDetailPage({ params }: Props) {
   // hasn't been expanded. Never show those to the user.
   const isRecordId = (v: string) => /^rec[A-Za-z0-9]{8,}$/.test(v)
 
+  // Safe title for profile header — skip raw linked-record IDs
+  const displayTitle =
+    user.jobTitle ??
+    (user.role && !isRecordId(user.role) ? user.role : undefined)
+
   const badges = [
     user.enneagram && !isRecordId(user.enneagram)
       ? { label: `Enneagram ${user.enneagram}`, className: 'bg-blue-50 text-blue-700' }
@@ -367,8 +373,8 @@ export default async function UserDetailPage({ params }: Props) {
             >
               {name}
             </h1>
-            {(user.jobTitle ?? user.role) && (
-              <p className="text-base text-slate-500 mt-0.5">{user.jobTitle ?? user.role}</p>
+            {displayTitle && (
+              <p className="text-base text-slate-500 mt-0.5">{displayTitle}</p>
             )}
             {user.companyName && (
               <p className="text-sm text-slate-400 mt-0.5">{user.companyName}</p>

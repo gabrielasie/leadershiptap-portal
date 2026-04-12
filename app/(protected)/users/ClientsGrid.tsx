@@ -27,6 +27,10 @@ const AVATAR_COLORS = [
   'bg-cyan-100 text-cyan-700',
 ]
 
+function isRecordId(v: string): boolean {
+  return /^rec[A-Za-z0-9]{8,}$/.test(v)
+}
+
 function avatarColor(id: string): string {
   let hash = 0
   for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0
@@ -95,7 +99,7 @@ export default function ClientsGrid({ users }: { users: User[] }) {
                 {user.companyName && (
                   <p className="text-sm text-slate-500 truncate">{user.companyName}</p>
                 )}
-                {(user.jobTitle ?? user.role) && (
+                {(user.jobTitle ?? (user.role && !isRecordId(user.role) ? user.role : null)) && (
                   <p className="text-sm text-slate-400 truncate">{user.jobTitle ?? user.role}</p>
                 )}
               </div>

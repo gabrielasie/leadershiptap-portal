@@ -81,7 +81,7 @@ export async function getNotesByUser(
     `${API_BASE}/${baseId}/Notes?filterByFormula=${formula}&${sort}`,
     {
       headers: { Authorization: `Bearer ${apiKey}` },
-      next: { revalidate: 60 },
+      cache: 'no-store',
     }
   )
   if (!res.ok) {

@@ -16,7 +16,7 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Mes
     id: record.id,
     messageName: (record.fields["Message Name"] as string) ?? "",
     subject: record.fields["Subject"] as string | undefined,
-    body: record.fields["Draft Content"] as string | undefined,
+    body: (record.fields["AI Generated Message Content"] ?? record.fields["Draft Content"]) as string | undefined,
     status: ((record.fields["Status"] as string) === "Sent" ? "Sent" : "Pending"),
     created: record.fields["Created"] as string | undefined,
     sentAt: record.fields["Sent Date"] as string | undefined,
@@ -95,7 +95,7 @@ export async function fetchAllMessages(): Promise<Message[]> {
 async function getAllMessages(apiKey: string, baseId: string): Promise<Message[]> {
   const res = await fetch(
     `${API_BASE}/${baseId}/Messages?sort%5B0%5D%5Bfield%5D=Created&sort%5B0%5D%5Bdirection%5D=desc`,
-    { headers: { Authorization: `Bearer ${apiKey}` }, next: { revalidate: 60 } }
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' }
   );
   if (!res.ok) {
     const text = await res.text();

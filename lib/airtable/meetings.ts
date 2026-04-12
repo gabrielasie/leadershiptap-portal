@@ -37,7 +37,7 @@ export async function getAllMeetings(): Promise<Meeting[]> {
     `${API_BASE}/${baseId}/Calendar%20Events?sort%5B0%5D%5Bfield%5D=StartTime&sort%5B0%5D%5Bdirection%5D=desc`,
     {
       headers: { Authorization: `Bearer ${apiKey}` },
-      next: { revalidate: 60 },
+      cache: 'no-store',
     }
   );
   if (!res.ok) {
@@ -45,6 +45,9 @@ export async function getAllMeetings(): Promise<Meeting[]> {
     throw new Error(`Airtable GET failed: ${text}`);
   }
   const data = await res.json();
+  // Debug: log raw ParticipantEmails format from Airtable (comma string or array?)
+  const firstRaw = data.records?.[0]?.fields?.ParticipantEmails;
+  console.log('[meetings] raw ParticipantEmails type:', typeof firstRaw, '| value:', firstRaw);
   return (data.records ?? []).map(mapRecord);
 }
 
@@ -55,7 +58,7 @@ export async function getMeetingsByUserEmail(email: string): Promise<Meeting[]> 
     `${API_BASE}/${baseId}/Calendar%20Events?filterByFormula=${formula}&sort%5B0%5D%5Bfield%5D=StartTime&sort%5B0%5D%5Bdirection%5D=desc`,
     {
       headers: { Authorization: `Bearer ${apiKey}` },
-      next: { revalidate: 60 },
+      cache: 'no-store',
     }
   );
   if (!res.ok) {
@@ -72,7 +75,7 @@ export async function getMeetingById(meetingId: string): Promise<Meeting | null>
     `${API_BASE}/${baseId}/Calendar%20Events/${meetingId}`,
     {
       headers: { Authorization: `Bearer ${apiKey}` },
-      next: { revalidate: 60 },
+      cache: 'no-store',
     }
   );
   if (!res.ok) return null;
