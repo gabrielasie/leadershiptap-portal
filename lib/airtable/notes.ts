@@ -75,9 +75,7 @@ export async function getNotesByUser(
   }
 
   const { apiKey, baseId } = getCredentials()
-  console.log('[notes] userId received:', userId)
   const formula = encodeURIComponent(`FIND("${userId}", ARRAYJOIN({Client}))`)
-  console.log('[notes] formula used:', `FIND("${userId}", ARRAYJOIN({Client}))`)
   const sort = 'sort%5B0%5D%5Bfield%5D=Date&sort%5B0%5D%5Bdirection%5D=desc'
   const res = await fetch(
     `${API_BASE}/${baseId}/Notes?filterByFormula=${formula}&${sort}`,
@@ -91,6 +89,5 @@ export async function getNotesByUser(
     throw new Error(`Airtable GET failed: ${text}`)
   }
   const data = await res.json()
-  console.log('[notes] raw response count:', data.records?.length ?? 0)
   return (data.records ?? []).map(mapRecord)
 }

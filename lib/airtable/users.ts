@@ -61,11 +61,11 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Use
     enneagramDescriptor: readLookup(record.fields["Descriptor (from Enneagram)"]),
     mbtiType: readLookup(record.fields["MBTI (from MBTI)"]),
     mbtiDescriptor: readLookup(record.fields["Descriptor (from MBTI)"]),
-    conflictPosture: readLookup(record.fields["Conflict Posture"]) ??
-      readLookup(record.fields["Conflict Posture (from Conflict Posture)"]),
+    // "Conflict Posture" field returns raw linked record IDs — no name lookup exists.
+    // Only the descriptor lookup is available in this base.
+    conflictPosture: undefined,
     conflictPostureDescriptor: readLookup(record.fields["Descriptor (from Conflict Posture)"]),
-    apologyLanguage: readLookup(record.fields["Apology Language"]) ??
-      readLookup(record.fields["Apology Language (from Apology Language)"]),
+    apologyLanguage: readLookup(record.fields["Apology Language (from Apology Language)"]),
     apologyLanguageDescriptor: readLookup(record.fields["Descriptor (from Apology Language)"]),
     strengths: readStrengths(
       record.fields["Strength Name (from Strengths)"],

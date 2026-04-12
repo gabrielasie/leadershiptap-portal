@@ -10,10 +10,10 @@ function getCredentials() {
 }
 
 function mapRecord(record: { id: string; fields: Record<string, unknown> }): Task {
-  const clientIds = record.fields['Client'];
-  // Support multiple name field conventions (our Tasks table uses "Title",
-  // pre-existing Todoist-linked tasks may use "Name")
-  const name = ((record.fields['Title'] ?? record.fields['Name'] ?? '') as string);
+  // "Linked Todoist Tasks" uses "Task" as the name field and "Users 2" as the user link.
+  // Legacy fallback for any portal-created records that use "Title" or "Name".
+  const name = ((record.fields['Task'] ?? record.fields['Title'] ?? record.fields['Name'] ?? '') as string);
+  const clientIds = record.fields['Users 2'] ?? record.fields['Client'];
   return {
     id: record.id,
     name,
@@ -27,14 +27,11 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Tas
 export async function getTasksByUser(userId: string): Promise<Task[]> {
   try {
     const { apiKey, baseId } = getCredentials();
-    console.log('[getTasksByUser] userId:', userId);
-
     const seen = new Set<string>();
     const results: Task[] = [];
 
     // Route 1: expand "Associated Tasks" linked field on the user record.
-    // This catches pre-existing tasks (e.g. Todoist-synced) that are linked
-    // to the user outside of our portal-created Tasks table.
+    // This catches pre-existing Todoist-synced tasks linked to the user.
     const userRes = await fetch(
       `${API_BASE}/${baseId}/Users/${userId}?expand%5B%5D=Associated%20Tasks`,
       { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' }
@@ -42,7 +39,6 @@ export async function getTasksByUser(userId: string): Promise<Task[]> {
     if (userRes.ok) {
       const userData = await userRes.json();
       const linked = userData.fields?.['Associated Tasks'];
-      console.log('[getTasksByUser] Associated Tasks raw (first 200):', JSON.stringify(linked)?.slice(0, 200));
       if (Array.isArray(linked)) {
         for (const item of linked) {
           if (item && typeof item === 'object' && 'fields' in item) {
@@ -53,28 +49,23 @@ export async function getTasksByUser(userId: string): Promise<Task[]> {
       }
     }
 
-    // Route 2: query the Tasks table directly (portal-created tasks use Client field)
-    const formula = encodeURIComponent(`FIND("${userId}", ARRAYJOIN({Client}))`);
-    const sort = 'sort%5B0%5D%5Bfield%5D=Due%20Date&sort%5B0%5D%5Bdirection%5D=asc';
+    // Route 2: query "Linked Todoist Tasks" directly — users are linked via the "Users 2" field
+    const formula = encodeURIComponent(`FIND("${userId}", ARRAYJOIN({Users 2}))`);
     const tableRes = await fetch(
-      `${API_BASE}/${baseId}/Tasks?filterByFormula=${formula}&${sort}`,
+      `${API_BASE}/${baseId}/Linked%20Todoist%20Tasks?filterByFormula=${formula}`,
       { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' }
     );
     if (tableRes.ok) {
       const tableData = await tableRes.json();
-      console.log('[getTasksByUser] Tasks table records:', tableData.records?.length ?? 0);
       for (const rec of (tableData.records ?? [])) {
         const task = mapRecord(rec);
         if (!seen.has(task.id)) { seen.add(task.id); results.push(task); }
       }
     } else {
       const errText = await tableRes.text();
-      if (!errText.includes('MODEL_NOT_FOUND') && !errText.includes('NOT_FOUND')) {
-        console.warn('[getTasksByUser] Tasks table query failed:', errText);
-      }
+      console.warn('[getTasksByUser] Linked Todoist Tasks query failed:', errText);
     }
 
-    console.log('[getTasksByUser] total merged tasks:', results.length);
     // Sort by due date asc, nulls last
     results.sort((a, b) => {
       if (!a.dueDate && !b.dueDate) return 0;
@@ -91,10 +82,10 @@ export async function getTasksByUser(userId: string): Promise<Task[]> {
 
 export async function createTask(fields: {
   Title: string;
-  'Due Date'?: string;   // YYYY-MM-DD
-  Priority?: 'Low' | 'Medium' | 'High';
+  'Due Date'?: string;   // YYYY-MM-DD (not stored — Linked Todoist Tasks has no due date field)
+  Priority?: 'Low' | 'Medium' | 'High';  // not stored — no field in current table
   Status?: string;
-  Client?: string[];     // linked record IDs → Users table
+  Client?: string[];     // linked record IDs → Users table (mapped to "Users 2")
 }): Promise<void> {
   let apiKey: string, baseId: string;
   try {
@@ -104,13 +95,17 @@ export async function createTask(fields: {
     return;
   }
   try {
-    const res = await fetch(`${API_BASE}/${baseId}/Tasks`, {
+    // The portal uses "Linked Todoist Tasks" — field names differ from portal schema.
+    // "Task" = name, "Users 2" = linked user. Due date and priority have no column yet.
+    const airtableFields: Record<string, unknown> = { Task: fields.Title };
+    if (fields.Client?.length) airtableFields['Users 2'] = fields.Client;
+    const res = await fetch(`${API_BASE}/${baseId}/Linked%20Todoist%20Tasks`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ fields }),
+      body: JSON.stringify({ fields: airtableFields }),
     });
     if (!res.ok) {
       const text = await res.text();

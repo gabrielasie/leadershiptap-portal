@@ -382,7 +382,8 @@ export default async function UserDetailPage({ params }: Props) {
   // Personality section: show only if at least one field has data
   const hasPersonality =
     !!(user.enneagramType || user.enneagram || user.mbtiType || user.mbti ||
-       user.conflictPosture || user.apologyLanguage ||
+       user.conflictPosture || user.conflictPostureDescriptor ||
+       user.apologyLanguage ||
        (user.strengths && user.strengths.length > 0))
 
   return (
@@ -527,10 +528,12 @@ export default async function UserDetailPage({ params }: Props) {
             )}
 
             {/* Conflict Posture */}
-            {user.conflictPosture && (
+            {(user.conflictPosture || user.conflictPostureDescriptor) && (
               <div className="border-b border-slate-100 pb-4 last:border-0 last:pb-0">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Conflict Posture</p>
-                <p className="text-sm font-medium text-slate-800">{user.conflictPosture}</p>
+                {user.conflictPosture && (
+                  <p className="text-sm font-medium text-slate-800">{user.conflictPosture}</p>
+                )}
                 {user.conflictPostureDescriptor && (
                   <DescriptorText text={user.conflictPostureDescriptor} />
                 )}
