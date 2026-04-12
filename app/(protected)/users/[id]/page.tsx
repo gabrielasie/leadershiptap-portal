@@ -181,9 +181,9 @@ function OrgPersonLink({ user }: { user: User }) {
       href={`/users/${user.id}`}
       className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors group"
     >
-      {user.avatarUrl ? (
+      {(user.profilePhoto ?? user.avatarUrl) ? (
         <img
-          src={user.avatarUrl}
+          src={(user.profilePhoto ?? user.avatarUrl)!}
           alt={getDisplayName(user)}
           className="w-8 h-8 rounded-full object-cover flex-shrink-0"
         />
@@ -354,9 +354,9 @@ export default async function UserDetailPage({ params }: Props) {
       {/* ── Profile card ─────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
         <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-5">
-          {user.avatarUrl ? (
+          {(user.profilePhoto ?? user.avatarUrl) ? (
             <img
-              src={user.avatarUrl}
+              src={(user.profilePhoto ?? user.avatarUrl)!}
               alt={name}
               className="w-16 h-16 rounded-full object-cover flex-shrink-0"
             />

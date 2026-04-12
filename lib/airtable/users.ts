@@ -23,6 +23,9 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Use
     companyId: record.fields["Company ID"] as string | undefined,
     companyName: record.fields["Company Name"] as string | undefined,
     avatarUrl: record.fields["Avatar URL"] as string | undefined,
+    profilePhoto: Array.isArray(record.fields["Profile Photo"])
+      ? (record.fields["Profile Photo"] as Array<{ url: string }>)[0]?.url
+      : undefined,
     enneagram: record.fields["Enneagram"] as string | undefined,
     mbti: record.fields["MBTI"] as string | undefined,
     department: record.fields["Department"] as string | undefined,

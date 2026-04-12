@@ -17,6 +17,7 @@ export interface User {
   companyId?: string;
   companyName?: string;
   avatarUrl?: string;
+  profilePhoto?: string;   // Airtable "Profile Photo" attachment field (first thumbnail URL)
   enneagram?: string;
   mbti?: string;
   // Week 6 fields

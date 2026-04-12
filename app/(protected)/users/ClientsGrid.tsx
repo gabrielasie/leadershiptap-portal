@@ -77,9 +77,9 @@ export default function ClientsGrid({ users }: { users: User[] }) {
               className="flex items-center gap-4 bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow"
             >
               {/* Avatar */}
-              {user.avatarUrl ? (
+              {(user.profilePhoto ?? user.avatarUrl) ? (
                 <img
-                  src={user.avatarUrl}
+                  src={(user.profilePhoto ?? user.avatarUrl)!}
                   alt={user.fullName ?? user.email}
                   className="w-10 h-10 rounded-full object-cover flex-shrink-0"
                 />
