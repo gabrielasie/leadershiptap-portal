@@ -6,6 +6,7 @@ import { getAllMeetings } from '@/lib/airtable/meetings'
 import { buildEmailToUserMap, findClientForMeeting, groupMeetingsByUser } from '@/lib/services/meetingsService'
 import { fetchAllMessages } from '@/lib/airtable/messages'
 import PageHeader from '@/components/layout/PageHeader'
+import DashboardQuickActions from './DashboardQuickActions'
 import type { User, Meeting, Message } from '@/lib/types'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -58,7 +59,7 @@ export default async function DashboardPage() {
   const sessionUser = await getSessionUser()
 
   const [users, allMeetings, allMessages] = await Promise.all([
-    getUsers(),
+    getUsers(sessionUser),
     getAllMeetings(),
     fetchAllMessages(),
   ])
@@ -134,13 +135,17 @@ export default async function DashboardPage() {
     return { user, lastMeeting, lastMessage, lastActivityDate }
   })
 
-  // Sort by most recent activity, nulls last
+  // Sort by most recent activity, nulls last — show top 5
   clientActivity.sort((a, b) => {
     if (!a.lastActivityDate && !b.lastActivityDate) return 0
     if (!a.lastActivityDate) return 1
     if (!b.lastActivityDate) return -1
     return b.lastActivityDate.getTime() - a.lastActivityDate.getTime()
   })
+  const recentClients = clientActivity.slice(0, 5)
+
+  // Client list for quick-action dialogs (id + display name)
+  const clientsForActions = users.map((u) => ({ id: u.id, name: getDisplayName(u) }))
 
   // ── render ─────────────────────────────────────────────────────────────────
 
@@ -149,6 +154,8 @@ export default async function DashboardPage() {
       <PageHeader title="Dashboard" description="Your coaching prep overview" />
 
       <div className="p-4 md:p-6 lg:p-8">
+        <DashboardQuickActions clients={clientsForActions} />
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
 
           {/* ── LEFT: Upcoming This Week ────────────────────────────────────── */}
@@ -221,17 +228,20 @@ export default async function DashboardPage() {
           <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
             <div className="flex items-center gap-2 mb-5">
               <Users className="h-5 w-5 text-slate-400" />
-              <h2 className="text-lg font-semibold text-slate-900">Client Activity</h2>
-              <span className="ml-auto text-xs text-slate-400 font-medium">
-                {users.length} {users.length === 1 ? 'client' : 'clients'}
-              </span>
+              <h2 className="text-lg font-semibold text-slate-900">Recent Clients</h2>
+              <Link
+                href="/users"
+                className="ml-auto text-xs text-[hsl(213,70%,30%)] hover:underline font-medium"
+              >
+                View all {users.length}
+              </Link>
             </div>
 
-            {clientActivity.length === 0 ? (
+            {recentClients.length === 0 ? (
               <p className="text-sm text-slate-400">No clients yet.</p>
             ) : (
               <div className="divide-y divide-slate-100">
-                {clientActivity.map(({ user, lastMeeting, lastMessage }) => (
+                {recentClients.map(({ user, lastMeeting, lastMessage }) => (
                   <Link
                     key={user.id}
                     href={`/users/${user.id}`}
