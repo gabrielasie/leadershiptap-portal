@@ -75,19 +75,30 @@ export async function getNotesByUser(
   }
 
   const { apiKey, baseId } = getCredentials()
-  const formula = encodeURIComponent(`FIND("${userId}", ARRAYJOIN({Client}))`)
-  const sort = 'sort%5B0%5D%5Bfield%5D=Date&sort%5B0%5D%5Bdirection%5D=desc'
-  const res = await fetch(
-    `${API_BASE}/${baseId}/Notes?filterByFormula=${formula}&${sort}`,
-    {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      cache: 'no-store',
-    }
-  )
+
+  // Fetch all notes then filter client-side — avoids ARRAYJOIN formula issues
+  // with linked-record fields that store Airtable record IDs.
+  const res = await fetch(`${API_BASE}/${baseId}/Notes`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: 'no-store',
+  })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Airtable GET failed: ${text}`)
   }
   const data = await res.json()
-  return (data.records ?? []).map(mapRecord)
+
+  const matching = (data.records ?? []).filter((r: { id: string; fields: Record<string, unknown> }) => {
+    const clients = (r.fields['Client'] ?? r.fields['Clients'] ?? []) as string[]
+    return Array.isArray(clients) && clients.includes(userId)
+  })
+
+  // Sort descending by date
+  matching.sort((a: { fields: Record<string, unknown> }, b: { fields: Record<string, unknown> }) => {
+    const da = (a.fields['Date'] as string) ?? ''
+    const db = (b.fields['Date'] as string) ?? ''
+    return db.localeCompare(da)
+  })
+
+  return matching.map(mapRecord)
 }

@@ -60,6 +60,8 @@ export interface Meeting {
   senderEmail?: string;
   participantEmails: string[];
   notes?: string;
+  sessionStatus?: string | null;
+  actionItems?: string | null;
 }
 
 export interface Note {

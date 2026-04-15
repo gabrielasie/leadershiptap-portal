@@ -28,6 +28,8 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Mee
     senderEmail: record.fields["SenderEmail"] as string | undefined,
     participantEmails: parseEmails(record.fields["ParticipantEmails"]),
     notes: record.fields["Notes"] as string | undefined,
+    sessionStatus: (record.fields["Session Status"] as string) ?? null,
+    actionItems: (record.fields["Action Items"] as string) ?? null,
   };
 }
 

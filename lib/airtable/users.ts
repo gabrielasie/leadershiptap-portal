@@ -92,6 +92,83 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Use
   };
 }
 
+export async function searchUsersByName(
+  query: string,
+): Promise<Array<{ id: string; name: string; jobTitle?: string }>> {
+  const { apiKey, baseId } = getCredentials()
+  const q = query.toLowerCase().replace(/"/g, '')
+  const formula = encodeURIComponent(
+    `OR(` +
+    `SEARCH("${q}",LOWER(IF({Full Name},{Full Name},"")),0),` +
+    `SEARCH("${q}",LOWER(IF({First Name},{First Name},"")&" "&IF({Last Name},{Last Name},"")),0)` +
+    `)`,
+  )
+  const res = await fetch(
+    `${API_BASE}/${baseId}/Users?filterByFormula=${formula}&maxRecords=20`,
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+  )
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.records ?? []).map((r: { id: string; fields: Record<string, unknown> }) => {
+    const f = r.fields
+    const name =
+      (f['Full Name'] as string | undefined) ||
+      [f['First Name'], f['Last Name']].filter(Boolean).join(' ') ||
+      (f['Email'] as string | undefined) ||
+      r.id
+    return { id: r.id, name, jobTitle: f['Job Title'] as string | undefined }
+  })
+}
+
+export async function createUserRecord(fields: {
+  'First Name'?: string
+  'Last Name'?: string
+  'Job Title'?: string
+  'Company Name'?: string
+}): Promise<string> {
+  const { apiKey, baseId } = getCredentials()
+  // Build a Full Name from first+last for the primary field
+  const fullName = [fields['First Name'], fields['Last Name']].filter(Boolean).join(' ')
+  const res = await fetch(`${API_BASE}/${baseId}/Users`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      fields: {
+        ...(fullName ? { 'Full Name': fullName } : {}),
+        ...fields,
+      },
+    }),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Airtable POST failed: ${text}`)
+  }
+  const data = await res.json()
+  return data.id as string
+}
+
+export async function patchTeamMembers(
+  userId: string,
+  memberIds: string[],
+): Promise<void> {
+  const { apiKey, baseId } = getCredentials()
+  const res = await fetch(`${API_BASE}/${baseId}/Users/${userId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ fields: { 'Team Members': memberIds } }),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Airtable PATCH failed: ${text}`)
+  }
+}
+
 export async function getAllUsers(): Promise<User[]> {
   let apiKey: string, baseId: string;
   try {
@@ -144,6 +221,33 @@ export async function updateUserCoachNotes(userId: string, notes: string): Promi
     }
   } catch (e) {
     console.error('[updateUserCoachNotes] Unexpected error:', e);
+  }
+}
+
+export interface UserProfileFields {
+  'Preferred Name'?: string
+  'Quick Notes'?: string
+  'Family Details'?: string
+  'Time at Company'?: string
+  'Title'?: string
+}
+
+export async function updateUserProfile(
+  userId: string,
+  fields: UserProfileFields,
+): Promise<void> {
+  const { apiKey, baseId } = getCredentials()
+  const res = await fetch(`${API_BASE}/${baseId}/Users/${userId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ fields }),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Airtable PATCH failed: ${text}`)
   }
 }
 

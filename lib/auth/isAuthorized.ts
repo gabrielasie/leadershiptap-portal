@@ -6,18 +6,26 @@ import type { SessionUser } from './getSessionUser'
  * Airtable Users record ID.
  *
  * - Admin: always allowed
- * - Coach: allowed only if the target userId appears in their scoped client list
- *   (i.e. the Airtable "Coach Email" field on that record matches their email)
- *
- * getAllUsers results are cached for 60s, so repeated calls within a request
- * lifecycle are cheap.
+ * - Coach: allowed only if the target user's "Coach" linked-record field
+ *   contains the coach's own Airtable record ID (resolved by email).
  */
 export async function canAccessUser(
   userId: string,
   sessionUser: SessionUser,
 ): Promise<boolean> {
   if (sessionUser.role === 'admin') return true
-  // TODO: re-enable coach scoping once "Coach Email" field is confirmed in Airtable
-  const clients = await getAllUsers()
-  return clients.some((c) => c.id === userId)
+
+  const all = await getAllUsers()
+
+  // Resolve the coach's own Airtable record ID by email
+  const coachRecord = all.find(
+    (u) =>
+      u.email?.toLowerCase() === sessionUser.email.toLowerCase() ||
+      u.workEmail?.toLowerCase() === sessionUser.email.toLowerCase(),
+  )
+
+  if (!coachRecord) return false
+
+  const target = all.find((u) => u.id === userId)
+  return target?.coachIds?.includes(coachRecord.id) ?? false
 }

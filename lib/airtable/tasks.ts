@@ -49,15 +49,23 @@ export async function getTasksByUser(userId: string): Promise<Task[]> {
       }
     }
 
-    // Route 2: query "Linked Todoist Tasks" directly — users are linked via the "Users 2" field
-    const formula = encodeURIComponent(`FIND("${userId}", ARRAYJOIN({Users 2}))`);
+    // Route 2: fetch all "Linked Todoist Tasks" and filter client-side.
+    // filterByFormula + ARRAYJOIN is unreliable for linked-record fields that
+    // store Airtable record IDs — client-side includes() is exact and guaranteed.
     const tableRes = await fetch(
-      `${API_BASE}/${baseId}/Linked%20Todoist%20Tasks?filterByFormula=${formula}`,
+      `${API_BASE}/${baseId}/Linked%20Todoist%20Tasks`,
       { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' }
     );
     if (tableRes.ok) {
       const tableData = await tableRes.json();
+      console.log('[Tasks] Raw records count:', tableData.records?.length);
+      tableData.records?.forEach((r: { id: string; fields: Record<string, unknown> }) => {
+        console.log('  id:', r.id, '| fields:', JSON.stringify(r.fields));
+      });
+      console.log('[Tasks] Filtering for userId:', userId);
       for (const rec of (tableData.records ?? [])) {
+        const users2 = rec.fields['Users 2'];
+        if (!Array.isArray(users2) || !users2.includes(userId)) continue;
         const task = mapRecord(rec);
         if (!seen.has(task.id)) { seen.add(task.id); results.push(task); }
       }

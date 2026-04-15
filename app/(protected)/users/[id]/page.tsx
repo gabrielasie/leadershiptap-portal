@@ -9,7 +9,6 @@ import {
   CheckSquare,
   Paperclip,
   BookOpen,
-  ExternalLink,
   Network,
   Brain,
   Heart,
@@ -24,6 +23,9 @@ import { getTasksByUser } from '@/lib/airtable/tasks'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import PlaceholderSection from '@/components/ui/PlaceholderSection'
 import UserActionsBar from './UserActionsBar'
+import RecentSessionCard from './RecentSessionCard'
+import EditProfileDialog from './EditProfileDialog'
+import AddTeamMemberDialog from './AddTeamMemberDialog'
 import type { User, Meeting, Message, Note, Task } from '@/lib/types'
 
 interface Props {
@@ -345,7 +347,7 @@ export default async function UserDetailPage({ params }: Props) {
   const allMeetings = upcomingSorted.length + pastSorted.length
   const nextMeeting = upcomingSorted[0] ?? null
   const lastMeeting = pastSorted[0] ?? null
-  const recentMeetings = pastSorted.slice(1, 4)
+  const recentMeetings = pastSorted.slice(1)
 
   const name = getDisplayName(user)
   const initials = getInitials(user)
@@ -403,6 +405,19 @@ export default async function UserDetailPage({ params }: Props) {
 
       {/* ── Profile card ─────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
+        <div className="flex items-start justify-between gap-2 mb-4 sm:mb-0">
+          <span />
+          <EditProfileDialog
+            userId={id}
+            initialValues={{
+              preferredName: user.preferredName ?? '',
+              quickNotes: user.quickNotes ?? '',
+              familyDetails: user.familyDetails ?? '',
+              timeAtCompany: user.timeAtCompany ?? '',
+              title: user.title ?? '',
+            }}
+          />
+        </div>
         <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-5">
           {(user.profilePhoto ?? user.avatarUrl) ? (
             <img
@@ -628,48 +643,33 @@ export default async function UserDetailPage({ params }: Props) {
 
       {/* ── Coach Notes ───────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-slate-400" />
-            <h2 className="text-lg font-semibold text-slate-900">Coach Notes</h2>
-          </div>
-          {process.env.AIRTABLE_BASE_ID && process.env.AIRTABLE_USERS_TABLE_ID && (
-            <a
-              href={`https://airtable.com/${process.env.AIRTABLE_BASE_ID}/${process.env.AIRTABLE_USERS_TABLE_ID}/${user.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-[hsl(213,70%,30%)] transition-colors"
-            >
-              Edit in Airtable
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          )}
+        <div className="flex items-center gap-2 mb-4">
+          <BookOpen className="h-5 w-5 text-slate-400" />
+          <h2 className="text-lg font-semibold text-slate-900">Coach Notes</h2>
         </div>
-        {user.coachNotes ? (
-          <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-            {user.coachNotes}
-          </p>
+        {sessionNotes.length === 0 ? (
+          <p className="text-sm text-slate-400">No coach notes yet — use the Log a Note button above.</p>
         ) : (
-          <p className="text-sm text-slate-400">
-            No coach notes yet.{' '}
-            {process.env.AIRTABLE_BASE_ID && process.env.AIRTABLE_USERS_TABLE_ID && (
-              <a
-                href={`https://airtable.com/${process.env.AIRTABLE_BASE_ID}/${process.env.AIRTABLE_USERS_TABLE_ID}/${user.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[hsl(213,70%,30%)] hover:underline inline-flex items-center gap-0.5"
-              >
-                Add notes in Airtable
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
-          </p>
+          <div className="space-y-4">
+            {sessionNotes.map((note) => (
+              <NoteCard key={note.id} note={note} />
+            ))}
+          </div>
         )}
       </div>
 
       {/* ── Team ─────────────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-        <SectionHeading icon={Network} title="Team" />
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <Network className="h-5 w-5 text-slate-400" />
+            <h2 className="text-lg font-semibold text-slate-900">Team</h2>
+          </div>
+          <AddTeamMemberDialog
+            leaderId={id}
+            existingMemberIds={teamMemberIdList}
+          />
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
 
           {/* Manager */}
@@ -776,80 +776,84 @@ export default async function UserDetailPage({ params }: Props) {
                 const { weekday, day, month, time } = formatMeetingDay(lastMeeting.startTime)
                 const label = relativeDays(lastMeeting.startTime)
                 return (
-                  <Link
-                    href={`/users/${id}/meetings/${lastMeeting.id}`}
-                    className="flex items-start gap-4 p-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors group"
-                  >
-                    <div className="flex-shrink-0 w-12 text-center bg-slate-200 text-slate-600 rounded-lg py-2 px-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wide">{weekday}</p>
-                      <p className="text-2xl font-bold leading-none mt-0.5">{day}</p>
-                      <p className="text-[10px] mt-0.5">{month}</p>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-800 truncate">
-                        {lastMeeting.title || 'Untitled Meeting'}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-0.5">{time}</p>
-                      <span className="mt-2 inline-block text-xs font-medium text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">
-                        {label}
-                      </span>
-                      {lastMeeting.notes && (
-                        <p className="text-xs text-slate-500 mt-2 line-clamp-2 leading-relaxed">
-                          {lastMeeting.notes}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+                    <Link
+                      href={`/users/${id}/meetings/${lastMeeting.id}`}
+                      className="flex items-start gap-4 p-4 hover:bg-slate-100 transition-colors group"
+                    >
+                      <div className="flex-shrink-0 w-12 text-center bg-slate-200 text-slate-600 rounded-lg py-2 px-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wide">{weekday}</p>
+                        <p className="text-2xl font-bold leading-none mt-0.5">{day}</p>
+                        <p className="text-[10px] mt-0.5">{month}</p>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-slate-800 truncate">
+                          {lastMeeting.title || 'Untitled Meeting'}
                         </p>
-                      )}
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0 mt-1 transition-colors" />
-                  </Link>
+                        <p className="text-xs text-slate-400 mt-0.5">{time}</p>
+                        <span className="mt-2 inline-block text-xs font-medium text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">
+                          {label}
+                        </span>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0 mt-1 transition-colors" />
+                    </Link>
+                    {(lastMeeting.notes || lastMeeting.actionItems) && (
+                      <div className="px-4 pb-4 border-t border-slate-100">
+                        <RecentSessionCard
+                          notes={lastMeeting.notes ?? ''}
+                          actionItems={lastMeeting.actionItems ?? null}
+                        />
+                      </div>
+                    )}
+                  </div>
                 )
               })() : (
                 <p className="text-sm text-slate-400 pl-1">No past sessions.</p>
               )}
             </div>
 
-            {/* RECENT SESSIONS */}
+            {/* PAST SESSIONS */}
             {recentMeetings.length > 0 && (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
-                  Recent Sessions
+                  Past Sessions
                 </p>
                 <div className="rounded-lg border border-slate-100 overflow-hidden">
                   {recentMeetings.map((m) => (
-                    <Link
+                    <div
                       key={m.id}
-                      href={`/users/${id}/meetings/${m.id}`}
-                      className="flex items-start gap-3 px-4 py-3 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors group"
+                      className="flex items-start gap-3 px-4 py-3 border-b border-slate-100 last:border-0"
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-900 truncate">
                           {m.title || 'Untitled Meeting'}
                         </p>
-                        <p className="text-xs text-slate-400 mt-0.5">{formatMeetingDate(m.startTime)}</p>
-                        {m.notes && (
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <p className="text-xs text-slate-400">{formatMeetingDate(m.startTime)}</p>
+                          {m.sessionStatus && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-500 border border-slate-200">
+                              {m.sessionStatus}
+                            </span>
+                          )}
+                        </div>
+                        {m.notes ? (
                           <p className="text-xs text-slate-400 mt-1 line-clamp-1">{m.notes}</p>
+                        ) : (
+                          <p className="text-xs text-slate-300 mt-1 italic">No notes</p>
                         )}
                       </div>
-                      <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0 mt-0.5 transition-colors" />
-                    </Link>
+                      <Link
+                        href={`/users/${id}/sessions/${m.id}`}
+                        className="flex-shrink-0 mt-0.5 text-xs font-medium text-[hsl(213,70%,30%)] hover:underline whitespace-nowrap"
+                      >
+                        View Full Notes
+                      </Link>
+                    </div>
                   ))}
                 </div>
               </div>
             )}
 
-          </div>
-        )}
-      </div>
-
-      {/* ── Session Notes ─────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-        <SectionHeading icon={FileText} title="Session Notes" />
-        {sessionNotes.length === 0 ? (
-          <p className="text-sm text-slate-400">No notes logged yet — use the Log a Note button above.</p>
-        ) : (
-          <div className="space-y-4">
-            {sessionNotes.map((note) => (
-              <NoteCard key={note.id} note={note} />
-            ))}
           </div>
         )}
       </div>
