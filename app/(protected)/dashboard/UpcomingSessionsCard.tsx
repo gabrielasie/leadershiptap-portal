@@ -95,6 +95,21 @@ function UnmatchedMeetingModal({
             </p>
           </div>
         )}
+
+        <div className="pt-2 border-t border-slate-100">
+          {item.clientId ? (
+            <Link
+              href={`/users/${item.clientId}/sessions/${item.meetingId}`}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-[hsl(213,70%,30%)] hover:underline"
+              onClick={onClose}
+            >
+              Open Full Session
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          ) : (
+            <p className="text-xs text-slate-400">No client profile linked</p>
+          )}
+        </div>
       </div>
     </div>
   )

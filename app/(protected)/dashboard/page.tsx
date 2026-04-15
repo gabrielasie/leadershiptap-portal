@@ -77,7 +77,12 @@ export default async function DashboardPage() {
   // Build serializable items for the UpcomingSessionsCard client component
   const coachEmail = sessionUser?.email?.toLowerCase() ?? ''
   const upcomingItems: UpcomingItem[] = dedupedUpcoming.map((meeting) => {
-    const client = findClientForMeeting(meeting, emailToUser)
+    // Check participantEmails first, then fall back to senderEmail
+    const client =
+      findClientForMeeting(meeting, emailToUser) ??
+      (meeting.senderEmail
+        ? (emailToUser.get(meeting.senderEmail.toLowerCase().trim()) ?? null)
+        : null)
     const d = new Date(meeting.startTime)
     const timeRange =
       meeting.endTime
