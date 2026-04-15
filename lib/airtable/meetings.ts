@@ -33,6 +33,28 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Mee
   };
 }
 
+export async function getAllUpcomingMeetings(daysAhead = 7): Promise<Meeting[]> {
+  const { apiKey, baseId } = getCredentials();
+  const now = new Date().toISOString();
+  const cutoff = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
+  const formula = encodeURIComponent(
+    `AND(IS_AFTER({StartTime}, "${now}"), IS_BEFORE({StartTime}, "${cutoff}"))`,
+  );
+  const res = await fetch(
+    `${API_BASE}/${baseId}/Calendar%20Events?filterByFormula=${formula}&sort%5B0%5D%5Bfield%5D=StartTime&sort%5B0%5D%5Bdirection%5D=asc&maxRecords=50`,
+    {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      cache: 'no-store',
+    }
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Airtable GET failed: ${text}`);
+  }
+  const data = await res.json();
+  return (data.records ?? []).map(mapRecord);
+}
+
 export async function getAllMeetings(): Promise<Meeting[]> {
   const { apiKey, baseId } = getCredentials();
   const res = await fetch(

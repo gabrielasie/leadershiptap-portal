@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Calendar, Users, ChevronRight, MessageSquare } from 'lucide-react'
 import { getUsers } from '@/lib/services/usersService'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
-import { getAllMeetings } from '@/lib/airtable/meetings'
+import { getAllMeetings, getAllUpcomingMeetings } from '@/lib/airtable/meetings'
 import { buildEmailToUserMap, findClientForMeeting, groupMeetingsByUser } from '@/lib/services/meetingsService'
 import { fetchAllMessages } from '@/lib/airtable/messages'
 import PageHeader from '@/components/layout/PageHeader'
@@ -58,26 +58,16 @@ function formatDateShort(iso: string): string {
 export default async function DashboardPage() {
   const sessionUser = await getSessionUser()
 
-  const [users, allMeetings, allMessages] = await Promise.all([
+  const [users, upcomingMeetings, allMeetings, allMessages] = await Promise.all([
     getUsers(sessionUser),
-    getAllMeetings(),
+    getAllUpcomingMeetings(7),   // Airtable-filtered: StartTime in next 7 days, sorted asc
+    getAllMeetings(),            // All-time: for client activity section
     fetchAllMessages(),
   ])
 
   // Build email → user lookup (matches both email and workEmail, normalised)
   const emailToUser = buildEmailToUserMap(users)
-
-  // ── Upcoming meetings: now → +7 days ──────────────────────────────────────
   const now = new Date()
-  const sevenDaysOut = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-
-  const upcomingMeetings = allMeetings
-    .filter((m) => {
-      if (!m.startTime) return false
-      const t = new Date(m.startTime)
-      return t >= now && t <= sevenDaysOut
-    })
-    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
 
   // Attach matched client to each upcoming meeting
   interface MeetingWithClient { meeting: Meeting; client: User | null }

@@ -22,9 +22,15 @@ export async function getUsers(sessionUser?: SessionUser | null): Promise<User[]
       u.workEmail?.toLowerCase() === sessionUser.email.toLowerCase(),
   );
 
-  if (!coachRecord) return []; // coach not found in Airtable — show nothing
+  // Coach record not found in Airtable — fall back to all users so the
+  // portal doesn't go blank while the Coach field is still being set up.
+  if (!coachRecord) return all;
 
-  return all.filter((u) => u.coachIds?.includes(coachRecord.id));
+  const scoped = all.filter((u) => u.coachIds?.includes(coachRecord.id));
+
+  // If the Coach field isn't wired up yet, fall back to all users rather
+  // than showing an empty portal.
+  return scoped.length > 0 ? scoped : all;
 }
 
 export async function getUserById(id: string): Promise<User | null> {
