@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Calendar, Users, ChevronRight, MessageSquare } from 'lucide-react'
+// ChevronRight used in Recent Clients rows below
 import { getUsers } from '@/lib/services/usersService'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getAllMeetings, getAllUpcomingMeetings } from '@/lib/airtable/meetings'
@@ -7,6 +8,7 @@ import { buildEmailToUserMap, findClientForMeeting, groupMeetingsByUser } from '
 import { fetchAllMessages } from '@/lib/airtable/messages'
 import PageHeader from '@/components/layout/PageHeader'
 import DashboardQuickActions from './DashboardQuickActions'
+import UpcomingSessionsCard, { type UpcomingItem } from './UpcomingSessionsCard'
 import type { User, Meeting, Message } from '@/lib/types'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -39,12 +41,6 @@ function avatarColor(id: string): string {
   return AVATAR_COLORS[hash % AVATAR_COLORS.length]
 }
 
-function formatTimeRange(startIso: string, endIso?: string): string {
-  const fmt = (iso: string) =>
-    new Date(iso).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-  return endIso ? `${fmt(startIso)} – ${fmt(endIso)}` : fmt(startIso)
-}
-
 function formatDateShort(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
     month: 'short',
@@ -69,12 +65,51 @@ export default async function DashboardPage() {
   const emailToUser = buildEmailToUserMap(users)
   const now = new Date()
 
-  // Attach matched client to each upcoming meeting
-  interface MeetingWithClient { meeting: Meeting; client: User | null }
-  const upcomingWithClients: MeetingWithClient[] = upcomingMeetings.map((meeting) => ({
-    meeting,
-    client: findClientForMeeting(meeting, emailToUser),
-  }))
+  // Dedup upcoming meetings by title + startTime
+  const seenKeys = new Set<string>()
+  const dedupedUpcoming = upcomingMeetings.filter((m) => {
+    const key = `${m.title ?? ''}|${m.startTime ?? ''}`
+    if (seenKeys.has(key)) return false
+    seenKeys.add(key)
+    return true
+  })
+
+  // Build serializable items for the UpcomingSessionsCard client component
+  const coachEmail = sessionUser?.email?.toLowerCase() ?? ''
+  const upcomingItems: UpcomingItem[] = dedupedUpcoming.map((meeting) => {
+    const client = findClientForMeeting(meeting, emailToUser)
+    const d = new Date(meeting.startTime)
+    const timeRange =
+      meeting.endTime
+        ? `${d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })} – ${new Date(meeting.endTime).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`
+        : d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+
+    // For the unmatched label: pick the first non-internal, non-coach participant
+    const externalEmails = meeting.participantEmails.filter(
+      (e) => e && !e.toLowerCase().includes('leadershiptap.com') && e.toLowerCase() !== coachEmail,
+    )
+    const displayLabel = client
+      ? null
+      : externalEmails.length > 0
+        ? externalEmails[0].split('@')[1] ?? externalEmails[0]  // show domain only
+        : null
+
+    return {
+      meetingId: meeting.id,
+      title: meeting.title,
+      startTime: meeting.startTime,
+      endTime: meeting.endTime,
+      weekday: d.toLocaleString('en-US', { weekday: 'short' }),
+      day: d.getDate(),
+      month: d.toLocaleString('en-US', { month: 'short' }),
+      timeRange,
+      clientId: client?.id ?? null,
+      clientName: client ? getDisplayName(client) : null,
+      displayLabel,
+      participantEmails: externalEmails,
+      notes: meeting.notes,
+    }
+  })
 
   // ── Client activity ────────────────────────────────────────────────────────
 
@@ -153,65 +188,14 @@ export default async function DashboardPage() {
             <div className="flex items-center gap-2 mb-5">
               <Calendar className="h-5 w-5 text-slate-400" />
               <h2 className="text-lg font-semibold text-slate-900">Upcoming This Week</h2>
-              {upcomingWithClients.length > 0 && (
+              {upcomingItems.length > 0 && (
                 <span className="ml-auto text-xs text-slate-400 font-medium">
-                  {upcomingWithClients.length}{' '}
-                  {upcomingWithClients.length === 1 ? 'meeting' : 'meetings'}
+                  {upcomingItems.length}{' '}
+                  {upcomingItems.length === 1 ? 'meeting' : 'meetings'}
                 </span>
               )}
             </div>
-
-            {upcomingWithClients.length === 0 ? (
-              <p className="text-sm text-slate-400">No meetings scheduled in the next 7 days.</p>
-            ) : (
-              <div className="space-y-3">
-                {upcomingWithClients.map(({ meeting, client }) => {
-                  const d = new Date(meeting.startTime)
-                  return (
-                    <div
-                      key={meeting.id}
-                      className="flex items-start gap-4 p-4 rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors"
-                    >
-                      {/* Date block */}
-                      <div className="flex-shrink-0 w-11 text-center">
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-[hsl(213,70%,30%)]">
-                          {d.toLocaleString('en-US', { weekday: 'short' })}
-                        </p>
-                        <p className="text-2xl font-bold text-slate-900 leading-none mt-0.5">
-                          {d.getDate()}
-                        </p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          {d.toLocaleString('en-US', { month: 'short' })}
-                        </p>
-                      </div>
-
-                      {/* Meeting info */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate">
-                          {meeting.title || 'Untitled Meeting'}
-                        </p>
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          {formatTimeRange(meeting.startTime, meeting.endTime)}
-                        </p>
-                        {client ? (
-                          <Link
-                            href={`/users/${client.id}`}
-                            className="inline-flex items-center gap-0.5 mt-1.5 text-xs font-medium text-[hsl(213,70%,30%)] hover:underline"
-                          >
-                            {getDisplayName(client)}
-                            <ChevronRight className="h-3 w-3" />
-                          </Link>
-                        ) : (
-                          <p className="text-xs text-slate-400 mt-1.5">
-                            {meeting.participantEmails[0] ?? '—'}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+            <UpcomingSessionsCard items={upcomingItems} />
           </div>
 
           {/* ── RIGHT: Client Activity ──────────────────────────────────────── */}
