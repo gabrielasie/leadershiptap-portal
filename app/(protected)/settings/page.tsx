@@ -1,9 +1,19 @@
 import { currentUser } from '@clerk/nextjs/server'
+import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import ManageAccountButton from './ManageAccountButton'
 
+const ROLE_BADGE: Record<string, string> = {
+  admin:   'bg-purple-100 text-purple-700',
+  coach:   'bg-blue-100 text-blue-700',
+  client:  'bg-slate-100 text-slate-600',
+  unknown: 'bg-slate-100 text-slate-500',
+}
+
 export default async function SettingsPage() {
-  const user = await currentUser()
-  const role = (user?.publicMetadata as { role?: string })?.role ?? 'coach'
+  const [user, userRecord] = await Promise.all([
+    currentUser(),
+    getCurrentUserRecord(),
+  ])
 
   const rawBaseId = process.env.AIRTABLE_BASE_ID ?? ''
   const maskedBaseId = rawBaseId
@@ -36,9 +46,27 @@ export default async function SettingsPage() {
             <p className="text-sm text-slate-500 mt-0.5">
               {user?.emailAddresses[0]?.emailAddress ?? '—'}
             </p>
-            <p className="text-xs text-slate-400 mt-0.5 capitalize">{role}</p>
           </div>
         </div>
+
+        {/* Access level row */}
+        <div className="mt-4 pt-4 border-t border-slate-100 space-y-2 text-sm">
+          <div className="flex justify-between items-center">
+            <span className="text-slate-500">Access Level</span>
+            <span className={`font-medium px-2.5 py-0.5 rounded-full text-xs capitalize ${ROLE_BADGE[userRecord.role] ?? ROLE_BADGE.unknown}`}>
+              {userRecord.role}
+            </span>
+          </div>
+          {userRecord.airtableId && (
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Airtable Record</span>
+              <code className="font-mono text-xs text-slate-400">
+                {userRecord.airtableId.slice(0, 10)}…
+              </code>
+            </div>
+          )}
+        </div>
+
         <ManageAccountButton />
       </section>
 

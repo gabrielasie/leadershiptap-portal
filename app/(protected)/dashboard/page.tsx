@@ -7,6 +7,7 @@ import { buildEmailToUserMap, findClientForMeeting, groupMeetingsByUser } from '
 import { fetchAllMessages } from '@/lib/airtable/messages'
 import { getAllOpenTasks } from '@/lib/airtable/tasks'
 import { getRecentNotes } from '@/lib/airtable/notes'
+import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import DashboardQuickActions from './DashboardQuickActions'
 import UpcomingSessionsCard, { type UpcomingItem } from './UpcomingSessionsCard'
 import type { User, Meeting, Message } from '@/lib/types'
@@ -72,13 +73,14 @@ function formatDateShort(iso: string): string {
 export default async function DashboardPage() {
   const sessionUser = await getSessionUser()
 
-  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, rawRecentNotes] = await Promise.all([
+  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, rawRecentNotes, userRecord] = await Promise.all([
     getUsers(sessionUser),
     getAllUpcomingMeetings(7),   // Airtable-filtered: StartTime in next 7 days, sorted asc
     getAllMeetings(),            // All-time: for client activity section
     fetchAllMessages(),
     getAllOpenTasks(),
     getRecentNotes(4),
+    getCurrentUserRecord(),
   ])
 
   // Build email → user lookup (matches both email and workEmail, normalised)
@@ -152,6 +154,7 @@ export default async function DashboardPage() {
     coachUser?.preferredName ??
     coachUser?.firstName ??
     coachUser?.fullName?.split(' ')[0] ??
+    (userRecord.name.split(' ')[0] || null) ??  // Clerk first name via getCurrentUserRecord
     sessionUser?.email?.split('@')[0] ??
     'Coach'
 
