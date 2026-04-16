@@ -97,14 +97,45 @@ export async function saveNoteAction(
     if (msg.includes('TABLE_NOT_FOUND') || msg.includes('Could not find table')) {
       throw new Error('NOTES_TABLE_MISSING')
     }
+    console.error('[saveNoteAction] Airtable error:', msg)
     throw new Error('SAVE_FAILED')
   }
   revalidatePath(`/users/${userId}`)
 }
 
+// ── Update Task Status ────────────────────────────────────────────────────────
+
+export async function updateTaskStatusAction(
+  taskId: string,
+  status: string,
+): Promise<{ success: boolean }> {
+  try {
+    const baseId = process.env.AIRTABLE_BASE_ID!
+    const token = process.env.AIRTABLE_API_KEY!
+    const res = await fetch(
+      `https://api.airtable.com/v0/${baseId}/Linked%20Todoist%20Tasks/${taskId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fields: { Status: status } }),
+      },
+    )
+    if (!res.ok) {
+      const text = await res.text()
+      console.error('[updateTaskStatusAction] Airtable error:', text)
+      return { success: false }
+    }
+    return { success: true }
+  } catch (err) {
+    console.error('[updateTaskStatusAction] error:', err)
+    return { success: false }
+  }
+}
+
 // ── Add Task ──────────────────────────────────────────────────────────────────
-// Writes to the Tasks table. See AIRTABLE SETUP section in the response for
-// the required table schema — this will throw if the table doesn't exist yet.
 
 export async function saveTaskAction(
   userId: string,

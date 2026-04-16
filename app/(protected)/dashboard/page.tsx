@@ -400,10 +400,10 @@ export default async function DashboardPage() {
       )}
 
       {/* ── Main grid ─────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
 
         {/* LEFT: Upcoming This Week */}
-        <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
+        <div id="upcoming" className="bg-white rounded-xl shadow-sm p-4 md:p-6">
           <div className="flex items-center gap-2 mb-5">
             <Calendar className="h-5 w-5 text-slate-400" />
             <h2 className="text-lg font-semibold text-slate-900">Upcoming This Week</h2>

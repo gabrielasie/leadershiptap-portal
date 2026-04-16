@@ -26,6 +26,7 @@ import UserActionsBar from './UserActionsBar'
 import RecentSessionCard from './RecentSessionCard'
 import EditProfileDialog from './EditProfileDialog'
 import AddTeamMemberDialog from './AddTeamMemberDialog'
+import TaskItem from './TaskItem'
 import type { User, Meeting, Message, Note, Task } from '@/lib/types'
 
 interface Props {
@@ -92,58 +93,7 @@ function relativeDays(iso: string): string {
 
 // ── sub-components ────────────────────────────────────────────────────────────
 
-const PRIORITY_STYLES: Record<string, string> = {
-  High:   'bg-rose-50 text-rose-700 border-rose-200',
-  Medium: 'bg-amber-50 text-amber-700 border-amber-200',
-  Low:    'bg-slate-100 text-slate-500 border-slate-200',
-}
 
-const STATUS_STYLES: Record<string, string> = {
-  'To Do':       'bg-slate-100 text-slate-500',
-  'In Progress': 'bg-blue-50 text-blue-700',
-  'Done':        'bg-emerald-50 text-emerald-700',
-}
-
-function formatTaskDueDate(dateStr: string): string {
-  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
-
-function TaskRow({ task }: { task: Task }) {
-  const isDone = task.status === 'Done'
-  const isOverdue =
-    task.dueDate &&
-    !isDone &&
-    new Date(task.dueDate + 'T23:59:59') < new Date()
-
-  return (
-    <div className="flex items-start gap-3 px-3 py-2.5 rounded-lg border border-slate-100 hover:border-slate-200 transition-colors">
-      <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium ${isDone ? 'line-through text-slate-400' : 'text-slate-900'}`}>{task.name}</p>
-        {task.dueDate && (
-          <p className={`text-xs mt-0.5 ${isOverdue ? 'text-rose-500 font-medium' : 'text-slate-400'}`}>
-            {isOverdue ? 'Overdue · ' : 'Due '}{formatTaskDueDate(task.dueDate)}
-          </p>
-        )}
-      </div>
-      <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-        {task.status && (
-          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[task.status] ?? 'bg-slate-100 text-slate-500'}`}>
-            {task.status}
-          </span>
-        )}
-        {task.priority && (
-          <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${PRIORITY_STYLES[task.priority] ?? 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-            {task.priority}
-          </span>
-        )}
-      </div>
-    </div>
-  )
-}
 
 function formatNoteDate(dateStr: string): string {
   if (!dateStr) return ''
@@ -900,7 +850,7 @@ export default async function UserDetailPage({ params }: Props) {
         ) : (
           <div className="space-y-2">
             {tasks.map((task) => (
-              <TaskRow key={task.id} task={task} />
+              <TaskItem key={task.id} task={task} />
             ))}
           </div>
         )}

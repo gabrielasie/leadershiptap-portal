@@ -8,7 +8,7 @@ import { Users, LayoutDashboard, Settings, LogOut } from 'lucide-react'
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', enabled: true },
   { href: '/users', icon: Users, label: 'Clients', enabled: true },
-  { href: '/settings', icon: Settings, label: 'Settings', enabled: false },
+  { href: '/settings', icon: Settings, label: 'Settings', enabled: true },
 ]
 
 export default function Sidebar() {
