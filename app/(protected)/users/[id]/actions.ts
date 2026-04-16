@@ -88,10 +88,14 @@ export async function saveNoteAction(
   content: string,
   date: string,         // YYYY-MM-DD from the date input
 ): Promise<void> {
+  console.log('[saveNoteAction] called — userId:', userId, '| date:', date, '| contentLen:', content.length)
   const sessionUser = await getSessionUser()
+  console.log('[saveNoteAction] sessionUser:', sessionUser?.email, '| role:', sessionUser?.role)
   try {
     await createNote(userId, content.trim(), date, sessionUser)
+    console.log('[saveNoteAction] createNote succeeded')
   } catch (err) {
+    console.error('[saveNoteAction] createNote threw:', err)
     const msg = err instanceof Error ? err.message : String(err)
     if (msg === 'NOT_AUTHORIZED') throw new Error('NOT_AUTHORIZED')
     if (msg.includes('TABLE_NOT_FOUND') || msg.includes('Could not find table')) {

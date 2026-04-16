@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Calendar, ChevronRight, X } from 'lucide-react'
+// ChevronRight still used in UnmatchedMeetingModal "Open Full Session" link
 
 export interface UpcomingItem {
   meetingId: string
@@ -158,12 +159,8 @@ export default function UpcomingSessionsCard({ items }: { items: UpcomingItem[] 
             </div>
           )
 
-          const chevron = (
-            <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0 mt-1 transition-colors" />
-          )
-
           const rowClass =
-            'flex items-start gap-4 p-4 rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors group'
+            'flex items-center gap-4 px-4 py-4 min-h-[64px] rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors group'
 
           if (item.clientId) {
             return (
@@ -174,7 +171,6 @@ export default function UpcomingSessionsCard({ items }: { items: UpcomingItem[] 
               >
                 {dateBlock}
                 {body}
-                {chevron}
               </Link>
             )
           }
@@ -187,7 +183,6 @@ export default function UpcomingSessionsCard({ items }: { items: UpcomingItem[] 
             >
               {dateBlock}
               {body}
-              {chevron}
             </button>
           )
         })}

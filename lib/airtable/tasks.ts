@@ -88,6 +88,38 @@ export async function getTasksByUser(userId: string): Promise<Task[]> {
   }
 }
 
+export async function getAllOpenTasks(): Promise<Task[]> {
+  try {
+    const { apiKey, baseId } = getCredentials();
+    const res = await fetch(
+      `${API_BASE}/${baseId}/Linked%20Todoist%20Tasks`,
+      { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+
+    const tasks: Task[] = (data.records ?? [])
+      .map(mapRecord)
+      .filter((t: Task) => {
+        const s = (t.status ?? '').toLowerCase();
+        return s !== 'done' && s !== 'completed';
+      });
+
+    // Sort by due date asc, nulls last (overdue dates surface first)
+    tasks.sort((a, b) => {
+      if (!a.dueDate && !b.dueDate) return 0;
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return a.dueDate.localeCompare(b.dueDate);
+    });
+
+    return tasks;
+  } catch (err) {
+    console.warn('[getAllOpenTasks] error:', err);
+    return [];
+  }
+}
+
 export async function createTask(fields: {
   Title: string;
   'Due Date'?: string;   // YYYY-MM-DD (not stored — Linked Todoist Tasks has no due date field)

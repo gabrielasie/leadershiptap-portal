@@ -14,7 +14,7 @@ function parseEmails(raw: unknown): string[] {
   const items: string[] = Array.isArray(raw)
     ? raw.map(String)
     : typeof raw === "string"
-    ? raw.split(",")
+    ? raw.split(/[,;]/)
     : [];
   return items.map((e) => e.trim()).filter(Boolean);
 }

@@ -85,10 +85,10 @@ export default function Sidebar() {
             return (
               <div
                 key={href}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 cursor-not-allowed select-none"
+                className="flex items-center gap-3 pl-[9px] pr-3 py-2 min-h-[48px] rounded-lg border-l-[3px] border-transparent text-base text-slate-400 cursor-not-allowed select-none"
                 title="Coming soon"
               >
-                <Icon className="h-4 w-4 flex-shrink-0" />
+                <Icon className="h-5 w-5 flex-shrink-0" />
                 {label}
               </div>
             )
@@ -97,13 +97,13 @@ export default function Sidebar() {
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+              className={`flex items-center gap-3 pl-[9px] pr-3 py-2 min-h-[48px] rounded-lg border-l-[3px] text-base transition-colors ${
                 active
-                  ? 'bg-[hsl(213,60%,94%)] text-[hsl(213,70%,30%)] font-medium'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'border-[hsl(213,70%,30%)] bg-[hsl(213,60%,94%)] text-[hsl(213,70%,30%)] font-medium'
+                  : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
-              <Icon className="h-4 w-4 flex-shrink-0" />
+              <Icon className="h-5 w-5 flex-shrink-0" />
               {label}
             </Link>
           )
@@ -132,9 +132,9 @@ export default function Sidebar() {
         )}
         <button
           onClick={() => signOut({ redirectUrl: '/sign-in' })}
-          className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+          className="flex w-full items-center gap-3 px-3 py-2 min-h-[48px] rounded-lg text-base text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors"
         >
-          <LogOut className="h-4 w-4 flex-shrink-0" />
+          <LogOut className="h-5 w-5 flex-shrink-0" />
           Sign out
         </button>
       </div>

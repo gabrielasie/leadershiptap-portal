@@ -73,9 +73,9 @@ function LogNoteDialog({ clients }: { clients: Client[] }) {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <button className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 bg-white hover:border-[hsl(213,60%,80%)] hover:bg-[hsl(213,60%,97%)] transition-colors group w-full">
-          <StickyNote className="h-5 w-5 text-slate-400 group-hover:text-[hsl(213,70%,30%)]" />
-          <span className="text-sm font-medium text-slate-700 group-hover:text-[hsl(213,70%,30%)]">Log a Note</span>
+        <button className="flex flex-col items-center justify-center gap-3 p-4 min-h-[100px] rounded-xl border border-slate-200 bg-white hover:border-[hsl(213,60%,80%)] hover:bg-[hsl(213,60%,97%)] transition-colors group w-full">
+          <StickyNote className="h-8 w-8 text-slate-400 group-hover:text-[hsl(213,70%,30%)]" />
+          <span className="text-base font-medium text-slate-700 group-hover:text-[hsl(213,70%,30%)]">Log a Note</span>
         </button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
@@ -154,9 +154,9 @@ function AddTaskDialog({ clients }: { clients: Client[] }) {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <button className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 bg-white hover:border-[hsl(213,60%,80%)] hover:bg-[hsl(213,60%,97%)] transition-colors group w-full">
-          <CheckSquare className="h-5 w-5 text-slate-400 group-hover:text-[hsl(213,70%,30%)]" />
-          <span className="text-sm font-medium text-slate-700 group-hover:text-[hsl(213,70%,30%)]">Add Task</span>
+        <button className="flex flex-col items-center justify-center gap-3 p-4 min-h-[100px] rounded-xl border border-slate-200 bg-white hover:border-[hsl(213,60%,80%)] hover:bg-[hsl(213,60%,97%)] transition-colors group w-full">
+          <CheckSquare className="h-8 w-8 text-slate-400 group-hover:text-[hsl(213,70%,30%)]" />
+          <span className="text-base font-medium text-slate-700 group-hover:text-[hsl(213,70%,30%)]">Add Task</span>
         </button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
@@ -210,10 +210,10 @@ export default function DashboardQuickActions({ clients }: Props) {
         <AddTaskDialog clients={clients} />
         <Link
           href="/users"
-          className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 bg-white hover:border-[hsl(213,60%,80%)] hover:bg-[hsl(213,60%,97%)] transition-colors group"
+          className="flex flex-col items-center justify-center gap-3 p-4 min-h-[100px] rounded-xl border border-slate-200 bg-white hover:border-[hsl(213,60%,80%)] hover:bg-[hsl(213,60%,97%)] transition-colors group"
         >
-          <Users className="h-5 w-5 text-slate-400 group-hover:text-[hsl(213,70%,30%)]" />
-          <span className="text-sm font-medium text-slate-700 group-hover:text-[hsl(213,70%,30%)]">All Clients</span>
+          <Users className="h-8 w-8 text-slate-400 group-hover:text-[hsl(213,70%,30%)]" />
+          <span className="text-base font-medium text-slate-700 group-hover:text-[hsl(213,70%,30%)]">All Clients</span>
         </Link>
       </div>
     </div>

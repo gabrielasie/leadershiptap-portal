@@ -21,6 +21,42 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Not
   }
 }
 
+export interface RecentNote {
+  id: string
+  content: string
+  date: string
+  userId: string | null
+}
+
+/**
+ * Fetch the N most recently dated notes across all clients.
+ * Sorted descending by Date on the Airtable side for efficiency.
+ */
+export async function getRecentNotes(limit = 4): Promise<RecentNote[]> {
+  const { apiKey, baseId } = getCredentials()
+  const url =
+    `${API_BASE}/${baseId}/Notes` +
+    `?sort%5B0%5D%5Bfield%5D=Date&sort%5B0%5D%5Bdirection%5D=desc` +
+    `&maxRecords=${limit}`
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: 'no-store',
+  })
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.records ?? []).map(
+    (r: { id: string; fields: Record<string, unknown> }): RecentNote => {
+      const clientIds = r.fields['Client']
+      return {
+        id: r.id,
+        content: (r.fields['Content'] as string) ?? '',
+        date: (r.fields['Date'] as string) ?? '',
+        userId: Array.isArray(clientIds) ? ((clientIds[0] as string) ?? null) : null,
+      }
+    },
+  )
+}
+
 /**
  * Write a note for a client.
  * Throws 'NOT_AUTHORIZED' if the sessionUser is not allowed to write for this userId.
@@ -38,25 +74,27 @@ export async function createNote(
   }
 
   const { apiKey, baseId } = getCredentials()
+  const body = {
+    fields: {
+      Content: content,
+      Date: date,
+      Client: [userId],
+    },
+  }
+  console.log('[createNote] POST body:', JSON.stringify(body))
   const res = await fetch(`${API_BASE}/${baseId}/Notes`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      fields: {
-        Content: content,
-        Date: date,
-        Client: [userId],
-      },
-    }),
+    body: JSON.stringify(body),
   })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Airtable POST failed: ${text}`)
-  }
   const data = await res.json()
+  console.log('[createNote] Airtable status:', res.status, '| response:', JSON.stringify(data))
+  if (!res.ok) {
+    throw new Error(`Airtable POST failed: ${JSON.stringify(data)}`)
+  }
   return mapRecord(data)
 }
 

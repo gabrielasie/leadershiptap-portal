@@ -1,17 +1,35 @@
 import Link from 'next/link'
-import { Calendar, Users, ChevronRight, MessageSquare } from 'lucide-react'
-// ChevronRight used in Recent Clients rows below
+import { Calendar, Users, ChevronRight, MessageSquare, Clock, CheckSquare } from 'lucide-react'
 import { getUsers } from '@/lib/services/usersService'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getAllMeetings, getAllUpcomingMeetings } from '@/lib/airtable/meetings'
 import { buildEmailToUserMap, findClientForMeeting, groupMeetingsByUser } from '@/lib/services/meetingsService'
 import { fetchAllMessages } from '@/lib/airtable/messages'
-import PageHeader from '@/components/layout/PageHeader'
+import { getAllOpenTasks } from '@/lib/airtable/tasks'
+import { getRecentNotes } from '@/lib/airtable/notes'
 import DashboardQuickActions from './DashboardQuickActions'
 import UpcomingSessionsCard, { type UpcomingItem } from './UpcomingSessionsCard'
 import type { User, Meeting, Message } from '@/lib/types'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+function getTimeOfDay(): string {
+  const h = new Date().getHours()
+  if (h < 12) return 'morning'
+  if (h < 17) return 'afternoon'
+  return 'evening'
+}
+
+function formatTimeUntil(iso: string, now: Date): string {
+  const diffMs = new Date(iso).getTime() - now.getTime()
+  if (diffMs <= 0) return 'starting now'
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 60) return `in ${diffMin} minute${diffMin === 1 ? '' : 's'}`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `in ${diffHr} hour${diffHr === 1 ? '' : 's'}`
+  const diffDay = Math.floor(diffHr / 24)
+  return `in ${diffDay} day${diffDay === 1 ? '' : 's'}`
+}
 
 function getDisplayName(user: User): string {
   if (user.fullName) return user.fullName
@@ -54,11 +72,13 @@ function formatDateShort(iso: string): string {
 export default async function DashboardPage() {
   const sessionUser = await getSessionUser()
 
-  const [users, upcomingMeetings, allMeetings, allMessages] = await Promise.all([
+  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, rawRecentNotes] = await Promise.all([
     getUsers(sessionUser),
     getAllUpcomingMeetings(7),   // Airtable-filtered: StartTime in next 7 days, sorted asc
     getAllMeetings(),            // All-time: for client activity section
     fetchAllMessages(),
+    getAllOpenTasks(),
+    getRecentNotes(4),
   ])
 
   // Build email → user lookup (matches both email and workEmail, normalised)
@@ -89,15 +109,10 @@ export default async function DashboardPage() {
         ? `${d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })} – ${new Date(meeting.endTime).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`
         : d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
 
-    // For the unmatched label: pick the first non-internal, non-coach participant
+    // External (non-internal, non-coach) participants — used only in the unmatched modal
     const externalEmails = meeting.participantEmails.filter(
       (e) => e && !e.toLowerCase().includes('leadershiptap.com') && e.toLowerCase() !== coachEmail,
     )
-    const displayLabel = client
-      ? null
-      : externalEmails.length > 0
-        ? externalEmails[0].split('@')[1] ?? externalEmails[0]  // show domain only
-        : null
 
     return {
       meetingId: meeting.id,
@@ -110,9 +125,66 @@ export default async function DashboardPage() {
       timeRange,
       clientId: client?.id ?? null,
       clientName: client ? getDisplayName(client) : null,
-      displayLabel,
+      displayLabel: null,
       participantEmails: externalEmails,
       notes: meeting.notes,
+    }
+  })
+
+  // ── Today section ──────────────────────────────────────────────────────────
+
+  const todayStr = now.toISOString().slice(0, 10)
+  const todayItems = upcomingItems.filter(
+    (item) => new Date(item.startTime).toISOString().slice(0, 10) === todayStr,
+  )
+  // Next upcoming meeting (soonest after now, across all 7 days)
+  const nextItem = upcomingItems.find((item) => new Date(item.startTime) > now) ?? null
+  // Additional today sessions beyond the "Coming Up Next" one
+  const otherTodayItems = todayItems.filter((item) => item !== nextItem)
+
+  // Coach first name for greeting
+  const coachUser = users.find(
+    (u) =>
+      u.email?.toLowerCase() === sessionUser?.email?.toLowerCase() ||
+      u.workEmail?.toLowerCase() === sessionUser?.email?.toLowerCase(),
+  )
+  const firstName =
+    coachUser?.preferredName ??
+    coachUser?.firstName ??
+    coachUser?.fullName?.split(' ')[0] ??
+    sessionUser?.email?.split('@')[0] ??
+    'Coach'
+
+  // Client user record for Coming Up Next avatar
+  const nextClient = nextItem?.clientId
+    ? (users.find((u) => u.id === nextItem.clientId) ?? null)
+    : null
+
+  // ── Open tasks ─────────────────────────────────────────────────────────────
+
+  const idToUser = new Map(users.map((u) => [u.id, u]))
+  const openTasks = rawOpenTasks.slice(0, 5).map((task) => {
+    const client = task.userId ? (idToUser.get(task.userId) ?? null) : null
+    return {
+      id: task.id,
+      name: task.name,
+      status: task.status,
+      dueDate: task.dueDate ?? null,
+      clientId: client?.id ?? null,
+      clientName: client ? getDisplayName(client) : null,
+    }
+  })
+
+  // ── Recent notes ───────────────────────────────────────────────────────────
+
+  const recentNotes = rawRecentNotes.map((note) => {
+    const client = note.userId ? (idToUser.get(note.userId) ?? null) : null
+    return {
+      id: note.id,
+      content: note.content,
+      date: note.date,
+      clientId: client?.id ?? null,
+      clientName: client ? getDisplayName(client) : null,
     }
   })
 
@@ -180,99 +252,280 @@ export default async function DashboardPage() {
   // ── render ─────────────────────────────────────────────────────────────────
 
   return (
-    <>
-      <PageHeader title="Dashboard" description="Your coaching prep overview" />
+    <div className="p-4 md:p-6 lg:p-8">
 
-      <div className="p-4 md:p-6 lg:p-8">
-        <DashboardQuickActions clients={clientsForActions} />
+      {/* ── Greeting ─────────────────────────────────────────────────────────── */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-slate-900">
+          Good {getTimeOfDay()}, {firstName} 👋
+        </h1>
+        <p className="text-sm text-slate-500 mt-1">
+          {todayItems.length > 0
+            ? `You have ${todayItems.length} session${todayItems.length === 1 ? '' : 's'} today`
+            : 'No sessions scheduled for today'}
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
-
-          {/* ── LEFT: Upcoming This Week ────────────────────────────────────── */}
-          <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-            <div className="flex items-center gap-2 mb-5">
-              <Calendar className="h-5 w-5 text-slate-400" />
-              <h2 className="text-lg font-semibold text-slate-900">Upcoming This Week</h2>
-              {upcomingItems.length > 0 && (
-                <span className="ml-auto text-xs text-slate-400 font-medium">
-                  {upcomingItems.length}{' '}
-                  {upcomingItems.length === 1 ? 'meeting' : 'meetings'}
-                </span>
-              )}
-            </div>
-            <UpcomingSessionsCard items={upcomingItems} />
+      {/* ── Coming Up Next ───────────────────────────────────────────────────── */}
+      {nextItem && (
+        <div className="bg-[hsl(213,60%,97%)] border border-[hsl(213,50%,88%)] rounded-xl p-5 mb-4 md:mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Clock className="h-4 w-4 text-[hsl(213,70%,45%)]" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(213,70%,45%)]">
+              Coming Up Next
+            </span>
+            <span className="ml-auto text-xs font-semibold text-[hsl(213,70%,45%)]">
+              {formatTimeUntil(nextItem.startTime, now)}
+            </span>
           </div>
 
-          {/* ── RIGHT: Client Activity ──────────────────────────────────────── */}
-          <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-            <div className="flex items-center gap-2 mb-5">
-              <Users className="h-5 w-5 text-slate-400" />
-              <h2 className="text-lg font-semibold text-slate-900">Recent Clients</h2>
-              <Link
-                href="/users"
-                className="ml-auto text-xs text-[hsl(213,70%,30%)] hover:underline font-medium"
+          <div className="flex items-start gap-4">
+            {/* Client avatar */}
+            {nextClient && (nextClient.profilePhoto ?? nextClient.avatarUrl) ? (
+              <img
+                src={(nextClient.profilePhoto ?? nextClient.avatarUrl)!}
+                alt={nextItem.clientName ?? ''}
+                className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+              />
+            ) : nextClient ? (
+              <div
+                className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0 ${avatarColor(nextClient.id)}`}
               >
-                View all {users.length}
+                {getInitials(nextClient)}
+              </div>
+            ) : null}
+
+            <div className="flex-1 min-w-0">
+              {nextItem.clientName && (
+                <p className="text-sm font-semibold text-[hsl(213,70%,30%)] mb-0.5">
+                  {nextItem.clientName}
+                </p>
+              )}
+              <p className="text-base font-bold text-slate-900 leading-snug">
+                {nextItem.title || 'Untitled Meeting'}
+              </p>
+              <p className="text-sm text-slate-500 mt-0.5">{nextItem.timeRange}</p>
+            </div>
+          </div>
+
+          {nextItem.clientId && (
+            <div className="mt-4">
+              <Link
+                href={`/users/${nextItem.clientId}`}
+                className="inline-flex items-center justify-center gap-1.5 h-12 px-6 w-full md:w-auto rounded-lg bg-[hsl(213,70%,30%)] text-white text-base font-medium hover:bg-[hsl(213,70%,25%)] transition-colors"
+              >
+                Open Client Profile
+                <ChevronRight className="h-4 w-4" />
               </Link>
             </div>
+          )}
+        </div>
+      )}
 
-            {recentClients.length === 0 ? (
-              <p className="text-sm text-slate-400">No clients yet.</p>
+      {/* ── Other today sessions — chip row ──────────────────────────────────── */}
+      {otherTodayItems.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 mb-4 md:mb-6 scrollbar-none">
+          {otherTodayItems.map((item) => {
+            const inner = (
+              <span className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1.5 rounded-full bg-white border border-slate-200 text-sm hover:border-[hsl(213,60%,70%)] hover:text-[hsl(213,70%,30%)] transition-colors">
+                <span className="text-slate-400 text-xs font-medium">{item.timeRange}</span>
+                <span className="text-slate-700 font-medium">
+                  {item.clientName ?? item.title}
+                </span>
+              </span>
+            )
+            return item.clientId ? (
+              <Link key={item.meetingId} href={`/users/${item.clientId}`}>
+                {inner}
+              </Link>
             ) : (
-              <div className="divide-y divide-slate-100">
-                {recentClients.map(({ user, lastMeeting, lastMessage }) => (
-                  <Link
-                    key={user.id}
-                    href={`/users/${user.id}`}
-                    className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 -mx-2 px-2 rounded-lg hover:bg-slate-50 transition-colors group"
-                  >
-                    {/* Avatar */}
-                    {(user.profilePhoto ?? user.avatarUrl) ? (
-                      <img
-                        src={(user.profilePhoto ?? user.avatarUrl)!}
-                        alt={getDisplayName(user)}
-                        className="w-9 h-9 rounded-full object-cover flex-shrink-0"
-                      />
-                    ) : (
-                      <div
-                        className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${avatarColor(user.id)}`}
+              <div key={item.meetingId}>{inner}</div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Quick Actions ─────────────────────────────────────────────────────── */}
+      <DashboardQuickActions clients={clientsForActions} />
+
+      {/* ── Open Tasks ───────────────────────────────────────────────────────── */}
+      {openTasks.length > 0 && (
+        <div className="mb-4 md:mb-6 bg-white rounded-xl shadow-sm p-4 md:p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <CheckSquare className="h-5 w-5 text-slate-400" />
+            <h2 className="text-lg font-semibold text-slate-900">Open Tasks</h2>
+            <span className="ml-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">
+              {openTasks.length}
+            </span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {openTasks.map((task) => {
+              const isOverdue = task.dueDate
+                ? new Date(task.dueDate) < now
+                : false
+              return (
+                <div
+                  key={task.id}
+                  className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate">{task.name}</p>
+                    {task.clientId && (
+                      <Link
+                        href={`/users/${task.clientId}`}
+                        className="text-xs text-[hsl(213,70%,30%)] hover:underline"
                       >
-                        {getInitials(user)}
-                      </div>
+                        {task.clientName}
+                      </Link>
                     )}
+                  </div>
+                  {task.dueDate && (
+                    <p
+                      className={`text-xs font-medium whitespace-nowrap flex-shrink-0 ${
+                        isOverdue ? 'text-rose-600' : 'text-slate-400'
+                      }`}
+                    >
+                      {isOverdue ? 'Overdue · ' : 'Due '}
+                      {new Date(task.dueDate).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
-                    {/* Name + last activity */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-900 truncate">
-                        {getDisplayName(user)}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
-                        {lastMeeting ? (
-                          <span className="flex items-center gap-1 text-xs text-slate-400">
-                            <Calendar className="h-3 w-3 flex-shrink-0" />
-                            {formatDateShort(lastMeeting.startTime)}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-300">No meetings yet</span>
-                        )}
-                        {lastMessage?.created && (
-                          <span className="flex items-center gap-1 text-xs text-slate-400">
-                            <MessageSquare className="h-3 w-3 flex-shrink-0" />
-                            {formatDateShort(lastMessage.created)}
-                          </span>
-                        )}
-                      </div>
+      {/* ── Main grid ─────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 items-start">
+
+        {/* LEFT: Upcoming This Week */}
+        <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <Calendar className="h-5 w-5 text-slate-400" />
+            <h2 className="text-lg font-semibold text-slate-900">Upcoming This Week</h2>
+            {upcomingItems.length > 0 && (
+              <span className="ml-auto text-xs text-slate-400 font-medium">
+                {upcomingItems.length}{' '}
+                {upcomingItems.length === 1 ? 'meeting' : 'meetings'}
+              </span>
+            )}
+          </div>
+          <UpcomingSessionsCard items={upcomingItems} />
+        </div>
+
+        {/* RIGHT: Recent Clients */}
+        <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <Users className="h-5 w-5 text-slate-400" />
+            <h2 className="text-lg font-semibold text-slate-900">Recent Clients</h2>
+            <Link
+              href="/users"
+              className="ml-auto text-xs text-[hsl(213,70%,30%)] hover:underline font-medium"
+            >
+              View all {users.length}
+            </Link>
+          </div>
+
+          {recentClients.length === 0 ? (
+            <p className="text-sm text-slate-400">No clients yet.</p>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {recentClients.map(({ user, lastMeeting, lastMessage }) => (
+                <Link
+                  key={user.id}
+                  href={`/users/${user.id}`}
+                  className="flex items-center gap-3 py-4 min-h-[64px] first:pt-0 last:pb-0 -mx-2 px-2 rounded-lg hover:bg-slate-50 transition-colors group"
+                >
+                  {/* Avatar */}
+                  {(user.profilePhoto ?? user.avatarUrl) ? (
+                    <img
+                      src={(user.profilePhoto ?? user.avatarUrl)!}
+                      alt={getDisplayName(user)}
+                      className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <div
+                      className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0 ${avatarColor(user.id)}`}
+                    >
+                      {getInitials(user)}
                     </div>
+                  )}
 
-                    <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0 transition-colors" />
-                  </Link>
+                  {/* Name + last activity */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-base font-semibold text-slate-900 truncate">
+                      {getDisplayName(user)}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
+                      {lastMeeting ? (
+                        <span className="flex items-center gap-1 text-xs text-slate-400">
+                          <Calendar className="h-3 w-3 flex-shrink-0" />
+                          {formatDateShort(lastMeeting.startTime)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-300">No meetings yet</span>
+                      )}
+                      {lastMessage?.created && (
+                        <span className="flex items-center gap-1 text-xs text-slate-400">
+                          <MessageSquare className="h-3 w-3 flex-shrink-0" />
+                          {formatDateShort(lastMessage.created)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0 transition-colors" />
+                </Link>
+              ))}
+            </div>
+          )}
+
+          {/* Recent Notes */}
+          <div className="mt-6 pt-5 border-t border-slate-100">
+            <h3 className="text-sm font-semibold text-slate-900 mb-3">Recent Notes</h3>
+            {recentNotes.length === 0 ? (
+              <p className="text-xs text-slate-400">No notes logged yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {recentNotes.map((note) => (
+                  <div
+                    key={note.id}
+                    className="rounded-lg border border-slate-100 p-3 hover:bg-slate-50 transition-colors"
+                  >
+                    <p className="text-xs text-slate-400 mb-1">
+                      {note.clientId ? (
+                        <Link
+                          href={`/users/${note.clientId}`}
+                          className="text-[hsl(213,70%,30%)] hover:underline font-medium"
+                        >
+                          {note.clientName}
+                        </Link>
+                      ) : (
+                        <span>Unknown client</span>
+                      )}
+                      {' · '}
+                      {note.date
+                        ? new Date(note.date).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                          })
+                        : 'No date'}
+                    </p>
+                    <p className="text-sm text-slate-700 line-clamp-2 leading-relaxed">
+                      {note.content}
+                    </p>
+                  </div>
                 ))}
               </div>
             )}
           </div>
-
         </div>
+
       </div>
-    </>
+    </div>
   )
 }
