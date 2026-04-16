@@ -742,7 +742,7 @@ export default async function UserDetailPage({ params }: Props) {
                 const label = relativeDays(nextMeeting.startTime)
                 return (
                   <Link
-                    href={`/users/${id}/meetings/${nextMeeting.id}`}
+                    href={`/users/${id}/sessions/${nextMeeting.id}`}
                     className="flex items-start gap-4 p-4 rounded-xl border-2 border-[hsl(213,60%,90%)] bg-[hsl(213,60%,97%)] hover:bg-[hsl(213,60%,95%)] transition-colors group"
                   >
                     <div className="flex-shrink-0 w-12 text-center bg-[hsl(213,70%,30%)] text-white rounded-lg py-2 px-1">
@@ -778,7 +778,7 @@ export default async function UserDetailPage({ params }: Props) {
                 return (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
                     <Link
-                      href={`/users/${id}/meetings/${lastMeeting.id}`}
+                      href={`/users/${id}/sessions/${lastMeeting.id}`}
                       className="flex items-start gap-4 p-4 hover:bg-slate-100 transition-colors group"
                     >
                       <div className="flex-shrink-0 w-12 text-center bg-slate-200 text-slate-600 rounded-lg py-2 px-1">

@@ -69,9 +69,6 @@ export async function getAllMeetings(): Promise<Meeting[]> {
     throw new Error(`Airtable GET failed: ${text}`);
   }
   const data = await res.json();
-  // Debug: log raw ParticipantEmails format from Airtable (comma string or array?)
-  const firstRaw = data.records?.[0]?.fields?.ParticipantEmails;
-  console.log('[meetings] raw ParticipantEmails type:', typeof firstRaw, '| value:', firstRaw);
   return (data.records ?? []).map(mapRecord);
 }
 

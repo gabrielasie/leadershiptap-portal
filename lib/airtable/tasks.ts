@@ -58,11 +58,6 @@ export async function getTasksByUser(userId: string): Promise<Task[]> {
     );
     if (tableRes.ok) {
       const tableData = await tableRes.json();
-      console.log('[Tasks] Raw records count:', tableData.records?.length);
-      tableData.records?.forEach((r: { id: string; fields: Record<string, unknown> }) => {
-        console.log('  id:', r.id, '| fields:', JSON.stringify(r.fields));
-      });
-      console.log('[Tasks] Filtering for userId:', userId);
       for (const rec of (tableData.records ?? [])) {
         const users2 = rec.fields['Users 2'];
         if (!Array.isArray(users2) || !users2.includes(userId)) continue;

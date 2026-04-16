@@ -81,7 +81,6 @@ export async function createNote(
       Client: [userId],
     },
   }
-  console.log('[createNote] POST body:', JSON.stringify(body))
   const res = await fetch(`${API_BASE}/${baseId}/Notes`, {
     method: 'POST',
     headers: {
@@ -91,7 +90,6 @@ export async function createNote(
     body: JSON.stringify(body),
   })
   const data = await res.json()
-  console.log('[createNote] Airtable status:', res.status, '| response:', JSON.stringify(data))
   if (!res.ok) {
     throw new Error(`Airtable POST failed: ${JSON.stringify(data)}`)
   }
