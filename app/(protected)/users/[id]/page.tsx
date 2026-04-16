@@ -27,6 +27,7 @@ import RecentSessionCard from './RecentSessionCard'
 import EditProfileDialog from './EditProfileDialog'
 import AddTeamMemberDialog from './AddTeamMemberDialog'
 import TaskItem from './TaskItem'
+import NoteItem from './NoteItem'
 import type { User, Meeting, Message, Note, Task } from '@/lib/types'
 
 interface Props {
@@ -95,29 +96,6 @@ function relativeDays(iso: string): string {
 
 
 
-function formatNoteDate(dateStr: string): string {
-  if (!dateStr) return ''
-  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
-
-function NoteCard({ note }: { note: Note }) {
-  return (
-    <div className="rounded-lg border border-slate-100 p-4">
-      {note.date && (
-        <p className="text-xs font-semibold text-slate-500 mb-2">
-          {formatNoteDate(note.date)}
-        </p>
-      )}
-      <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-        {note.content}
-      </p>
-    </div>
-  )
-}
 
 function SectionHeading({ icon: Icon, title }: { icon: React.ElementType; title: string }) {
   return (
@@ -600,9 +578,9 @@ export default async function UserDetailPage({ params }: Props) {
         {sessionNotes.length === 0 ? (
           <p className="text-sm text-slate-400">No coach notes yet — use the Log a Note button above.</p>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {sessionNotes.map((note) => (
-              <NoteCard key={note.id} note={note} />
+              <NoteItem key={note.id} note={note} />
             ))}
           </div>
         )}

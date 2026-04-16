@@ -103,6 +103,55 @@ export async function saveNoteAction(
   revalidatePath(`/users/${userId}`)
 }
 
+// ── Edit / Delete Note ────────────────────────────────────────────────────────
+
+export async function updateNoteAction(
+  noteId: string,
+  content: string,
+  date: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const baseId = process.env.AIRTABLE_BASE_ID!
+    const token = process.env.AIRTABLE_API_KEY!
+    const res = await fetch(`https://api.airtable.com/v0/${baseId}/Notes/${noteId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { Content: content, Date: date } }),
+    })
+    if (!res.ok) {
+      const data = await res.json()
+      console.error('[updateNoteAction] Airtable error:', data)
+      return { success: false, error: JSON.stringify(data) }
+    }
+    return { success: true }
+  } catch (err) {
+    console.error('[updateNoteAction] error:', err)
+    return { success: false, error: String(err) }
+  }
+}
+
+export async function deleteNoteAction(
+  noteId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const baseId = process.env.AIRTABLE_BASE_ID!
+    const token = process.env.AIRTABLE_API_KEY!
+    const res = await fetch(`https://api.airtable.com/v0/${baseId}/Notes/${noteId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) {
+      const data = await res.json()
+      console.error('[deleteNoteAction] Airtable error:', data)
+      return { success: false, error: JSON.stringify(data) }
+    }
+    return { success: true }
+  } catch (err) {
+    console.error('[deleteNoteAction] error:', err)
+    return { success: false, error: String(err) }
+  }
+}
+
 // ── Update Task Status ────────────────────────────────────────────────────────
 
 export async function updateTaskStatusAction(
