@@ -58,12 +58,14 @@ export async function getTasksByUser(userId: string): Promise<Task[]> {
     );
     if (tableRes.ok) {
       const tableData = await tableRes.json();
+      console.log('[getTasksByUser] userId:', userId, '— total records in table:', tableData.records?.length);
       for (const rec of (tableData.records ?? [])) {
         const users2 = rec.fields['Users 2'];
         if (!Array.isArray(users2) || !users2.includes(userId)) continue;
         const task = mapRecord(rec);
         if (!seen.has(task.id)) { seen.add(task.id); results.push(task); }
       }
+      console.log('[getTasksByUser] matched tasks:', results.length);
     } else {
       const errText = await tableRes.text();
       console.warn('[getTasksByUser] Linked Todoist Tasks query failed:', errText);
@@ -134,6 +136,8 @@ export async function createTask(fields: {
     // "Task" = name, "Users 2" = linked user. Due date and priority have no column yet.
     const airtableFields: Record<string, unknown> = { Task: fields.Title };
     if (fields.Client?.length) airtableFields['Users 2'] = fields.Client;
+    console.log('[createTask] userId:', fields.Client?.[0]);
+    console.log('[createTask] POST body:', JSON.stringify({ fields: airtableFields }));
     const res = await fetch(`${API_BASE}/${baseId}/Linked%20Todoist%20Tasks`, {
       method: 'POST',
       headers: {
@@ -142,9 +146,10 @@ export async function createTask(fields: {
       },
       body: JSON.stringify({ fields: airtableFields }),
     });
+    const data = await res.json();
+    console.log('[createTask] response:', JSON.stringify(data));
     if (!res.ok) {
-      const text = await res.text();
-      console.error('[createTask] Airtable POST failed:', text);
+      console.error('[createTask] Airtable POST failed');
     }
   } catch (e) {
     console.error('[createTask] Unexpected error:', e);
