@@ -348,27 +348,7 @@ export default async function UserDetailPage({ params }: Props) {
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
         <div className="flex items-start justify-between gap-2 mb-4 sm:mb-0">
           <span />
-          <EditProfileDialog
-            userId={id}
-            initialValues={{
-              preferredName: user.preferredName ?? '',
-              quickNotes: user.quickNotes ?? '',
-              familyDetails: user.familyDetails ?? '',
-              timeAtCompany: user.timeAtCompany ?? '',
-              title: user.title ?? '',
-            }}
-            readOnly={{
-              fullName: user.fullName ?? [user.firstName, user.lastName].filter(Boolean).join(' '),
-              email: user.email ?? '',
-              startDate: user.startDate ?? '',
-              enneagramType: user.enneagramType ?? '',
-              enneagramDescriptor: user.enneagramDescriptor ?? '',
-              mbtiType: user.mbtiType ?? '',
-              mbtiDescriptor: user.mbtiDescriptor ?? '',
-              conflictPostureDescriptor: user.conflictPostureDescriptor ?? '',
-              apologyLanguageDescriptor: user.apologyLanguageDescriptor ?? '',
-            }}
-          />
+          <EditProfileDialog user={user} />
         </div>
         <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-5">
           {(user.profilePhoto ?? user.avatarUrl) ? (

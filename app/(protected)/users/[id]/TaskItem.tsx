@@ -5,16 +5,18 @@ import { useRouter } from 'next/navigation'
 import { updateTaskStatusAction } from './actions'
 import type { Task } from '@/lib/types'
 
-const STATUS_STYLES: Record<string, string> = {
-  'To Do':       'bg-slate-100 text-slate-500',
-  'In Progress': 'bg-blue-50 text-blue-700',
-  'Done':        'bg-emerald-50 text-emerald-700',
+type Status = 'pending' | 'in progress' | 'completed'
+
+const STATUS_STYLES: Record<Status, string> = {
+  'pending':     'bg-slate-100 text-slate-500',
+  'in progress': 'bg-blue-50 text-blue-700',
+  'completed':   'bg-emerald-50 text-emerald-700',
 }
 
-const PRIORITY_STYLES: Record<string, string> = {
-  Low:    'bg-slate-50 text-slate-500 border-slate-200',
-  Medium: 'bg-amber-50 text-amber-700 border-amber-200',
-  High:   'bg-rose-50 text-rose-700 border-rose-200',
+const STATUS_LABELS: Record<Status, string> = {
+  'pending':     'Pending',
+  'in progress': 'In Progress',
+  'completed':   'Done',
 }
 
 function formatDue(dateStr: string): string {
@@ -27,25 +29,28 @@ function formatDue(dateStr: string): string {
 
 export default function TaskItem({ task }: { task: Task }) {
   const router = useRouter()
-  const [optimisticDone, setOptimisticDone] = useState(task.status === 'Done')
+  const [optimisticStatus, setOptimisticStatus] = useState<Status>(
+    (task.status as Status) ?? 'pending'
+  )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const isDone = optimisticDone
+  const isDone = optimisticStatus === 'completed'
   const isOverdue =
     task.dueDate &&
     !isDone &&
     new Date(task.dueDate + 'T23:59:59') < new Date()
 
   async function toggle() {
-    const prev = isDone
-    setOptimisticDone(!prev)
+    const prev = optimisticStatus
+    const next: Status = isDone ? 'pending' : 'completed'
+    setOptimisticStatus(next)
     setError('')
     setLoading(true)
-    const result = await updateTaskStatusAction(task.id, !prev)
+    const result = await updateTaskStatusAction(task.id, next)
     setLoading(false)
     if (!result.success) {
-      setOptimisticDone(prev)
+      setOptimisticStatus(prev)
       setError('Failed to update — please try again')
     } else {
       router.refresh()
@@ -82,28 +87,20 @@ export default function TaskItem({ task }: { task: Task }) {
             {isOverdue ? 'Overdue · ' : 'Due '}{formatDue(task.dueDate)}
           </p>
         )}
+        {task.notes && (
+          <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{task.notes}</p>
+        )}
         {error && (
           <p className="text-xs text-rose-500 mt-0.5">{error}</p>
         )}
       </div>
 
       <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-        {task.status && (
-          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-            isDone
-              ? STATUS_STYLES['Done']
-              : STATUS_STYLES[task.status] ?? 'bg-slate-100 text-slate-500'
-          }`}>
-            {isDone ? 'Done' : task.status}
-          </span>
-        )}
-        {task.priority && (
-          <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
-            PRIORITY_STYLES[task.priority] ?? 'bg-slate-100 text-slate-500 border-slate-200'
-          }`}>
-            {task.priority}
-          </span>
-        )}
+        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+          STATUS_STYLES[optimisticStatus] ?? 'bg-slate-100 text-slate-500'
+        }`}>
+          {STATUS_LABELS[optimisticStatus] ?? optimisticStatus}
+        </span>
       </div>
     </div>
   )

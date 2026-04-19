@@ -1,14 +1,37 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Search, Users, X } from 'lucide-react'
 import type { User } from '@/lib/types'
+import AddClientDialog from './AddClientDialog'
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface EnrichedUser {
+  user: User
+  noteCount: number
+  openTaskCount: number
+  meetingCount: number  // from user.associatedMeetingIds.length
+}
+
+interface Props {
+  users: EnrichedUser[]
+  coaches: Array<{ id: string; name: string }>
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getDisplayName(user: User): string {
+  if (user.fullName) return user.fullName
+  if (user.firstName || user.lastName)
+    return [user.firstName, user.lastName].filter(Boolean).join(' ')
+  return user.preferredName ?? user.email
+}
 
 function getInitials(user: User): string {
-  if (user.firstName && user.lastName) {
+  if (user.firstName && user.lastName)
     return (user.firstName[0] + user.lastName[0]).toUpperCase()
-  }
   if (user.fullName) {
     const parts = user.fullName.trim().split(/\s+/)
     return parts.length >= 2
@@ -27,85 +50,249 @@ const AVATAR_COLORS = [
   'bg-cyan-100 text-cyan-700',
 ]
 
-function isRecordId(v: string): boolean {
-  return /^rec[A-Za-z0-9]{8,}$/.test(v)
-}
-
 function avatarColor(id: string): string {
   let hash = 0
   for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0
   return AVATAR_COLORS[hash % AVATAR_COLORS.length]
 }
 
-export default function ClientsGrid({ users }: { users: User[] }) {
-  const [query, setQuery] = useState('')
+function isRecordId(v: string): boolean {
+  return /^rec[A-Za-z0-9]{8,}$/.test(v)
+}
 
-  const filtered = query.trim()
-    ? users.filter((u) => {
-        const q = query.toLowerCase()
-        return (
-          (u.fullName ?? '').toLowerCase().includes(q) ||
-          (u.companyName ?? '').toLowerCase().includes(q)
-        )
-      })
-    : users
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function RoleBadge({ role }: { role: string }) {
+  if (!role || isRecordId(role)) return null
+  const lower = role.toLowerCase()
+  if (lower === 'coach')
+    return <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700 whitespace-nowrap">{role}</span>
+  if (lower === 'admin')
+    return <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-slate-800 text-white whitespace-nowrap">{role}</span>
+  return <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-slate-100 text-slate-500 whitespace-nowrap">{role}</span>
+}
+
+function ClientCard({ enriched }: { enriched: EnrichedUser }) {
+  const { user, meetingCount, noteCount, openTaskCount } = enriched
+  const name = getDisplayName(user)
+  const subtitle = [user.title ?? user.jobTitle, user.companyName].filter(Boolean).join(' · ')
+  const role = user.role && !isRecordId(user.role) ? user.role : null
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
-      {/* Search */}
-      <div className="w-full max-w-sm">
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name or company..."
-          className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(213,70%,30%)]/30 focus:border-[hsl(213,70%,30%)]"
-        />
+    <Link
+      href={`/users/${user.id}`}
+      className="block bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow"
+    >
+      <div className="flex items-start gap-3">
+        {/* Avatar */}
+        {(user.profilePhoto ?? user.avatarUrl) ? (
+          <img
+            src={(user.profilePhoto ?? user.avatarUrl)!}
+            alt={name}
+            className="w-11 h-11 rounded-full object-cover flex-shrink-0 mt-0.5"
+          />
+        ) : (
+          <div
+            className={`w-11 h-11 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0 mt-0.5 ${avatarColor(user.id)}`}
+          >
+            {getInitials(user)}
+          </div>
+        )}
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          {/* Name row + role badge + chevron */}
+          <div className="flex items-center gap-1.5">
+            <p className="font-semibold text-slate-900 truncate flex-1 min-w-0">{name}</p>
+            {role && <RoleBadge role={role} />}
+            <ChevronRight className="h-4 w-4 text-slate-300 flex-shrink-0" />
+          </div>
+
+          {/* Subtitle: Title · Company */}
+          {subtitle && (
+            <p className="text-sm text-slate-500 truncate mt-0.5">{subtitle}</p>
+          )}
+
+          {/* Stats row */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            {noteCount > 0 && (
+              <>
+                <span className="text-slate-200 text-xs">·</span>
+                <span className="text-xs text-slate-400">Notes: {noteCount}</span>
+              </>
+            )}
+            {openTaskCount > 0 && (
+              <>
+                <span className="text-slate-200 text-xs">·</span>
+                <span className="text-xs text-slate-400">Tasks: {openTaskCount}</span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </Link>
+  )
+}
+
+// ── Select helper ─────────────────────────────────────────────────────────────
+
+function FilterSelect({
+  value,
+  onChange,
+  children,
+}: {
+  value: string
+  onChange: (v: string) => void
+  children: React.ReactNode
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(213,70%,30%)]/30 focus:border-[hsl(213,70%,30%)] pr-8 appearance-none cursor-pointer"
+      style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2394a3b8\' stroke-width=\'2\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+    >
+      {children}
+    </select>
+  )
+}
+
+// ── Main grid ─────────────────────────────────────────────────────────────────
+
+export default function ClientsGrid({ users, coaches }: Props) {
+  const [query, setQuery] = useState('')
+  const [selectedRole, setSelectedRole] = useState('all')
+  const [selectedCoach, setSelectedCoach] = useState('all')
+  const [sortBy, setSortBy] = useState('recent')
+
+  // Unique roles from data
+  const roles = useMemo(() => {
+    const found = new Set(
+      users.map((e) => e.user.role).filter((r): r is string => !!r && !isRecordId(r))
+    )
+    return [...found].sort()
+  }, [users])
+
+  const hasFilters = query.trim() !== '' || selectedRole !== 'all' || selectedCoach !== 'all'
+
+  const filtered = useMemo(() => {
+    let result = [...users]
+
+    // Text search
+    if (query.trim()) {
+      const q = query.toLowerCase()
+      result = result.filter(({ user }) =>
+        getDisplayName(user).toLowerCase().includes(q) ||
+        (user.companyName ?? '').toLowerCase().includes(q) ||
+        (user.workEmail ?? user.email ?? '').toLowerCase().includes(q)
+      )
+    }
+
+    // Role filter
+    if (selectedRole !== 'all') {
+      result = result.filter(({ user }) => user.role === selectedRole)
+    }
+
+    // Coach filter
+    if (selectedCoach !== 'all') {
+      result = result.filter(({ user }) => user.coachIds?.includes(selectedCoach))
+    }
+
+    // Sort
+    if (sortBy === 'name-asc') {
+      result.sort((a, b) => getDisplayName(a.user).localeCompare(getDisplayName(b.user)))
+    } else if (sortBy === 'name-desc') {
+      result.sort((a, b) => getDisplayName(b.user).localeCompare(getDisplayName(a.user)))
+    } else {
+      // 'recent' and 'sessions' both sort by session count descending
+      result.sort((a, b) => b.meetingCount - a.meetingCount)
+    }
+
+    return result
+  }, [users, query, selectedRole, selectedCoach, sortBy])
+
+  function clearFilters() {
+    setQuery('')
+    setSelectedRole('all')
+    setSelectedCoach('all')
+    setSortBy('recent')
+  }
+
+  return (
+    <div className="p-4 md:p-8 space-y-5">
+
+      {/* ── Filter bar ──────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-2 items-center">
+        {/* Search */}
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name or company..."
+            className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(213,70%,30%)]/30 focus:border-[hsl(213,70%,30%)]"
+          />
+        </div>
+
+        {/* Role filter */}
+        {roles.length > 1 && (
+          <FilterSelect value={selectedRole} onChange={setSelectedRole}>
+            <option value="all">All Roles</option>
+            {roles.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </FilterSelect>
+        )}
+
+        {/* Coach filter */}
+        {coaches.length > 1 && (
+          <FilterSelect value={selectedCoach} onChange={setSelectedCoach}>
+            <option value="all">All Coaches</option>
+            {coaches.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </FilterSelect>
+        )}
+
+        {/* Sort */}
+        <FilterSelect value={sortBy} onChange={setSortBy}>
+          <option value="recent">Recently Active</option>
+          <option value="name-asc">Name A–Z</option>
+          <option value="name-desc">Name Z–A</option>
+          <option value="sessions">Most Sessions</option>
+        </FilterSelect>
+
+        {/* Add Client button */}
+        <div className="ml-auto">
+          <AddClientDialog coaches={coaches} />
+        </div>
       </div>
 
-      {/* Grid */}
-      {filtered.length === 0 ? (
-        <p className="text-sm text-slate-500">
-          {users.length === 0 ? 'No clients yet.' : 'No clients found matching your search.'}
-        </p>
+      {/* ── Grid or empty state ─────────────────────────────────────────────── */}
+      {users.length === 0 ? (
+        <p className="text-sm text-slate-500">No clients yet.</p>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+            <Users className="h-6 w-6 text-slate-400" />
+          </div>
+          <p className="text-sm font-medium text-slate-700 mb-1">No clients match your search</p>
+          <p className="text-xs text-slate-400 mb-4">Try adjusting your filters</p>
+          {hasFilters && (
+            <button
+              onClick={clearFilters}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-[hsl(213,70%,30%)] hover:underline"
+            >
+              <X className="h-3.5 w-3.5" />
+              Clear filters
+            </button>
+          )}
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((user) => (
-            <Link
-              key={user.id}
-              href={`/users/${user.id}`}
-              className="flex items-center gap-4 bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow"
-            >
-              {/* Avatar */}
-              {(user.profilePhoto ?? user.avatarUrl) ? (
-                <img
-                  src={(user.profilePhoto ?? user.avatarUrl)!}
-                  alt={user.fullName ?? user.email}
-                  className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-                />
-              ) : (
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0 ${avatarColor(user.id)}`}
-                >
-                  {getInitials(user)}
-                </div>
-              )}
-
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-slate-900 truncate">
-                  {user.fullName ?? user.email}
-                </p>
-                {user.companyName && (
-                  <p className="text-sm text-slate-500 truncate">{user.companyName}</p>
-                )}
-                {(user.jobTitle ?? (user.role && !isRecordId(user.role) ? user.role : null)) && (
-                  <p className="text-sm text-slate-400 truncate">{user.jobTitle ?? user.role}</p>
-                )}
-              </div>
-
-              <ChevronRight className="h-4 w-4 text-slate-300 flex-shrink-0" />
-            </Link>
+          {filtered.map((enriched) => (
+            <ClientCard key={enriched.user.id} enriched={enriched} />
           ))}
         </div>
       )}

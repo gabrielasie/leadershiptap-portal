@@ -9,109 +9,47 @@ function getCredentials() {
   return { apiKey, baseId };
 }
 
-function mapRecord(record: { id: string; fields: Record<string, unknown> }): Task {
-  const name = (record.fields['Task'] as string) ?? '';
-  // Status is a checkbox (boolean) in Airtable — map true → 'Done', false/null → 'To Do'
-  const status: Task['status'] = record.fields['Status'] === true ? 'Done' : 'To Do'
-  // 'Users 2' is the multipleRecordLinks field; 'Users' is a plain text field
-  const clientIds = record.fields['Users 2'];
+function mapTaskRecord(record: { id: string; fields: Record<string, unknown> }): Task {
   return {
     id: record.id,
-    name,
+    name: (record.fields['Title'] as string) || 'Untitled',
+    status: (record.fields['Status'] as Task['status']) || 'pending',
     dueDate: (record.fields['Due Date'] as string) || undefined,
-    priority: record.fields['Priority'] as Task['priority'],
-    status,
-    userId: Array.isArray(clientIds) ? (clientIds[0] as string) : undefined,
+    notes: (record.fields['Notes'] as string) || undefined,
+    coachName: (record.fields['Coach Name'] as string) || undefined,
+    userId: Array.isArray(record.fields['Client'])
+      ? (record.fields['Client'] as string[])[0]
+      : undefined,
   };
 }
+
+// ── Portal tasks (Tasks table) ────────────────────────────────────────────────
 
 export async function getTasksByUser(userId: string): Promise<Task[]> {
   try {
     const { apiKey, baseId } = getCredentials();
-    const seen = new Set<string>();
-    const results: Task[] = [];
+    const res = await fetch(`${API_BASE}/${baseId}/Tasks`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      console.warn('[getTasksByUser] Tasks query failed:', text);
+      return [];
+    }
+    const data = await res.json();
+    console.log('[getTasksByUser] total records fetched:', data.records?.length);
 
-    // Route 1: expand "Associated Tasks" linked field on the user record.
-    // This catches pre-existing Todoist-synced tasks linked to the user.
-    const userRes = await fetch(
-      `${API_BASE}/${baseId}/Users/${userId}?expand%5B%5D=Associated%20Tasks`,
-      { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' }
-    );
-    if (userRes.ok) {
-      const userData = await userRes.json();
-      const linked = userData.fields?.['Associated Tasks'];
-      if (Array.isArray(linked)) {
-        for (const item of linked) {
-          if (item && typeof item === 'object' && 'fields' in item) {
-            const task = mapRecord(item as { id: string; fields: Record<string, unknown> });
-            if (!seen.has(task.id)) { seen.add(task.id); results.push(task); }
-          }
-        }
-      }
+    const tasks: Task[] = [];
+    for (const rec of (data.records ?? [])) {
+      const client = rec.fields['Client'];
+      if (!Array.isArray(client) || !client.includes(userId)) continue;
+      tasks.push(mapTaskRecord(rec));
     }
 
-    // Route 2: fetch ALL pages of "Linked Todoist Tasks" and filter client-side.
-    // filterByFormula + ARRAYJOIN is unreliable for linked-record fields that
-    // store Airtable record IDs — client-side includes() is exact and guaranteed.
-    // Portal-created tasks use "Client"; Todoist-synced tasks use "Users 2".
-    let offset: string | undefined
-    do {
-      const url =
-        `${API_BASE}/${baseId}/Linked%20Todoist%20Tasks` +
-        (offset ? `?offset=${encodeURIComponent(offset)}` : '')
-      const tableRes = await fetch(url, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-        cache: 'no-store',
-      })
-      if (!tableRes.ok) {
-        const errText = await tableRes.text()
-        console.warn('[getTasksByUser] Linked Todoist Tasks query failed:', errText)
-        break
-      }
-      const tableData = await tableRes.json()
-      offset = tableData.offset  // undefined when last page
-      console.log('[getTasksByUser] userId:', userId, '| page records:', tableData.records?.length, '| hasMore:', !!offset)
-      for (const rec of (tableData.records ?? [])) {
-        const users = rec.fields['Users 2']
-        if (!Array.isArray(users) || !users.includes(userId)) continue
-        const task = mapRecord(rec)
-        if (!seen.has(task.id)) { seen.add(task.id); results.push(task) }
-      }
-    } while (offset)
-    console.log('[getTasksByUser] matched tasks after all pages:', results.length)
+    console.log('[getTasksByUser] matched tasks for userId', userId, ':', tasks.length);
 
     // Sort by due date asc, nulls last
-    results.sort((a, b) => {
-      if (!a.dueDate && !b.dueDate) return 0;
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return a.dueDate.localeCompare(b.dueDate);
-    });
-    return results;
-  } catch (err) {
-    console.warn('[getTasksByUser] unexpected error:', err);
-    return [];
-  }
-}
-
-export async function getAllOpenTasks(): Promise<Task[]> {
-  try {
-    const { apiKey, baseId } = getCredentials();
-    const res = await fetch(
-      `${API_BASE}/${baseId}/Linked%20Todoist%20Tasks`,
-      { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
-
-    const tasks: Task[] = (data.records ?? [])
-      .map(mapRecord)
-      .filter((t: Task) => {
-        const s = (t.status ?? '').toLowerCase();
-        return s !== 'done' && s !== 'completed';
-      });
-
-    // Sort by due date asc, nulls last (overdue dates surface first)
     tasks.sort((a, b) => {
       if (!a.dueDate && !b.dueDate) return 0;
       if (!a.dueDate) return 1;
@@ -121,44 +59,143 @@ export async function getAllOpenTasks(): Promise<Task[]> {
 
     return tasks;
   } catch (err) {
-    console.warn('[getAllOpenTasks] error:', err);
+    console.warn('[getTasksByUser] unexpected error:', err);
     return [];
   }
 }
 
-export async function createTask(fields: {
-  Title: string;
-  'Due Date'?: string;
-  Priority?: 'Low' | 'Medium' | 'High';
-  'Users 2'?: string[];     // multipleRecordLinks → Users table
-}): Promise<void> {
-  let apiKey: string, baseId: string;
-  try {
-    ({ apiKey, baseId } = getCredentials());
-  } catch (e) {
-    console.error('[createTask] Missing Airtable credentials:', e);
-    return;
+export async function createTask(
+  userId: string,
+  title: string,
+  dueDate?: string,
+  notes?: string,
+): Promise<string> {
+  const { apiKey, baseId } = getCredentials();
+
+  const fields: Record<string, unknown> = {
+    Title: title,
+    Client: [userId],
+    Status: 'pending',
+  };
+  if (dueDate) fields['Due Date'] = dueDate;
+  if (notes) fields['Notes'] = notes;
+
+  console.log('[createTask] POST body:', JSON.stringify({ fields }, null, 2));
+
+  const res = await fetch(`${API_BASE}/${baseId}/Tasks`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ fields }),
+  });
+  const data = await res.json();
+  console.log('[createTask] Airtable status:', res.status);
+  console.log('[createTask] Airtable response:', JSON.stringify(data, null, 2));
+  if (!res.ok) {
+    throw new Error(`Airtable POST failed (${res.status}): ${JSON.stringify(data)}`);
   }
+  return data.id as string;
+}
+
+export async function updateTaskStatus(
+  taskId: string,
+  status: 'pending' | 'in progress' | 'completed',
+): Promise<{ success: true } | { error: string }> {
   try {
-    const airtableFields: Record<string, unknown> = { Task: fields.Title }
-    if (fields['Users 2']?.length) airtableFields['Users 2'] = fields['Users 2']
-    console.log('[createTask] userId received:', fields['Users 2']?.[0])
-    console.log('[createTask] POST body:', JSON.stringify({ fields: airtableFields }, null, 2))
-    const res = await fetch(`${API_BASE}/${baseId}/Linked%20Todoist%20Tasks`, {
-      method: 'POST',
+    const { apiKey, baseId } = getCredentials();
+    const res = await fetch(`${API_BASE}/${baseId}/Tasks/${taskId}`, {
+      method: 'PATCH',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ fields: airtableFields }),
+      body: JSON.stringify({ fields: { Status: status } }),
+    });
+    const data = await res.json();
+    console.log('[updateTaskStatus] status:', res.status, '| response:', JSON.stringify(data));
+    if (!res.ok) {
+      return { error: JSON.stringify(data) };
+    }
+    return { success: true };
+  } catch (err) {
+    console.error('[updateTaskStatus] error:', err);
+    return { error: String(err) };
+  }
+}
+
+export async function updateTask(
+  taskId: string,
+  fields: {
+    Title?: string
+    Status?: 'pending' | 'in progress' | 'completed'
+    'Due Date'?: string | null
+    Notes?: string
+  },
+): Promise<{ success: true } | { error: string }> {
+  try {
+    const { apiKey, baseId } = getCredentials()
+    // Strip undefined; keep null (used to clear date fields)
+    const clean = Object.fromEntries(
+      Object.entries(fields).filter(([, v]) => v !== undefined && v !== '')
+    )
+    const res = await fetch(`${API_BASE}/${baseId}/Tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fields: clean }),
     })
     const data = await res.json()
-    console.log('[createTask] Airtable status:', res.status)
-    console.log('[createTask] Airtable response:', JSON.stringify(data, null, 2))
+    console.log('[updateTask] status:', res.status, '| response:', JSON.stringify(data))
+    if (!res.ok) return { error: JSON.stringify(data) }
+    return { success: true }
+  } catch (err) {
+    console.error('[updateTask] error:', err)
+    return { error: String(err) }
+  }
+}
+
+export async function deleteTask(
+  taskId: string,
+): Promise<{ success: true } | { error: string }> {
+  try {
+    const { apiKey, baseId } = getCredentials();
+    const res = await fetch(`${API_BASE}/${baseId}/Tasks/${taskId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
     if (!res.ok) {
-      console.error('[createTask] Airtable POST failed — check field names above')
+      const data = await res.json();
+      console.error('[deleteTask] Airtable error:', data);
+      return { error: JSON.stringify(data) };
     }
-  } catch (e) {
-    console.error('[createTask] Unexpected error:', e)
+    return { success: true };
+  } catch (err) {
+    console.error('[deleteTask] error:', err);
+    return { error: String(err) };
+  }
+}
+
+// ── Dashboard summary (Tasks table, open only) ────────────────────────────────
+
+export async function getAllOpenTasks(): Promise<Task[]> {
+  try {
+    const { apiKey, baseId } = getCredentials();
+    const res = await fetch(`${API_BASE}/${baseId}/Tasks`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      cache: 'no-store',
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+
+    return (data.records ?? [])
+      .map(mapTaskRecord)
+      .filter((t: Task) => t.status !== 'completed');
+  } catch (err) {
+    console.warn('[getAllOpenTasks] error:', err);
+    return [];
   }
 }

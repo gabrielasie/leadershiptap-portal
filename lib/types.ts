@@ -42,12 +42,31 @@ export interface User {
   directReportIds?: string[];  // linked record IDs — all direct reports
   teamMemberIds?: string[];    // linked record IDs — team members
 
+  // Session count via linked record field (avoids email matching)
+  associatedMeetingIds?: string[]   // "Associated Meetings" linked field → Calendar Events
+
+  // Raw linked record IDs — used by edit forms to pre-select current values
+  enneagramIds?: string[]
+  mbtiIds?: string[]
+  conflictPostureIds?: string[]
+  apologyLanguageIds?: string[]
+  strengthIds?: string[]
+  companyLinkedIds?: string[]   // from the "Company" linked field
+
+  // Extra contact fields
+  personalEmail?: string        // "Personal Email"
+  birthday?: string             // "Birthday"
+  workDeskNumber?: string       // "Work Desk Number"
+  workCellNumber?: string       // "Work Cell Number"
+  personalCellNumber?: string   // "Personal Cell Number"
+
   // Legacy / misc
   enneagram?: string;
   mbti?: string;
   department?: string;
   title?: string;        // maps to Airtable "Title" (distinct from "Job Title")
   startDate?: string;
+  hireDate?: string;
   engagementLevel?: string;
   coachNotes?: string;
 }
@@ -73,11 +92,12 @@ export interface Note {
 
 export interface Task {
   id: string;
-  name: string;
+  name: string;        // maps to 'Title' in Tasks table
   dueDate?: string;    // YYYY-MM-DD
-  priority?: 'Low' | 'Medium' | 'High';
-  status?: 'To Do' | 'In Progress' | 'Done';
-  userId?: string;     // first linked Users record ID
+  status?: 'pending' | 'in progress' | 'completed';
+  notes?: string;
+  coachName?: string;
+  userId?: string;     // first linked Client record ID
 }
 
 export interface Message {

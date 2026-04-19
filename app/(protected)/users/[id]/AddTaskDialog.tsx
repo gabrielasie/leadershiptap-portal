@@ -13,17 +13,9 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { CheckSquare } from 'lucide-react'
 import { saveTaskAction } from './actions'
-
-type Priority = 'Low' | 'Medium' | 'High'
 
 interface AddTaskDialogProps {
   userId: string
@@ -34,7 +26,7 @@ export default function AddTaskDialog({ userId }: AddTaskDialogProps) {
   const [open, setOpen] = useState(false)
   const [taskName, setTaskName] = useState('')
   const [dueDate, setDueDate] = useState('')
-  const [priority, setPriority] = useState<Priority>('Medium')
+  const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
   const canSubmit = taskName.trim().length > 0 && !saving
@@ -47,13 +39,13 @@ export default function AddTaskDialog({ userId }: AddTaskDialogProps) {
         userId,
         taskName.trim(),
         dueDate || null,
-        priority,
+        notes.trim() || null,
       )
       toast.success('Task added')
       setOpen(false)
       setTaskName('')
       setDueDate('')
-      setPriority('Medium')
+      setNotes('')
       router.refresh()
     } catch (err) {
       console.error(err)
@@ -79,7 +71,6 @@ export default function AddTaskDialog({ userId }: AddTaskDialogProps) {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Task name */}
             <div className="space-y-1.5">
               <Label htmlFor="task-name">Task name <span className="text-destructive">*</span></Label>
               <Input
@@ -91,34 +82,25 @@ export default function AddTaskDialog({ userId }: AddTaskDialogProps) {
               />
             </div>
 
-            {/* Due date + Priority — side by side */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="task-due">Due date</Label>
-                <Input
-                  id="task-due"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                />
-              </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="task-due">Due date</Label>
+              <Input
+                id="task-due"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
+            </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="task-priority">Priority</Label>
-                <Select
-                  value={priority}
-                  onValueChange={(v) => setPriority(v as Priority)}
-                >
-                  <SelectTrigger id="task-priority">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Low">Low</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="High">High</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="task-notes">Notes</Label>
+              <Textarea
+                id="task-notes"
+                placeholder="Optional notes…"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+              />
             </div>
           </div>
 

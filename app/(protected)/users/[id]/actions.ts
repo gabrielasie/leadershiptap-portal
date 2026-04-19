@@ -2,13 +2,16 @@
 
 import { revalidatePath } from 'next/cache'
 import { createNote } from '@/lib/airtable/notes'
-import { createTask } from '@/lib/airtable/tasks'
+import { createTask, updateTaskStatus } from '@/lib/airtable/tasks'
 import {
   updateUserProfile,
   type UserProfileFields,
+  fetchProfileOptions,
+  type ProfileOption,
   searchUsersByName,
   createUserRecord,
   patchTeamMembers,
+  getAllUsers,
 } from '@/lib/airtable/users'
 import { updateMeetingFields } from '@/lib/airtable/meetings'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
@@ -19,14 +22,33 @@ export async function updateProfileAction(
   userId: string,
   changed: UserProfileFields,
 ): Promise<{ success: true } | { error: string }> {
+  console.log('[updateProfileAction] userId:', userId)
+  console.log('[updateProfileAction] fields being sent:', JSON.stringify(changed, null, 2))
   try {
     await updateUserProfile(userId, changed)
     revalidatePath(`/users/${userId}`)
     return { success: true }
   } catch (err) {
-    console.error('[updateProfileAction]', err)
-    return { error: 'Failed to update profile — please try again' }
+    console.error('[updateProfileAction] error:', err)
+    const msg = err instanceof Error ? err.message : String(err)
+    return { error: msg.includes('Airtable PATCH failed') ? msg : 'Failed to update profile — please try again' }
   }
+}
+
+// ── Fetch profile dropdown options (called when Edit Profile modal opens) ──────
+
+export async function fetchProfileOptionsAction(): Promise<{
+  companies: ProfileOption[]
+  enneagrams: ProfileOption[]
+  mbtis: ProfileOption[]
+  conflictPostures: ProfileOption[]
+  apologyLanguages: ProfileOption[]
+  strengths: ProfileOption[]
+  coaches: ProfileOption[]
+  allUsers: ProfileOption[]
+}> {
+  const allUsers = await getAllUsers()
+  return fetchProfileOptions(allUsers)
 }
 
 // ── Team Members ──────────────────────────────────────────────────────────────
@@ -159,32 +181,14 @@ export async function deleteNoteAction(
 
 export async function updateTaskStatusAction(
   taskId: string,
-  done: boolean,   // Status is a checkbox field in Airtable — true = done, false = not done
+  status: 'pending' | 'in progress' | 'completed',
 ): Promise<{ success: boolean }> {
-  try {
-    const baseId = process.env.AIRTABLE_BASE_ID!
-    const token = process.env.AIRTABLE_API_KEY!
-    const res = await fetch(
-      `https://api.airtable.com/v0/${baseId}/Linked%20Todoist%20Tasks/${taskId}`,
-      {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ fields: { Status: done } }),
-      },
-    )
-    if (!res.ok) {
-      const data = await res.json()
-      console.error('[updateTaskStatusAction] Airtable error:', data)
-      return { success: false }
-    }
-    return { success: true }
-  } catch (err) {
-    console.error('[updateTaskStatusAction] error:', err)
+  const result = await updateTaskStatus(taskId, status)
+  if ('error' in result) {
+    console.error('[updateTaskStatusAction] error:', result.error)
     return { success: false }
   }
+  return { success: true }
 }
 
 // ── Session Notes ─────────────────────────────────────────────────────────────
@@ -204,21 +208,22 @@ export async function updateSessionNotesAction(
   }
 }
 
+// ── Upload Profile Photo ──────────────────────────────────────────────────────
+
 // ── Add Task ──────────────────────────────────────────────────────────────────
 
 export async function saveTaskAction(
   userId: string,
   taskName: string,
-  dueDate: string | null,   // YYYY-MM-DD or null
-  priority: 'Low' | 'Medium' | 'High',
+  dueDate: string | null,
+  notes: string | null,
 ): Promise<void> {
-  console.log('[saveTaskAction] userId received:', userId)
-  console.log('[saveTaskAction] taskName:', taskName, '| dueDate:', dueDate, '| priority:', priority)
-  await createTask({
-    Title: taskName,
-    ...(dueDate ? { 'Due Date': dueDate } : {}),
-    Priority: priority,
-    'Users 2': [userId],
-  })
+  console.log('[saveTaskAction] userId:', userId, '| title:', taskName, '| dueDate:', dueDate)
+  await createTask(
+    userId,
+    taskName,
+    dueDate ?? undefined,
+    notes ?? undefined,
+  )
   revalidatePath(`/users/${userId}`)
 }

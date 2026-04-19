@@ -58,7 +58,7 @@ export async function getAllUpcomingMeetings(daysAhead = 7): Promise<Meeting[]> 
 export async function getAllMeetings(): Promise<Meeting[]> {
   const { apiKey, baseId } = getCredentials();
   const res = await fetch(
-    `${API_BASE}/${baseId}/Calendar%20Events?sort%5B0%5D%5Bfield%5D=StartTime&sort%5B0%5D%5Bdirection%5D=desc`,
+    `${API_BASE}/${baseId}/Calendar%20Events?sort%5B0%5D%5Bfield%5D=StartTime&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=2000`,
     {
       headers: { Authorization: `Bearer ${apiKey}` },
       cache: 'no-store',

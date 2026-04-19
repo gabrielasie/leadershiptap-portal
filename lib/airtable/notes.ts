@@ -29,6 +29,35 @@ export interface RecentNote {
 }
 
 /**
+ * Fetch all notes across all clients (up to `limit`), sorted descending by date.
+ * Used by the dashboard to build a per-client notes map.
+ */
+export async function getAllRecentNotes(limit = 100): Promise<RecentNote[]> {
+  const { apiKey, baseId } = getCredentials()
+  const url =
+    `${API_BASE}/${baseId}/Notes` +
+    `?sort%5B0%5D%5Bfield%5D=Date&sort%5B0%5D%5Bdirection%5D=desc` +
+    `&maxRecords=${limit}`
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: 'no-store',
+  })
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.records ?? []).map(
+    (r: { id: string; fields: Record<string, unknown> }): RecentNote => {
+      const clientIds = r.fields['Client']
+      return {
+        id: r.id,
+        content: (r.fields['Content'] as string) ?? '',
+        date: (r.fields['Date'] as string) ?? '',
+        userId: Array.isArray(clientIds) ? ((clientIds[0] as string) ?? null) : null,
+      }
+    },
+  )
+}
+
+/**
  * Fetch the N most recently dated notes across all clients.
  * Sorted descending by Date on the Airtable side for efficiency.
  */
@@ -137,4 +166,37 @@ export async function getNotesByUser(
   })
 
   return matching.map(mapRecord)
+}
+
+export async function updateNote(
+  noteId: string,
+  content: string,
+  date: string,
+): Promise<{ success: true } | { error: string }> {
+  const { apiKey, baseId } = getCredentials()
+  const res = await fetch(`${API_BASE}/${baseId}/Notes/${noteId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: { Content: content, Date: date } }),
+  })
+  if (!res.ok) {
+    const data = await res.json()
+    return { error: JSON.stringify(data) }
+  }
+  return { success: true }
+}
+
+export async function deleteNote(
+  noteId: string,
+): Promise<{ success: true } | { error: string }> {
+  const { apiKey, baseId } = getCredentials()
+  const res = await fetch(`${API_BASE}/${baseId}/Notes/${noteId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${apiKey}` },
+  })
+  if (!res.ok) {
+    const data = await res.json()
+    return { error: JSON.stringify(data) }
+  }
+  return { success: true }
 }

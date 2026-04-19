@@ -71,6 +71,10 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Use
       record.fields["Strength Name (from Strengths)"],
       record.fields["Domain (from Strengths)"]
     ),
+    // Session count — linked field to Calendar Events (no email matching needed)
+    associatedMeetingIds: Array.isArray(record.fields["Associated Meetings"])
+      ? (record.fields["Associated Meetings"] as string[])
+      : [],
     // Org / Team — linked record IDs
     managerIds: Array.isArray(record.fields["Manager"])
       ? (record.fields["Manager"] as string[])
@@ -81,12 +85,32 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Use
     teamMemberIds: Array.isArray(record.fields["Team Members"])
       ? (record.fields["Team Members"] as string[])
       : [],
+    // Raw linked record IDs for edit forms
+    enneagramIds: Array.isArray(record.fields["Enneagram"])
+      ? (record.fields["Enneagram"] as string[]) : [],
+    mbtiIds: Array.isArray(record.fields["MBTI"])
+      ? (record.fields["MBTI"] as string[]) : [],
+    conflictPostureIds: Array.isArray(record.fields["Conflict Posture"])
+      ? (record.fields["Conflict Posture"] as string[]) : [],
+    apologyLanguageIds: Array.isArray(record.fields["Apology Language"])
+      ? (record.fields["Apology Language"] as string[]) : [],
+    strengthIds: Array.isArray(record.fields["Strengths"])
+      ? (record.fields["Strengths"] as string[]) : [],
+    companyLinkedIds: Array.isArray(record.fields["Company"])
+      ? (record.fields["Company"] as string[]) : [],
+    // Extra contact fields
+    personalEmail: record.fields["Personal Email"] as string | undefined,
+    birthday: record.fields["Birthday"] as string | undefined,
+    workDeskNumber: record.fields["Work Desk Number"] as string | undefined,
+    workCellNumber: record.fields["Work Cell Number"] as string | undefined,
+    personalCellNumber: record.fields["Personal Cell Number"] as string | undefined,
     // Legacy
     enneagram: record.fields["Enneagram"] as string | undefined,
     mbti: record.fields["MBTI"] as string | undefined,
     department: record.fields["Department"] as string | undefined,
     title: record.fields["Title"] as string | undefined,
     startDate: record.fields["Start Date"] as string | undefined,
+    hireDate: record.fields["Hire Date"] as string | undefined,
     engagementLevel: record.fields["Engagement Level"] as string | undefined,
     coachNotes: record.fields["Coach Notes"] as string | undefined,
   };
@@ -124,6 +148,9 @@ export async function createUserRecord(fields: {
   'First Name'?: string
   'Last Name'?: string
   'Title'?: string
+  'Work Email'?: string
+  'Role'?: string
+  'Coach'?: string[]  // Airtable record IDs of coach users
 }): Promise<string> {
   const { apiKey, baseId } = getCredentials()
 
@@ -135,6 +162,9 @@ export async function createUserRecord(fields: {
       ...(fields['First Name'] ? { 'First Name': fields['First Name'] } : {}),
       ...(fields['Last Name'] ? { 'Last Name': fields['Last Name'] } : {}),
       ...(fields['Title'] ? { 'Title': fields['Title'] } : {}),
+      ...(fields['Work Email'] ? { 'Work Email': fields['Work Email'] } : {}),
+      ...(fields['Role'] ? { 'Role': fields['Role'] } : {}),
+      ...(fields['Coach']?.length ? { 'Coach': fields['Coach'] } : {}),
     },
   }
   console.log('[createUserRecord] POST body:', JSON.stringify(body, null, 2))
@@ -232,11 +262,30 @@ export async function updateUserCoachNotes(userId: string, notes: string): Promi
 }
 
 export interface UserProfileFields {
+  // Text / date fields
+  'First Name'?: string
+  'Last Name'?: string
   'Preferred Name'?: string
+  'Work Email'?: string
+  'Personal Email'?: string
+  'Title'?: string
+  'Hire Date'?: string
+  'Birthday'?: string
+  'Work Desk Number'?: string
+  'Work Cell Number'?: string
+  'Personal Cell Number'?: string
   'Quick Notes'?: string
   'Family Details'?: string
-  'Time at Company'?: string
-  'Title'?: string
+  'Role'?: string
+  // Linked record fields — arrays of record IDs
+  'Enneagram'?: string[]
+  'MBTI'?: string[]
+  'Conflict Posture'?: string[]
+  'Apology Language'?: string[]
+  'Strengths'?: string[]
+  'Coach'?: string[]
+  'Team Lead'?: string[]
+  'Company'?: string[]
 }
 
 export async function updateUserProfile(
@@ -244,18 +293,104 @@ export async function updateUserProfile(
   fields: UserProfileFields,
 ): Promise<void> {
   const { apiKey, baseId } = getCredentials()
+
+  // Never send empty strings or empty arrays — skip fields with no value.
+  const sanitized = Object.fromEntries(
+    Object.entries(fields).filter(([, v]) => {
+      if (v === undefined || v === null) return false
+      if (typeof v === 'string') return v !== ''
+      if (Array.isArray(v)) return v.length > 0
+      return true
+    })
+  )
+
+  console.log('[updateUserProfile] userId:', userId)
+  console.log('[updateUserProfile] fields to write:', JSON.stringify(sanitized, null, 2))
+
   const res = await fetch(`${API_BASE}/${baseId}/Users/${userId}`, {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ fields }),
+    body: JSON.stringify({ fields: sanitized }),
   })
+
+  // Read body as text once — avoids double-read issues and captures full error
+  const responseText = await res.text()
+  console.log('[updateUserProfile] Airtable status:', res.status)
+  console.log('[updateUserProfile] Airtable response:', responseText)
+
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Airtable PATCH failed: ${text}`)
+    console.error('[updateUserProfile] Full Airtable error:', res.status, responseText)
+    throw new Error(`Airtable PATCH failed (${res.status}): ${responseText}`)
   }
+}
+
+// ── Profile options (for the Edit Profile dialog dropdowns) ───────────────────
+
+export interface ProfileOption {
+  id: string
+  name: string
+}
+
+async function fetchTableOptions(
+  tableName: string,
+  nameField: string,
+): Promise<ProfileOption[]> {
+  try {
+    const { apiKey, baseId } = getCredentials()
+    const res = await fetch(
+      `${API_BASE}/${baseId}/${encodeURIComponent(tableName)}?fields[]=${encodeURIComponent(nameField)}&maxRecords=200`,
+      { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+    )
+    if (!res.ok) {
+      console.warn(`[fetchTableOptions] ${tableName} failed:`, res.status)
+      return []
+    }
+    const data = await res.json()
+    return (data.records ?? [])
+      .map((r: { id: string; fields: Record<string, unknown> }) => ({
+        id: r.id,
+        name: (r.fields[nameField] as string) ?? '',
+      }))
+      .filter((r: ProfileOption) => r.name)
+  } catch (e) {
+    console.warn(`[fetchTableOptions] ${tableName} error:`, e)
+    return []
+  }
+}
+
+export async function fetchProfileOptions(allUsers: User[]): Promise<{
+  companies: ProfileOption[]
+  enneagrams: ProfileOption[]
+  mbtis: ProfileOption[]
+  conflictPostures: ProfileOption[]
+  apologyLanguages: ProfileOption[]
+  strengths: ProfileOption[]
+  coaches: ProfileOption[]
+  allUsers: ProfileOption[]
+}> {
+  const [companies, enneagrams, mbtis, conflictPostures, apologyLanguages, strengths] =
+    await Promise.all([
+      fetchTableOptions('Companies', 'Name'),
+      fetchTableOptions('Enneagram', 'Name'),
+      fetchTableOptions('16Personalities', 'Name'),
+      fetchTableOptions('Conflict Postures', 'Conflict Posture'),
+      fetchTableOptions('Apology Languages', 'Apology Language'),
+      fetchTableOptions('Strengths', 'Strength'),
+    ])
+
+  const nameOf = (u: User) =>
+    (u.fullName ?? [u.firstName, u.lastName].filter(Boolean).join(' ')) || u.email
+
+  const coaches = allUsers
+    .filter((u) => u.role?.toLowerCase() === 'coach' || u.role?.toLowerCase() === 'admin')
+    .map((u) => ({ id: u.id, name: nameOf(u) }))
+
+  const users = allUsers.map((u) => ({ id: u.id, name: nameOf(u) }))
+
+  return { companies, enneagrams, mbtis, conflictPostures, apologyLanguages, strengths, coaches, allUsers: users }
 }
 
 export async function getUserById(id: string): Promise<User | null> {
