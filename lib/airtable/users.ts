@@ -127,26 +127,36 @@ export async function createUserRecord(fields: {
   'Company Name'?: string
 }): Promise<string> {
   const { apiKey, baseId } = getCredentials()
+
+  // Sample one record to confirm real field names before writing
+  const sampleRes = await fetch(`${API_BASE}/${baseId}/Users?maxRecords=1`, {
+    headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store',
+  })
+  const sampleData = await sampleRes.json()
+  console.log('[createUserRecord] Users table fields:', Object.keys(sampleData.records?.[0]?.fields ?? {}))
+
   // Build a Full Name from first+last for the primary field
   const fullName = [fields['First Name'], fields['Last Name']].filter(Boolean).join(' ')
+  const body = {
+    fields: {
+      ...(fullName ? { 'Full Name': fullName } : {}),
+      ...fields,
+    },
+  }
+  console.log('[createUserRecord] POST body:', JSON.stringify(body))
   const res = await fetch(`${API_BASE}/${baseId}/Users`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      fields: {
-        ...(fullName ? { 'Full Name': fullName } : {}),
-        ...fields,
-      },
-    }),
+    body: JSON.stringify(body),
   })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Airtable POST failed: ${text}`)
-  }
   const data = await res.json()
+  console.log('[createUserRecord] response:', JSON.stringify(data))
+  if (!res.ok) {
+    throw new Error(`Airtable POST failed: ${JSON.stringify(data)}`)
+  }
   return data.id as string
 }
 
@@ -155,17 +165,20 @@ export async function patchTeamMembers(
   memberIds: string[],
 ): Promise<void> {
   const { apiKey, baseId } = getCredentials()
+  const body = { fields: { 'Team Members': memberIds } }
+  console.log('[patchTeamMembers] PATCH userId:', userId, 'body:', JSON.stringify(body))
   const res = await fetch(`${API_BASE}/${baseId}/Users/${userId}`, {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ fields: { 'Team Members': memberIds } }),
+    body: JSON.stringify(body),
   })
+  const data = await res.json()
+  console.log('[patchTeamMembers] status:', res.status, 'response:', JSON.stringify(data))
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Airtable PATCH failed: ${text}`)
+    throw new Error(`Airtable PATCH failed: ${JSON.stringify(data)}`)
   }
 }
 
