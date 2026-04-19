@@ -45,11 +45,13 @@ export async function linkExistingTeamMember(
 ): Promise<{ success: true } | { error: string }> {
   if (existingMemberIds.includes(newMemberId)) return { success: true }
   try {
-    await patchTeamMembers(leaderId, [...existingMemberIds, newMemberId])
+    const newIds = [...existingMemberIds, newMemberId]
+    console.log('[linkExistingTeamMember] PATCH leaderId:', leaderId, '| Team Members:', newIds)
+    await patchTeamMembers(leaderId, newIds)
     revalidatePath(`/users/${leaderId}`)
     return { success: true }
   } catch (err) {
-    console.error('[linkExistingTeamMember]', err)
+    console.error('[linkExistingTeamMember] error:', err)
     return { error: 'Failed to link team member — please try again' }
   }
 }
@@ -61,22 +63,22 @@ export async function createAndLinkTeamMember(
     firstName: string
     lastName?: string
     jobTitle?: string
-    companyName?: string
   },
 ): Promise<{ success: true } | { error: string }> {
   try {
+    console.log('[createAndLinkTeamMember] creating user:', memberData)
     const newId = await createUserRecord({
       'First Name': memberData.firstName || undefined,
       'Last Name': memberData.lastName || undefined,
-      'Job Title': memberData.jobTitle || undefined,
-      'Company Name': memberData.companyName || undefined,
+      'Title': memberData.jobTitle || undefined,
     })
+    console.log('[createAndLinkTeamMember] created record id:', newId, '| linking to leader:', leaderId)
     await patchTeamMembers(leaderId, [...existingMemberIds, newId])
     revalidatePath(`/users/${leaderId}`)
     return { success: true }
   } catch (err) {
-    console.error('[createAndLinkTeamMember]', err)
-    return { error: 'Failed to create team member — please try again' }
+    console.error('[createAndLinkTeamMember] error:', err)
+    return { error: String(err instanceof Error ? err.message : err) }
   }
 }
 

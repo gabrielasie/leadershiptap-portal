@@ -123,27 +123,21 @@ export async function searchUsersByName(
 export async function createUserRecord(fields: {
   'First Name'?: string
   'Last Name'?: string
-  'Job Title'?: string
-  'Company Name'?: string
+  'Title'?: string
 }): Promise<string> {
   const { apiKey, baseId } = getCredentials()
 
-  // Sample one record to confirm real field names before writing
-  const sampleRes = await fetch(`${API_BASE}/${baseId}/Users?maxRecords=1`, {
-    headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store',
-  })
-  const sampleData = await sampleRes.json()
-  console.log('[createUserRecord] Users table fields:', Object.keys(sampleData.records?.[0]?.fields ?? {}))
-
-  // Build a Full Name from first+last for the primary field
-  const fullName = [fields['First Name'], fields['Last Name']].filter(Boolean).join(' ')
+  // Only write to confirmed writable fields.
+  // 'Full Name' is a formula — Airtable rejects writes to it.
+  // 'Company Name' is a lookup — not writable.
   const body = {
     fields: {
-      ...(fullName ? { 'Full Name': fullName } : {}),
-      ...fields,
+      ...(fields['First Name'] ? { 'First Name': fields['First Name'] } : {}),
+      ...(fields['Last Name'] ? { 'Last Name': fields['Last Name'] } : {}),
+      ...(fields['Title'] ? { 'Title': fields['Title'] } : {}),
     },
   }
-  console.log('[createUserRecord] POST body:', JSON.stringify(body))
+  console.log('[createUserRecord] POST body:', JSON.stringify(body, null, 2))
   const res = await fetch(`${API_BASE}/${baseId}/Users`, {
     method: 'POST',
     headers: {
@@ -153,7 +147,7 @@ export async function createUserRecord(fields: {
     body: JSON.stringify(body),
   })
   const data = await res.json()
-  console.log('[createUserRecord] response:', JSON.stringify(data))
+  console.log('[createUserRecord] status:', res.status, '| response:', JSON.stringify(data, null, 2))
   if (!res.ok) {
     throw new Error(`Airtable POST failed: ${JSON.stringify(data)}`)
   }

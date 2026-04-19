@@ -49,7 +49,6 @@ export default function AddTeamMemberDialog({ leaderId, existingMemberIds }: Pro
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [jobTitle, setJobTitle] = useState('')
-  const [companyName, setCompanyName] = useState('')
 
   function resetState() {
     setQuery('')
@@ -58,7 +57,6 @@ export default function AddTeamMemberDialog({ leaderId, existingMemberIds }: Pro
     setFirstName('')
     setLastName('')
     setJobTitle('')
-    setCompanyName('')
     setErrorMsg('')
   }
 
@@ -108,7 +106,6 @@ export default function AddTeamMemberDialog({ leaderId, existingMemberIds }: Pro
         firstName: firstName.trim(),
         lastName: lastName.trim() || undefined,
         jobTitle: jobTitle.trim() || undefined,
-        companyName: companyName.trim() || undefined,
       })
       if ('error' in result) {
         setErrorMsg(result.error)
@@ -229,17 +226,6 @@ export default function AddTeamMemberDialog({ leaderId, existingMemberIds }: Pro
                 disabled={isPending}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="tm-company">Company</Label>
-              <Input
-                id="tm-company"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="e.g. Acme Corp"
-                disabled={isPending}
-              />
-            </div>
-
             <div className="flex items-center justify-between pt-1">
               {errorMsg ? (
                 <p className="text-xs font-medium text-rose-600">{errorMsg}</p>
