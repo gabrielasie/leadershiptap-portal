@@ -344,6 +344,17 @@ export default async function UserDetailPage({ params }: Props) {
               timeAtCompany: user.timeAtCompany ?? '',
               title: user.title ?? '',
             }}
+            readOnly={{
+              fullName: user.fullName ?? [user.firstName, user.lastName].filter(Boolean).join(' '),
+              email: user.email ?? '',
+              startDate: user.startDate ?? '',
+              enneagramType: user.enneagramType ?? '',
+              enneagramDescriptor: user.enneagramDescriptor ?? '',
+              mbtiType: user.mbtiType ?? '',
+              mbtiDescriptor: user.mbtiDescriptor ?? '',
+              conflictPostureDescriptor: user.conflictPostureDescriptor ?? '',
+              apologyLanguageDescriptor: user.apologyLanguageDescriptor ?? '',
+            }}
           />
         </div>
         <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-5">
