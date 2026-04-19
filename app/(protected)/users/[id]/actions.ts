@@ -219,6 +219,8 @@ export async function saveTaskAction(
   dueDate: string | null,   // YYYY-MM-DD or null
   priority: 'Low' | 'Medium' | 'High',
 ): Promise<void> {
+  console.log('[saveTaskAction] userId received:', userId)
+  console.log('[saveTaskAction] taskName:', taskName, '| dueDate:', dueDate, '| priority:', priority)
   await createTask({
     Title: taskName,
     ...(dueDate ? { 'Due Date': dueDate } : {}),

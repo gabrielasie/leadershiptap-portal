@@ -10,10 +10,11 @@ function getCredentials() {
 }
 
 function mapRecord(record: { id: string; fields: Record<string, unknown> }): Task {
-  // "Linked Todoist Tasks" uses "Task" as the name field and "Users 2" as the user link.
-  // Legacy fallback for any portal-created records that use "Title" or "Name".
+  // "Linked Todoist Tasks" uses "Task" as the name field.
+  // Portal-created tasks also try "Title" / "Name" as fallbacks.
   const name = ((record.fields['Task'] ?? record.fields['Title'] ?? record.fields['Name'] ?? '') as string);
-  const clientIds = record.fields['Users 2'] ?? record.fields['Client'];
+  // Portal writes "Client"; Todoist-synced records use "Users 2". Check both.
+  const clientIds = record.fields['Client'] ?? record.fields['Users 2'];
   return {
     id: record.id,
     name,
@@ -49,48 +50,40 @@ export async function getTasksByUser(userId: string): Promise<Task[]> {
       }
     }
 
-    // Route 2: fetch all "Linked Todoist Tasks" and filter client-side.
+    // Route 2: fetch ALL pages of "Linked Todoist Tasks" and filter client-side.
     // filterByFormula + ARRAYJOIN is unreliable for linked-record fields that
     // store Airtable record IDs — client-side includes() is exact and guaranteed.
-    const tableRes = await fetch(
-      `${API_BASE}/${baseId}/Linked%20Todoist%20Tasks`,
-      { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' }
-    );
-    if (tableRes.ok) {
-      const tableData = await tableRes.json();
-      console.log('[getTasksByUser] userId:', userId);
-      console.log('[getTasksByUser] total records in Linked Todoist Tasks:', tableData.records?.length);
-      // Log every record's client-linking fields so mismatches are visible
-      (tableData.records ?? []).forEach((r: { id: string; fields: Record<string, unknown> }, i: number) => {
-        const clientField =
-          r.fields['Users 2'] ??
-          r.fields['Client'] ??
-          r.fields['Clients'] ??
-          r.fields['User'] ??
-          null;
-        console.log(`[getTasksByUser] record ${i}:`, {
-          id: r.id,
-          name: r.fields['Task'] ?? r.fields['Title'] ?? r.fields['Name'],
-          clientField,
-          status: r.fields['Status'],
-        });
-      });
-      for (const rec of (tableData.records ?? [])) {
-        // Try all plausible field names for the user-link column
-        const clientField =
-          (rec.fields['Users 2'] as unknown) ??
-          (rec.fields['Client'] as unknown) ??
-          (rec.fields['Clients'] as unknown) ??
-          (rec.fields['User'] as unknown);
-        if (!Array.isArray(clientField) || !clientField.includes(userId)) continue;
-        const task = mapRecord(rec);
-        if (!seen.has(task.id)) { seen.add(task.id); results.push(task); }
+    // Portal-created tasks use "Client"; Todoist-synced tasks use "Users 2".
+    let offset: string | undefined
+    do {
+      const url =
+        `${API_BASE}/${baseId}/Linked%20Todoist%20Tasks` +
+        (offset ? `?offset=${encodeURIComponent(offset)}` : '')
+      const tableRes = await fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        cache: 'no-store',
+      })
+      if (!tableRes.ok) {
+        const errText = await tableRes.text()
+        console.warn('[getTasksByUser] Linked Todoist Tasks query failed:', errText)
+        break
       }
-      console.log('[getTasksByUser] matched tasks:', results.length);
-    } else {
-      const errText = await tableRes.text();
-      console.warn('[getTasksByUser] Linked Todoist Tasks query failed:', errText);
-    }
+      const tableData = await tableRes.json()
+      offset = tableData.offset  // undefined when last page
+      console.log('[getTasksByUser] userId:', userId, '| page records:', tableData.records?.length, '| hasMore:', !!offset)
+      for (const rec of (tableData.records ?? [])) {
+        // "Client" = portal-created; "Users 2" = Todoist-synced; check both
+        const clientField =
+          (rec.fields['Client'] as unknown) ??
+          (rec.fields['Users 2'] as unknown) ??
+          (rec.fields['Clients'] as unknown) ??
+          (rec.fields['User'] as unknown)
+        if (!Array.isArray(clientField) || !clientField.includes(userId)) continue
+        const task = mapRecord(rec)
+        if (!seen.has(task.id)) { seen.add(task.id); results.push(task) }
+      }
+    } while (offset)
+    console.log('[getTasksByUser] matched tasks after all pages:', results.length)
 
     // Sort by due date asc, nulls last
     results.sort((a, b) => {
@@ -153,12 +146,12 @@ export async function createTask(fields: {
     return;
   }
   try {
-    // The portal uses "Linked Todoist Tasks" — field names differ from portal schema.
-    // "Task" = name, "Users 2" = linked user. Due date and priority have no column yet.
-    const airtableFields: Record<string, unknown> = { Task: fields.Title };
-    if (fields.Client?.length) airtableFields['Users 2'] = fields.Client;
-    console.log('[createTask] userId:', fields.Client?.[0]);
-    console.log('[createTask] POST body:', JSON.stringify({ fields: airtableFields }));
+    // Portal tasks use "Client" for the user link — same field name as the Notes table.
+    // "Task" is the primary name field in Linked Todoist Tasks.
+    const airtableFields: Record<string, unknown> = { Task: fields.Title }
+    if (fields.Client?.length) airtableFields['Client'] = fields.Client
+    console.log('[createTask] userId received:', fields.Client?.[0])
+    console.log('[createTask] POST body:', JSON.stringify({ fields: airtableFields }, null, 2))
     const res = await fetch(`${API_BASE}/${baseId}/Linked%20Todoist%20Tasks`, {
       method: 'POST',
       headers: {
@@ -166,13 +159,14 @@ export async function createTask(fields: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ fields: airtableFields }),
-    });
-    const data = await res.json();
-    console.log('[createTask] response:', JSON.stringify(data));
+    })
+    const data = await res.json()
+    console.log('[createTask] Airtable status:', res.status)
+    console.log('[createTask] Airtable response:', JSON.stringify(data, null, 2))
     if (!res.ok) {
-      console.error('[createTask] Airtable POST failed');
+      console.error('[createTask] Airtable POST failed — check field names above')
     }
   } catch (e) {
-    console.error('[createTask] Unexpected error:', e);
+    console.error('[createTask] Unexpected error:', e)
   }
 }
