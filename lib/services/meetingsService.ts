@@ -80,16 +80,41 @@ export async function updateMeetingNotes(meetingId: string, notes: string): Prom
 }
 
 // ── Email-based matching helpers ──────────────────────────────────────────────
-// All helpers normalise emails to lowercase+trimmed so casing and whitespace
-// in Airtable never break a match.
 
+// Normalise: lowercase, remove all whitespace (Airtable sometimes stores
+// "j  barton@..." with stray spaces), trim.
+function normalizeEmail(email: string): string {
+  return email.replace(/\s+/g, '').toLowerCase().trim()
+}
+
+// Strip the last TLD segment so "nmayorga@specializedstaffing.com" also matches
+// a stored value of "nmayorga@specializedstaffing" (missing-TLD data quality issue).
+function stripTld(email: string): string {
+  return email.replace(/\.[a-z]{2,6}$/, '')
+}
+
+// Index both the normalised email and its TLD-stripped variant so fuzzy lookups work.
 export function buildEmailToUserMap(users: User[]): Map<string, User> {
-  const map = new Map<string, User>();
+  const map = new Map<string, User>()
   for (const user of users) {
-    if (user.email) map.set(user.email.toLowerCase().trim(), user);
-    if (user.workEmail) map.set(user.workEmail.toLowerCase().trim(), user);
+    for (const raw of [user.email, user.workEmail]) {
+      if (!raw) continue
+      const norm = normalizeEmail(raw)
+      if (!norm) continue
+      map.set(norm, user)
+      // Also index the TLD-stripped form so a stored "user@domain" matches
+      // a meeting participant "user@domain.com".
+      const noTld = stripTld(norm)
+      if (noTld !== norm) map.set(noTld, user)
+    }
   }
-  return map;
+  return map
+}
+
+// Look up a meeting participant email with exact-then-TLD-stripped fallback.
+function lookupEmail(email: string, emailToUser: Map<string, User>): User | null {
+  const norm = normalizeEmail(email)
+  return emailToUser.get(norm) ?? emailToUser.get(stripTld(norm)) ?? null
 }
 
 // Returns the first User whose email matches any participant in the meeting.
@@ -98,29 +123,29 @@ export function findClientForMeeting(
   emailToUser: Map<string, User>
 ): User | null {
   for (const email of meeting.participantEmails) {
-    const user = emailToUser.get(email.toLowerCase().trim());
-    if (user) return user;
+    const user = lookupEmail(email, emailToUser)
+    if (user) return user
   }
-  return null;
+  return null
 }
 
-// Returns a Map<userId, Meeting[]> — each meeting appears under the first
-// participant email that matches a known user.
+// Returns a Map<userId, Meeting[]> — each meeting appears under every matched
+// participant, capped at the first non-duplicate match per meeting.
 export function groupMeetingsByUser(
   meetings: Meeting[],
   users: User[]
 ): Map<string, Meeting[]> {
-  const emailToUser = buildEmailToUserMap(users);
-  const result = new Map<string, Meeting[]>();
+  const emailToUser = buildEmailToUserMap(users)
+  const result = new Map<string, Meeting[]>()
   for (const meeting of meetings) {
     for (const email of meeting.participantEmails) {
-      const user = emailToUser.get(email.toLowerCase().trim());
+      const user = lookupEmail(email, emailToUser)
       if (user) {
-        if (!result.has(user.id)) result.set(user.id, []);
-        result.get(user.id)!.push(meeting);
-        break; // stop at first match so the meeting isn't counted twice
+        if (!result.has(user.id)) result.set(user.id, [])
+        result.get(user.id)!.push(meeting)
+        break // stop at first match so the meeting isn't counted twice
       }
     }
   }
-  return result;
+  return result
 }

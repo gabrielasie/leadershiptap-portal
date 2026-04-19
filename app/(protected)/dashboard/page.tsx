@@ -251,6 +251,13 @@ export default async function DashboardPage() {
     return { user, lastMeeting, lastMessage, lastActivityDate }
   })
 
+  // Diagnostic: log meeting match counts per client
+  clientActivity.forEach(({ user, lastMeeting }) => {
+    const email = user.workEmail ?? user.email ?? '(no email)'
+    const count = meetingsByUser.get(user.id)?.length ?? 0
+    console.log(`[dashboard] ${getDisplayName(user)} | email: ${email} | meetings matched: ${count}${lastMeeting ? ` | last: ${lastMeeting.startTime.slice(0,10)}` : ''}`)
+  })
+
   // Sort by most recent activity, nulls last — show top 5
   clientActivity.sort((a, b) => {
     if (!a.lastActivityDate && !b.lastActivityDate) return 0
