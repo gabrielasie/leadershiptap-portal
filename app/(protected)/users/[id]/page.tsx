@@ -309,6 +309,19 @@ export default async function UserDetailPage({ params }: Props) {
       : null,
   ].filter((b): b is { label: string; className: string } => b !== null)
 
+  // Returns true only if the field has at least one line of real content —
+  // filters out blank lines and "Label: ?" placeholder patterns.
+  function hasRealContent(val: string | undefined): boolean {
+    if (!val || !val.trim()) return false
+    return val.split('\n').some((line) => {
+      const t = line.trim()
+      if (!t || t === '?') return false
+      // "Spouse: ?" / "Daughter's name:" / "Child: " — label with no real value
+      if (/^[^:]{1,30}:\s*\??$/.test(t)) return false
+      return true
+    })
+  }
+
   // Personality section: show only if at least one field has data
   const hasPersonality =
     !!(user.enneagramType || user.enneagram || user.mbtiType || user.mbti ||
@@ -526,23 +539,20 @@ export default async function UserDetailPage({ params }: Props) {
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
         <SectionHeading icon={Heart} title="Coaching Context" />
         <div className="space-y-4">
-          {user.quickNotes && user.quickNotes.trim() && user.quickNotes.trim() !== '?' && (
+          {hasRealContent(user.quickNotes) && (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Quick Notes</p>
               <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{user.quickNotes}</p>
             </div>
           )}
-          {user.familyDetails && user.familyDetails.trim() && user.familyDetails.trim() !== '?' && (
+          {hasRealContent(user.familyDetails) && (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Family Details</p>
               <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{user.familyDetails}</p>
             </div>
           )}
-          {(!user.quickNotes || !user.quickNotes.trim() || user.quickNotes.trim() === '?') &&
-           (!user.familyDetails || !user.familyDetails.trim() || user.familyDetails.trim() === '?') && (
-            <p className="text-sm text-slate-400 italic">
-              No coaching context yet. Use Edit Profile to add notes.
-            </p>
+          {!hasRealContent(user.quickNotes) && !hasRealContent(user.familyDetails) && (
+            <p className="text-sm text-slate-400 italic">No coaching context added yet.</p>
           )}
         </div>
       </div>

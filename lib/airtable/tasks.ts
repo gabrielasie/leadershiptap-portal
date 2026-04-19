@@ -11,13 +11,16 @@ function getCredentials() {
 
 function mapRecord(record: { id: string; fields: Record<string, unknown> }): Task {
   const name = (record.fields['Task'] as string) ?? '';
-  const clientIds = record.fields['Users'];
+  // Status is a checkbox (boolean) in Airtable — map true → 'Done', false/null → 'To Do'
+  const status: Task['status'] = record.fields['Status'] === true ? 'Done' : 'To Do'
+  // 'Users 2' is the multipleRecordLinks field; 'Users' is a plain text field
+  const clientIds = record.fields['Users 2'];
   return {
     id: record.id,
     name,
     dueDate: (record.fields['Due Date'] as string) || undefined,
     priority: record.fields['Priority'] as Task['priority'],
-    status: (record.fields['Status'] as Task['status']) || 'To Do',
+    status,
     userId: Array.isArray(clientIds) ? (clientIds[0] as string) : undefined,
   };
 }
@@ -69,7 +72,7 @@ export async function getTasksByUser(userId: string): Promise<Task[]> {
       offset = tableData.offset  // undefined when last page
       console.log('[getTasksByUser] userId:', userId, '| page records:', tableData.records?.length, '| hasMore:', !!offset)
       for (const rec of (tableData.records ?? [])) {
-        const users = rec.fields['Users']
+        const users = rec.fields['Users 2']
         if (!Array.isArray(users) || !users.includes(userId)) continue
         const task = mapRecord(rec)
         if (!seen.has(task.id)) { seen.add(task.id); results.push(task) }
@@ -127,8 +130,7 @@ export async function createTask(fields: {
   Title: string;
   'Due Date'?: string;
   Priority?: 'Low' | 'Medium' | 'High';
-  Status?: string;
-  Users?: string[];     // linked record IDs → Users table
+  'Users 2'?: string[];     // multipleRecordLinks → Users table
 }): Promise<void> {
   let apiKey: string, baseId: string;
   try {
@@ -139,8 +141,8 @@ export async function createTask(fields: {
   }
   try {
     const airtableFields: Record<string, unknown> = { Task: fields.Title }
-    if (fields.Users?.length) airtableFields['Users'] = fields.Users
-    console.log('[createTask] userId received:', fields.Users?.[0])
+    if (fields['Users 2']?.length) airtableFields['Users 2'] = fields['Users 2']
+    console.log('[createTask] userId received:', fields['Users 2']?.[0])
     console.log('[createTask] POST body:', JSON.stringify({ fields: airtableFields }, null, 2))
     const res = await fetch(`${API_BASE}/${baseId}/Linked%20Todoist%20Tasks`, {
       method: 'POST',

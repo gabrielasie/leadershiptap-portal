@@ -29,6 +29,7 @@ export default function TaskItem({ task }: { task: Task }) {
   const router = useRouter()
   const [optimisticDone, setOptimisticDone] = useState(task.status === 'Done')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const isDone = optimisticDone
   const isOverdue =
@@ -37,16 +38,18 @@ export default function TaskItem({ task }: { task: Task }) {
     new Date(task.dueDate + 'T23:59:59') < new Date()
 
   async function toggle() {
+    const prev = isDone
+    setOptimisticDone(!prev)
+    setError('')
     setLoading(true)
-    const newStatus = isDone ? 'To Do' : 'Done'
-    setOptimisticDone(!isDone)
-    const result = await updateTaskStatusAction(task.id, newStatus)
+    const result = await updateTaskStatusAction(task.id, !prev)
+    setLoading(false)
     if (!result.success) {
-      setOptimisticDone(isDone) // revert on failure
+      setOptimisticDone(prev)
+      setError('Failed to update — please try again')
     } else {
       router.refresh()
     }
-    setLoading(false)
   }
 
   return (
@@ -78,6 +81,9 @@ export default function TaskItem({ task }: { task: Task }) {
           }`}>
             {isOverdue ? 'Overdue · ' : 'Due '}{formatDue(task.dueDate)}
           </p>
+        )}
+        {error && (
+          <p className="text-xs text-rose-500 mt-0.5">{error}</p>
         )}
       </div>
 

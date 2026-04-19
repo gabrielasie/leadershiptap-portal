@@ -159,22 +159,11 @@ export async function deleteNoteAction(
 
 export async function updateTaskStatusAction(
   taskId: string,
-  status: string,
+  done: boolean,   // Status is a checkbox field in Airtable — true = done, false = not done
 ): Promise<{ success: boolean }> {
   try {
     const baseId = process.env.AIRTABLE_BASE_ID!
     const token = process.env.AIRTABLE_API_KEY!
-
-    // Sample one record so we can see the real Status option values in the logs
-    const sampleRes = await fetch(
-      `https://api.airtable.com/v0/${baseId}/Linked%20Todoist%20Tasks?maxRecords=3`,
-      { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
-    )
-    const sampleData = await sampleRes.json()
-    console.log('[updateTaskStatus] sample Status values:',
-      sampleData.records?.map((r: { fields: Record<string, unknown> }) => r.fields['Status']))
-
-    console.log('[updateTaskStatus] sending status:', status, 'for task:', taskId)
     const res = await fetch(
       `https://api.airtable.com/v0/${baseId}/Linked%20Todoist%20Tasks/${taskId}`,
       {
@@ -183,12 +172,14 @@ export async function updateTaskStatusAction(
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ fields: { Status: status } }),
+        body: JSON.stringify({ fields: { Status: done } }),
       },
     )
-    const data = await res.json()
-    console.log('[updateTaskStatus] response:', JSON.stringify(data))
-    if (!res.ok) return { success: false }
+    if (!res.ok) {
+      const data = await res.json()
+      console.error('[updateTaskStatusAction] Airtable error:', data)
+      return { success: false }
+    }
     return { success: true }
   } catch (err) {
     console.error('[updateTaskStatusAction] error:', err)
@@ -227,7 +218,7 @@ export async function saveTaskAction(
     Title: taskName,
     ...(dueDate ? { 'Due Date': dueDate } : {}),
     Priority: priority,
-    Users: [userId],
+    'Users 2': [userId],
   })
   revalidatePath(`/users/${userId}`)
 }
