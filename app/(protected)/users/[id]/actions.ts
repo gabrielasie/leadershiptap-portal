@@ -10,6 +10,7 @@ import {
   createUserRecord,
   patchTeamMembers,
 } from '@/lib/airtable/users'
+import { updateMeetingFields } from '@/lib/airtable/meetings'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 
 // ── Edit Profile ──────────────────────────────────────────────────────────────
@@ -190,6 +191,23 @@ export async function updateTaskStatusAction(
   } catch (err) {
     console.error('[updateTaskStatusAction] error:', err)
     return { success: false }
+  }
+}
+
+// ── Session Notes ─────────────────────────────────────────────────────────────
+
+export async function updateSessionNotesAction(
+  meetingId: string,
+  notes: string,
+  userId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await updateMeetingFields(meetingId, { Notes: notes })
+    revalidatePath(`/users/${userId}`)
+    return { success: true }
+  } catch (err) {
+    console.error('[updateSessionNotesAction]', err)
+    return { success: false, error: 'Failed to save notes — please try again' }
   }
 }
 

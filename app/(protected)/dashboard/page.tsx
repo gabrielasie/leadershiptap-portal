@@ -127,7 +127,18 @@ export default async function DashboardPage() {
       timeRange,
       clientId: client?.id ?? null,
       clientName: client ? getDisplayName(client) : null,
-      displayLabel: null,
+      displayLabel: client ? null : (() => {
+        const allEmails = [meeting.senderEmail, ...meeting.participantEmails]
+          .filter(Boolean)
+          .map((e) => e!.trim().toLowerCase())
+          .filter((e) => e && !e.includes('leadershiptap') && e !== coachEmail)
+        const domains = [...new Set(
+          allEmails
+            .map((e) => e.split('@')[1]?.replace(/\.(com|net|org|io)$/, '') ?? '')
+            .filter(Boolean),
+        )]
+        return domains.slice(0, 2).join(', ') || null
+      })(),
       participantEmails: externalEmails,
       notes: meeting.notes,
     }

@@ -428,26 +428,124 @@ export default async function UserDetailPage({ params }: Props) {
         )}
       </div>
 
-      {/* ── Coaching Context ──────────────────────────────────────────────── */}
-      {(user.quickNotes || user.familyDetails) && (
-        <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-          <SectionHeading icon={Heart} title="Coaching Context" />
-          <div className="space-y-4">
-            {user.quickNotes && (
+      {/* ── Most Recent Session ───────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl shadow-sm p-4 md:p-6 space-y-5">
+        {lastMeeting ? (
+          <div className="border-l-4 border-blue-600 bg-blue-50/40 rounded-r-xl p-5">
+            <div className="flex justify-between items-start mb-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Quick Notes</p>
-                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{user.quickNotes}</p>
+                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">
+                  Most Recent Session
+                </p>
+                <p className="text-sm font-medium mt-0.5">
+                  {new Date(lastMeeting.startTime).toLocaleDateString('en-US', {
+                    weekday: 'long', month: 'long', day: 'numeric',
+                  })}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">{lastMeeting.title}</p>
               </div>
+              <Link
+                href={`/users/${id}/sessions/${lastMeeting.id}`}
+                className="text-xs text-blue-600 hover:underline whitespace-nowrap"
+              >
+                Full session →
+              </Link>
+            </div>
+
+            {lastMeeting.notes ? (
+              <p className="text-sm whitespace-pre-wrap leading-relaxed text-slate-800">
+                {lastMeeting.notes}
+              </p>
+            ) : (
+              <p className="text-sm text-slate-400 italic">
+                No notes for this session yet.
+              </p>
             )}
-            {user.familyDetails && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Family Details</p>
-                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{user.familyDetails}</p>
-              </div>
+
+            <Link
+              href={`/users/${id}/sessions/${lastMeeting.id}`}
+              className="inline-block mt-3 text-sm font-medium text-blue-600 hover:underline"
+            >
+              ✏️ {lastMeeting.notes ? 'Edit session notes' : 'Add session notes'}
+            </Link>
+          </div>
+        ) : (
+          <div className="border border-dashed border-slate-200 rounded-xl p-5 text-center">
+            <p className="text-sm text-slate-400">No sessions recorded yet.</p>
+          </div>
+        )}
+
+        {/* Past sessions list */}
+        {recentMeetings.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+              Past Sessions
+              <span className="text-xs font-normal text-slate-400">
+                ({recentMeetings.length} more)
+              </span>
+            </h3>
+            <div className="space-y-2">
+              {recentMeetings.slice(0, 5).map((m) => (
+                <Link
+                  key={m.id}
+                  href={`/users/${id}/sessions/${m.id}`}
+                  className="flex items-center justify-between p-3 border border-slate-100 rounded-lg hover:bg-slate-50 transition-colors group"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-900 truncate">{m.title || 'Untitled Meeting'}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {new Date(m.startTime).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric',
+                      })}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {m.notes && (
+                      <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                        Has notes
+                      </span>
+                    )}
+                    <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 transition-colors" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+            {recentMeetings.length > 5 && (
+              <Link
+                href={`/users/${id}/sessions`}
+                className="text-sm text-blue-600 hover:underline mt-3 block"
+              >
+                View all {recentMeetings.length + 1} sessions →
+              </Link>
             )}
           </div>
+        )}
+      </div>
+
+      {/* ── Coaching Context ──────────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
+        <SectionHeading icon={Heart} title="Coaching Context" />
+        <div className="space-y-4">
+          {user.quickNotes && user.quickNotes.trim() && user.quickNotes.trim() !== '?' && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Quick Notes</p>
+              <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{user.quickNotes}</p>
+            </div>
+          )}
+          {user.familyDetails && user.familyDetails.trim() && user.familyDetails.trim() !== '?' && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Family Details</p>
+              <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{user.familyDetails}</p>
+            </div>
+          )}
+          {(!user.quickNotes || !user.quickNotes.trim() || user.quickNotes.trim() === '?') &&
+           (!user.familyDetails || !user.familyDetails.trim() || user.familyDetails.trim() === '?') && (
+            <p className="text-sm text-slate-400 italic">
+              No coaching context yet. Use Edit Profile to add notes.
+            </p>
+          )}
         </div>
-      )}
+      </div>
 
       {/* ── Personality & Strengths ───────────────────────────────────────── */}
       {hasPersonality && (
