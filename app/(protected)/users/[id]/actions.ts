@@ -225,7 +225,7 @@ export async function saveTaskAction(
     Title: taskName,
     ...(dueDate ? { 'Due Date': dueDate } : {}),
     Priority: priority,
-    Client: [userId],
+    Users: [userId],
   })
   revalidatePath(`/users/${userId}`)
 }
