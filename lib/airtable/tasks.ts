@@ -58,10 +58,31 @@ export async function getTasksByUser(userId: string): Promise<Task[]> {
     );
     if (tableRes.ok) {
       const tableData = await tableRes.json();
-      console.log('[getTasksByUser] userId:', userId, '— total records in table:', tableData.records?.length);
+      console.log('[getTasksByUser] userId:', userId);
+      console.log('[getTasksByUser] total records in Linked Todoist Tasks:', tableData.records?.length);
+      // Log every record's client-linking fields so mismatches are visible
+      (tableData.records ?? []).forEach((r: { id: string; fields: Record<string, unknown> }, i: number) => {
+        const clientField =
+          r.fields['Users 2'] ??
+          r.fields['Client'] ??
+          r.fields['Clients'] ??
+          r.fields['User'] ??
+          null;
+        console.log(`[getTasksByUser] record ${i}:`, {
+          id: r.id,
+          name: r.fields['Task'] ?? r.fields['Title'] ?? r.fields['Name'],
+          clientField,
+          status: r.fields['Status'],
+        });
+      });
       for (const rec of (tableData.records ?? [])) {
-        const users2 = rec.fields['Users 2'];
-        if (!Array.isArray(users2) || !users2.includes(userId)) continue;
+        // Try all plausible field names for the user-link column
+        const clientField =
+          (rec.fields['Users 2'] as unknown) ??
+          (rec.fields['Client'] as unknown) ??
+          (rec.fields['Clients'] as unknown) ??
+          (rec.fields['User'] as unknown);
+        if (!Array.isArray(clientField) || !clientField.includes(userId)) continue;
         const task = mapRecord(rec);
         if (!seen.has(task.id)) { seen.add(task.id); results.push(task); }
       }
