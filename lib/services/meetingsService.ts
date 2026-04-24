@@ -8,13 +8,19 @@ interface SplitMeetings {
   past: Meeting[];
 }
 
-// Dedup by title+startTime until calendar pipeline provides stable unique IDs
+// Dedup by Provider Event ID when available; fall back to title+startTime
 function deduplicateMeetings(meetings: Meeting[]): Meeting[] {
-  const seen = new Set<string>()
+  const seenById = new Set<string>()
+  const seenByKey = new Set<string>()
   return meetings.filter((m) => {
+    if (m.providerEventId) {
+      if (seenById.has(m.providerEventId)) return false
+      seenById.add(m.providerEventId)
+      return true
+    }
     const key = `${m.title ?? ''}|${m.startTime ?? ''}`
-    if (seen.has(key)) return false
-    seen.add(key)
+    if (seenByKey.has(key)) return false
+    seenByKey.add(key)
     return true
   })
 }

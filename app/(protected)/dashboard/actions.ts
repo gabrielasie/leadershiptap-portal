@@ -3,9 +3,11 @@
 import { revalidatePath } from 'next/cache'
 import { createTask, updateTask, updateTaskStatus, deleteTask } from '@/lib/airtable/tasks'
 import { createNote, updateNote, deleteNote } from '@/lib/airtable/notes'
-import { getMeetingsByUserEmail, updateMeetingFields } from '@/lib/airtable/meetings'
+import { getMeetingsByUserEmail } from '@/lib/airtable/meetings'
+import { upsertCoachSession } from '@/lib/airtable/coachSessions'
 import { getUserById } from '@/lib/services/usersService'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
+import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 
 type TaskStatus = 'pending' | 'in progress' | 'completed'
 
@@ -95,7 +97,7 @@ export async function fetchClientSessionsAction(
   }
 }
 
-// Save a note — either as a session note (PATCH Calendar Events) or general note (POST Notes)
+// Save a note — either as a Coach Session record or a general note
 export async function dashboardLogNoteAction(params: {
   clientId: string
   content: string
@@ -104,7 +106,17 @@ export async function dashboardLogNoteAction(params: {
   const today = new Date().toISOString().slice(0, 10)
   try {
     if (params.meetingId) {
-      await updateMeetingFields(params.meetingId, { Notes: params.content })
+      const userRecord = await getCurrentUserRecord()
+      if (!userRecord.airtableId) {
+        return { success: false, error: 'Could not resolve your coach record.' }
+      }
+      await upsertCoachSession(
+        userRecord.airtableId,
+        params.meetingId,
+        params.clientId,
+        { sessionNotes: params.content },
+      )
+      revalidatePath(`/users/${params.clientId}`)
     } else {
       const sessionUser = await getSessionUser()
       await createNote(params.clientId, params.content, today, sessionUser)

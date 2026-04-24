@@ -7,8 +7,8 @@ export async function createClientAction(data: {
   firstName: string
   lastName: string
   workEmail: string
-  title?: string
-  role?: string
+  jobTitle?: string
+  companyId?: string
   coachId?: string
 }): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
@@ -16,8 +16,8 @@ export async function createClientAction(data: {
       'First Name': data.firstName,
       'Last Name': data.lastName,
       'Work Email': data.workEmail,
-      ...(data.title ? { 'Title': data.title } : {}),
-      ...(data.role ? { 'Role': data.role } : {}),
+      ...(data.jobTitle ? { 'Job Title': data.jobTitle } : {}),
+      ...(data.companyId ? { 'Company': [data.companyId] } : {}),
       ...(data.coachId ? { 'Coach': [data.coachId] } : {}),
     })
     revalidatePath('/users')

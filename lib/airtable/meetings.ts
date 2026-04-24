@@ -22,6 +22,7 @@ function parseEmails(raw: unknown): string[] {
 function mapRecord(record: { id: string; fields: Record<string, unknown> }): Meeting {
   return {
     id: record.id,
+    providerEventId: record.fields["Provider Event ID"] as string | undefined,
     title: (record.fields["EventName"] as string) ?? "",
     startTime: (record.fields["StartTime"] as string) ?? "",
     endTime: record.fields["EndTime"] as string | undefined,

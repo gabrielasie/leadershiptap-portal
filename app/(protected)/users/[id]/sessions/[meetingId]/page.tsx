@@ -3,6 +3,8 @@ import { ArrowLeft, Calendar, Clock, Users, CheckSquare } from 'lucide-react'
 import { notFound } from 'next/navigation'
 import { getUserById } from '@/lib/services/usersService'
 import { getMeetingById } from '@/lib/airtable/meetings'
+import { getCoachSession } from '@/lib/airtable/coachSessions'
+import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import SessionNotesEditor from './SessionNotesEditor'
 
 interface Props {
@@ -39,12 +41,22 @@ const SESSION_STATUS_STYLES: Record<string, string> = {
 export default async function SessionDetailPage({ params }: Props) {
   const { id, meetingId } = await params
 
-  const [user, meeting] = await Promise.all([
+  const [user, meeting, currentUserRecord] = await Promise.all([
     getUserById(id),
     getMeetingById(meetingId),
+    getCurrentUserRecord(),
   ])
 
   if (!meeting) notFound()
+
+  const coachSession = currentUserRecord.airtableId
+    ? await getCoachSession(currentUserRecord.airtableId, meetingId).catch(() => null)
+    : null
+
+  // Show coach session notes when available; fall back to the Calendar Event's
+  // Notes field so that notes entered before the Coach Session table existed
+  // still appear.
+  const notesForEditor = coachSession?.sessionNotes ?? meeting.notes ?? undefined
 
   const userName = user?.fullName ?? user?.preferredName ?? user?.firstName ?? 'Client'
 
@@ -114,11 +126,11 @@ export default async function SessionDetailPage({ params }: Props) {
 
       {/* Session Notes */}
       <div className="bg-white rounded-xl shadow-sm p-5 md:p-6">
-        <SessionNotesEditor meetingId={meetingId} initialNotes={meeting.notes} />
+        <SessionNotesEditor meetingId={meetingId} userId={id} initialNotes={notesForEditor} />
       </div>
 
-      {/* Action Items */}
-      {meeting.actionItems && (
+      {/* Action Items — prefer coach session, fall back to Calendar Event */}
+      {(coachSession?.actionItems || meeting.actionItems) && (
         <div className="bg-white rounded-xl shadow-sm p-5 md:p-6">
           <div className="flex items-center gap-2 mb-3">
             <CheckSquare className="h-4 w-4 text-amber-500" />
@@ -127,7 +139,7 @@ export default async function SessionDetailPage({ params }: Props) {
             </h2>
           </div>
           <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-            {meeting.actionItems}
+            {coachSession?.actionItems ?? meeting.actionItems}
           </p>
         </div>
       )}

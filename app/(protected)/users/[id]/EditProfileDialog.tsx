@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Camera } from 'lucide-react'
-import { updateProfileAction, fetchProfileOptionsAction } from './actions'
+import { updateProfileAction, fetchProfileOptionsAction, upsertCoachContextAction } from './actions'
 import type { UserProfileFields } from '@/lib/airtable/users'
+import type { CoachPersonContext } from '@/lib/airtable/coachPersonContext'
 import type { User } from '@/lib/types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -27,6 +28,7 @@ interface ProfileOptions {
 
 interface Props {
   user: User
+  coachContext: CoachPersonContext | null
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -116,7 +118,7 @@ const ROLE_OPTIONS = ['Client', 'Team Member', 'Senior Leader', 'Coach', 'Admin'
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function EditProfileDialog({ user }: Props) {
+export default function EditProfileDialog({ user, coachContext }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -188,8 +190,8 @@ export default function EditProfileDialog({ user }: Props) {
     setRole(user.role ?? '')
     setCoachId(user.coachIds?.[0] ?? '')
     setTeamLeadId(user.teamLeadIds?.[0] ?? '')
-    setQuickNotes(user.quickNotes ?? '')
-    setFamilyDetails(user.familyDetails ?? '')
+    setQuickNotes(coachContext?.quickNotes ?? '')
+    setFamilyDetails(coachContext?.familyDetails ?? '')
     setEnneagramId(user.enneagramIds?.[0] ?? '')
     setMbtiId(user.mbtiIds?.[0] ?? '')
     setConflictPostureId(user.conflictPostureIds?.[0] ?? '')
@@ -279,8 +281,6 @@ export default function EditProfileDialog({ user }: Props) {
     if (workDeskNumber !== (user.workDeskNumber ?? '')) patch['Work Desk Number'] = workDeskNumber
     if (workCellNumber !== (user.workCellNumber ?? '')) patch['Work Cell Number'] = workCellNumber
     if (personalCellNumber !== (user.personalCellNumber ?? '')) patch['Personal Cell Number'] = personalCellNumber
-    if (quickNotes !== (user.quickNotes ?? '')) patch['Quick Notes'] = quickNotes
-    if (familyDetails !== (user.familyDetails ?? '')) patch['Family Details'] = familyDetails
     if (role !== (user.role ?? '')) patch['Role'] = role
 
     // Linked single-record fields — only if changed and non-empty
@@ -307,6 +307,24 @@ export default function EditProfileDialog({ user }: Props) {
         setSaveStatus('')
         // Append to any existing photo error rather than overwriting it
         setErrorMsg((prev) => (prev ? `${prev}\n${result.error}` : result.error))
+        return
+      }
+    }
+
+    // ── Save coaching context fields to Coach-Person Context table ────────────
+    const origQuickNotes = coachContext?.quickNotes ?? ''
+    const origFamilyDetails = coachContext?.familyDetails ?? ''
+    const contextChanged =
+      quickNotes !== origQuickNotes || familyDetails !== origFamilyDetails
+    if (contextChanged) {
+      const ctxResult = await upsertCoachContextAction(user.id, {
+        quickNotes,
+        familyDetails,
+      })
+      if ('error' in ctxResult) {
+        setSaving(false)
+        setSaveStatus('')
+        setErrorMsg((prev) => (prev ? `${prev}\n${ctxResult.error}` : ctxResult.error))
         return
       }
     }

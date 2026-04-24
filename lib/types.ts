@@ -73,6 +73,7 @@ export interface User {
 
 export interface Meeting {
   id: string;
+  providerEventId?: string; // "Provider Event ID" — stable external calendar ID
   title: string;
   startTime: string; // ISO 8601
   endTime?: string;

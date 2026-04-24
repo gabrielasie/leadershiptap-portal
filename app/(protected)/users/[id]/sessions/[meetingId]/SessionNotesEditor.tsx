@@ -6,10 +6,11 @@ import { updateSessionNotes } from './actions'
 
 interface Props {
   meetingId: string
+  userId: string
   initialNotes: string | undefined
 }
 
-export default function SessionNotesEditor({ meetingId, initialNotes }: Props) {
+export default function SessionNotesEditor({ meetingId, userId, initialNotes }: Props) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(initialNotes ?? '')
@@ -34,7 +35,7 @@ export default function SessionNotesEditor({ meetingId, initialNotes }: Props) {
   function handleSave() {
     setStatus('saving')
     startTransition(async () => {
-      const result = await updateSessionNotes(meetingId, draft)
+      const result = await updateSessionNotes(meetingId, draft, userId)
       if ('error' in result) {
         setStatus('error')
         setErrorMsg(result.error)

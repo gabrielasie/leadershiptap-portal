@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { cookies } from 'next/headers'
 import { Calendar, Users, ChevronRight, Clock, CheckSquare } from 'lucide-react'
 import { getUsers } from '@/lib/services/usersService'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
@@ -13,6 +14,7 @@ import UpcomingSessionsCard, { type UpcomingItem } from './UpcomingSessionsCard'
 import DashboardTaskItem, { type DashboardTask } from './DashboardTaskItem'
 import AddTaskDashboardDialog from './AddTaskDashboardDialog'
 import ClientRowWithNotes from './ClientRowWithNotes'
+import SyncCalendarButton from './SyncCalendarButton'
 import type { User, Meeting, Message } from '@/lib/types'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -77,23 +79,37 @@ function formatSessionLabel(iso: string): string {
 export default async function DashboardPage() {
   const sessionUser = await getSessionUser()
 
-  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, allRecentNotes, userRecord] = await Promise.all([
-    getUsers(sessionUser),
+  const [cookieStore, userRecord] = await Promise.all([
+    cookies(),
+    getCurrentUserRecord(),
+  ])
+
+  const viewMode = cookieStore.get('lt_view_mode')?.value === 'admin' ? 'admin' : 'coach'
+  const filterByCoachId =
+    viewMode === 'coach' && userRecord.airtableId ? userRecord.airtableId : undefined
+
+  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, allRecentNotes] = await Promise.all([
+    getUsers(sessionUser, filterByCoachId),
     getAllUpcomingMeetings(7),   // Airtable-filtered: StartTime in next 7 days, sorted asc
     getAllMeetings(),            // All-time: for client activity section
     fetchAllMessages(),
     getAllOpenTasks(),
     getAllRecentNotes(100),      // Fetch enough to cover all clients
-    getCurrentUserRecord(),
   ])
 
   // Build email → user lookup (matches both email and workEmail, normalised)
   const emailToUser = buildEmailToUserMap(users)
   const now = new Date()
 
-  // Dedup upcoming meetings by title + startTime
+  // Dedup upcoming meetings — prefer Provider Event ID, fall back to title+startTime
+  const seenById = new Set<string>()
   const seenKeys = new Set<string>()
   const dedupedUpcoming = upcomingMeetings.filter((m) => {
+    if (m.providerEventId) {
+      if (seenById.has(m.providerEventId)) return false
+      seenById.add(m.providerEventId)
+      return true
+    }
     const key = `${m.title ?? ''}|${m.startTime ?? ''}`
     if (seenKeys.has(key)) return false
     seenKeys.add(key)
@@ -287,15 +303,18 @@ export default async function DashboardPage() {
     <div className="p-4 md:p-6 lg:p-8">
 
       {/* ── Greeting ─────────────────────────────────────────────────────────── */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">
-          Good {getTimeOfDay()}, {firstName} 👋
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          {todayItems.length > 0
-            ? `You have ${todayItems.length} session${todayItems.length === 1 ? '' : 's'} today`
-            : 'No sessions scheduled for today'}
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Good {getTimeOfDay()}, {firstName} 👋
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            {todayItems.length > 0
+              ? `You have ${todayItems.length} session${todayItems.length === 1 ? '' : 's'} today`
+              : 'No sessions scheduled for today'}
+          </p>
+        </div>
+        {sessionUser?.role === 'admin' && <SyncCalendarButton />}
       </div>
 
       {/* ── Coming Up Next ───────────────────────────────────────────────────── */}

@@ -13,8 +13,11 @@ import {
   patchTeamMembers,
   getAllUsers,
 } from '@/lib/airtable/users'
+import { upsertCoachPersonContext } from '@/lib/airtable/coachPersonContext'
+import { upsertCoachSession } from '@/lib/airtable/coachSessions'
 import { updateMeetingFields } from '@/lib/airtable/meetings'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
+import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 
 // ── Edit Profile ──────────────────────────────────────────────────────────────
 
@@ -199,12 +202,40 @@ export async function updateSessionNotesAction(
   userId: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await updateMeetingFields(meetingId, { Notes: notes })
+    const userRecord = await getCurrentUserRecord()
+    if (!userRecord.airtableId) {
+      // Fall back to patching the Calendar Event if the coach record can't be resolved
+      await updateMeetingFields(meetingId, { Notes: notes })
+    } else {
+      await upsertCoachSession(userRecord.airtableId, meetingId, userId, {
+        sessionNotes: notes,
+      })
+    }
     revalidatePath(`/users/${userId}`)
     return { success: true }
   } catch (err) {
     console.error('[updateSessionNotesAction]', err)
     return { success: false, error: 'Failed to save notes — please try again' }
+  }
+}
+
+// ── Coach-Person Context ──────────────────────────────────────────────────────
+
+export async function upsertCoachContextAction(
+  personId: string,
+  fields: { quickNotes?: string; familyDetails?: string; flags?: string[] },
+): Promise<{ success: true } | { error: string }> {
+  try {
+    const userRecord = await getCurrentUserRecord()
+    if (!userRecord.airtableId) {
+      return { error: 'Could not resolve your coach record — please try again.' }
+    }
+    await upsertCoachPersonContext(userRecord.airtableId, personId, fields)
+    revalidatePath(`/users/${personId}`)
+    return { success: true }
+  } catch (err) {
+    console.error('[upsertCoachContextAction] error:', err)
+    return { error: 'Failed to save coaching context — please try again.' }
   }
 }
 

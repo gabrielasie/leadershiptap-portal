@@ -48,10 +48,22 @@ function deduplicateUsers(users: User[]): User[] {
  * - Coach: only users whose "Coach" linked-record field contains the coach's
  *   Airtable record ID. The coach's own record is resolved by matching their
  *   Clerk email against the Users table.
+ *
+ * Pass `filterByCoachId` to override the role-based logic with an explicit
+ * Airtable record ID filter (used by the Coach View / Admin View toggle).
  */
-export async function getUsers(sessionUser?: SessionUser | null): Promise<User[]> {
+export async function getUsers(
+  sessionUser?: SessionUser | null,
+  filterByCoachId?: string,
+): Promise<User[]> {
   const all = await getAllUsers();
   const deduped = deduplicateUsers(all)
+
+  // Explicit coach-id filter (view mode override takes precedence over role)
+  if (filterByCoachId) {
+    const scoped = deduped.filter((u) => u.coachIds?.includes(filterByCoachId))
+    return scoped.length > 0 ? scoped : deduped
+  }
 
   if (!sessionUser || sessionUser.role === 'admin') return deduped;
 

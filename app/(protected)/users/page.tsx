@@ -1,8 +1,10 @@
+import { cookies } from 'next/headers'
 import { getUsers } from '@/lib/services/usersService'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import { getAllRecentNotes } from '@/lib/airtable/notes'
 import { getAllOpenTasks } from '@/lib/airtable/tasks'
+import { fetchProfileOptions, getAllUsers } from '@/lib/airtable/users'
 import PageHeader from '@/components/layout/PageHeader'
 import ClientsGrid, { type EnrichedUser } from './ClientsGrid'
 import type { User } from '@/lib/types'
@@ -15,16 +17,26 @@ function getDisplayName(user: User): string {
 }
 
 export default async function UsersPage() {
-  const [sessionUser, userRecord] = await Promise.all([
+  const [sessionUser, userRecord, cookieStore] = await Promise.all([
     getSessionUser(),
     getCurrentUserRecord(),
+    cookies(),
   ])
 
-  const [users, allRecentNotes, openTasks] = await Promise.all([
-    getUsers(sessionUser),
+  const viewMode = cookieStore.get('lt_view_mode')?.value === 'admin' ? 'admin' : 'coach'
+  // In coach view, filter by the logged-in user's Airtable record ID.
+  // In admin view, pass no filter so all users are returned.
+  const filterByCoachId =
+    viewMode === 'coach' && userRecord.airtableId ? userRecord.airtableId : undefined
+
+  const [users, allRecentNotes, openTasks, allUsersForOptions] = await Promise.all([
+    getUsers(sessionUser, filterByCoachId),
     getAllRecentNotes(300),
     getAllOpenTasks(),
+    getAllUsers(),
   ])
+
+  const profileOptions = await fetchProfileOptions(allUsersForOptions)
 
   // ── Notes count per user ─────────────────────────────────────────────────
   const noteCountByUser = new Map<string, number>()
@@ -88,7 +100,12 @@ export default async function UsersPage() {
         title="Clients"
         description={description}
       />
-      <ClientsGrid users={enrichedUsers} coaches={coaches} />
+      <ClientsGrid
+        users={enrichedUsers}
+        coaches={coaches}
+        companies={profileOptions.companies}
+        currentCoachId={userRecord.airtableId ?? undefined}
+      />
     </>
   )
 }

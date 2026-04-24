@@ -18,6 +18,8 @@ export interface EnrichedUser {
 interface Props {
   users: EnrichedUser[]
   coaches: Array<{ id: string; name: string }>
+  companies: Array<{ id: string; name: string }>
+  currentCoachId?: string
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -159,7 +161,7 @@ function FilterSelect({
 
 // ── Main grid ─────────────────────────────────────────────────────────────────
 
-export default function ClientsGrid({ users, coaches }: Props) {
+export default function ClientsGrid({ users, coaches, companies, currentCoachId }: Props) {
   const [query, setQuery] = useState('')
   const [selectedRole, setSelectedRole] = useState('all')
   const [selectedCoach, setSelectedCoach] = useState('all')
@@ -265,7 +267,7 @@ export default function ClientsGrid({ users, coaches }: Props) {
 
         {/* Add Client button */}
         <div className="ml-auto">
-          <AddClientDialog coaches={coaches} />
+          <AddClientDialog coaches={coaches} companies={companies} currentCoachId={currentCoachId} />
         </div>
       </div>
 

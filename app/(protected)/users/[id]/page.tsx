@@ -21,9 +21,13 @@ import { getUserMessages } from '@/lib/services/messagesService'
 import { getNotesByUser } from '@/lib/airtable/notes'
 import { getTasksByUser } from '@/lib/airtable/tasks'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
+import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
+import { getCoachPersonContext } from '@/lib/airtable/coachPersonContext'
+import { getRecentCoachSessionsForPerson } from '@/lib/airtable/coachSessions'
 import PlaceholderSection from '@/components/ui/PlaceholderSection'
 import UserActionsBar from './UserActionsBar'
 import RecentSessionCard from './RecentSessionCard'
+import MostRecentSessionNotes from './MostRecentSessionNotes'
 import EditProfileDialog from './EditProfileDialog'
 import AddTeamMemberDialog from './AddTeamMemberDialog'
 import TaskItem from './TaskItem'
@@ -224,7 +228,11 @@ function MessageRow({ msg, userId }: { msg: Message; userId: string }) {
 
 export default async function UserDetailPage({ params }: Props) {
   const { id } = await params
-  const [user, sessionUser] = await Promise.all([getUserById(id), getSessionUser()])
+  const [user, sessionUser, currentUserRecord] = await Promise.all([
+    getUserById(id),
+    getSessionUser(),
+    getCurrentUserRecord(),
+  ])
 
   if (!user) {
     return (
@@ -251,6 +259,8 @@ export default async function UserDetailPage({ params }: Props) {
     coach,
     teamLead,
     teamMemberResults,
+    coachContext,
+    recentCoachSessions,
   ] = await Promise.all([
     getMeetingsForUser(contactEmail, sessionUser, id),
     getUserMessages(id),
@@ -261,6 +271,12 @@ export default async function UserDetailPage({ params }: Props) {
     coachId ? getUserById(coachId) : Promise.resolve(null),
     teamLeadId ? getUserById(teamLeadId) : Promise.resolve(null),
     Promise.all(teamMemberIdList.map((tid) => getUserById(tid))),
+    currentUserRecord.airtableId
+      ? getCoachPersonContext(currentUserRecord.airtableId, id).catch(() => null)
+      : Promise.resolve(null),
+    currentUserRecord.airtableId
+      ? getRecentCoachSessionsForPerson(currentUserRecord.airtableId, id, 10).catch(() => [])
+      : Promise.resolve([]),
   ])
 
   const directReports = reportResults.filter((u): u is User => u !== null)
@@ -348,7 +364,7 @@ export default async function UserDetailPage({ params }: Props) {
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
         <div className="flex items-start justify-between gap-2 mb-4 sm:mb-0">
           <span />
-          <EditProfileDialog user={user} />
+          <EditProfileDialog user={user} coachContext={coachContext} />
         </div>
         <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-5">
           {(user.profilePhoto ?? user.avatarUrl) ? (
@@ -423,50 +439,11 @@ export default async function UserDetailPage({ params }: Props) {
 
       {/* ── Most Recent Session ───────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6 space-y-5">
-        {lastMeeting ? (
-          <div className="border-l-4 border-blue-600 bg-blue-50/40 rounded-r-xl p-5">
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">
-                  Most Recent Session
-                </p>
-                <p className="text-sm font-medium mt-0.5">
-                  {new Date(lastMeeting.startTime).toLocaleDateString('en-US', {
-                    weekday: 'long', month: 'long', day: 'numeric',
-                  })}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">{lastMeeting.title}</p>
-              </div>
-              <Link
-                href={`/users/${id}/sessions/${lastMeeting.id}`}
-                className="text-xs text-blue-600 hover:underline whitespace-nowrap"
-              >
-                Full session →
-              </Link>
-            </div>
-
-            {lastMeeting.notes ? (
-              <p className="text-sm whitespace-pre-wrap leading-relaxed text-slate-800">
-                {lastMeeting.notes}
-              </p>
-            ) : (
-              <p className="text-sm text-slate-400 italic">
-                No notes for this session yet.
-              </p>
-            )}
-
-            <Link
-              href={`/users/${id}/sessions/${lastMeeting.id}`}
-              className="inline-block mt-3 text-sm font-medium text-blue-600 hover:underline"
-            >
-              ✏️ {lastMeeting.notes ? 'Edit session notes' : 'Add session notes'}
-            </Link>
-          </div>
-        ) : (
-          <div className="border border-dashed border-slate-200 rounded-xl p-5 text-center">
-            <p className="text-sm text-slate-400">No sessions recorded yet.</p>
-          </div>
-        )}
+        <MostRecentSessionNotes
+          meeting={lastMeeting}
+          userId={id}
+          coachSession={recentCoachSessions[0] ?? null}
+        />
 
         {/* Past sessions list */}
         {recentMeetings.length > 0 && (
@@ -518,23 +495,41 @@ export default async function UserDetailPage({ params }: Props) {
       {/* ── Coaching Context ──────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
         <SectionHeading icon={Heart} title="Coaching Context" />
-        <div className="space-y-4">
-          {hasRealContent(user.quickNotes) && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Quick Notes</p>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{user.quickNotes}</p>
-            </div>
-          )}
-          {hasRealContent(user.familyDetails) && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Family Details</p>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{user.familyDetails}</p>
-            </div>
-          )}
-          {!hasRealContent(user.quickNotes) && !hasRealContent(user.familyDetails) && (
-            <p className="text-sm text-slate-400 italic">No coaching context added yet.</p>
-          )}
-        </div>
+        {coachContext === null ? (
+          <p className="text-sm text-slate-400 italic">No context added yet — use Edit Profile to add notes.</p>
+        ) : (
+          <div className="space-y-4">
+            {hasRealContent(coachContext.quickNotes ?? undefined) && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Quick Notes</p>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{coachContext.quickNotes}</p>
+              </div>
+            )}
+            {hasRealContent(coachContext.familyDetails ?? undefined) && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Family Details</p>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{coachContext.familyDetails}</p>
+              </div>
+            )}
+            {coachContext.flags.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Relationship Flags</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {coachContext.flags.map((flag) => (
+                    <span key={flag} className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                      {flag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {!hasRealContent(coachContext.quickNotes ?? undefined) &&
+              !hasRealContent(coachContext.familyDetails ?? undefined) &&
+              coachContext.flags.length === 0 && (
+                <p className="text-sm text-slate-400 italic">No context added yet — use Edit Profile to add notes.</p>
+              )}
+          </div>
+        )}
       </div>
 
       {/* ── Personality & Strengths ───────────────────────────────────────── */}

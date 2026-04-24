@@ -147,10 +147,12 @@ export async function searchUsersByName(
 export async function createUserRecord(fields: {
   'First Name'?: string
   'Last Name'?: string
+  'Job Title'?: string
   'Title'?: string
   'Work Email'?: string
   'Role'?: string
   'Coach'?: string[]  // Airtable record IDs of coach users
+  'Company'?: string[]  // Airtable record IDs of company records
 }): Promise<string> {
   const { apiKey, baseId } = getCredentials()
 
@@ -161,10 +163,12 @@ export async function createUserRecord(fields: {
     fields: {
       ...(fields['First Name'] ? { 'First Name': fields['First Name'] } : {}),
       ...(fields['Last Name'] ? { 'Last Name': fields['Last Name'] } : {}),
+      ...(fields['Job Title'] ? { 'Job Title': fields['Job Title'] } : {}),
       ...(fields['Title'] ? { 'Title': fields['Title'] } : {}),
       ...(fields['Work Email'] ? { 'Work Email': fields['Work Email'] } : {}),
       ...(fields['Role'] ? { 'Role': fields['Role'] } : {}),
       ...(fields['Coach']?.length ? { 'Coach': fields['Coach'] } : {}),
+      ...(fields['Company']?.length ? { 'Company': fields['Company'] } : {}),
     },
   }
   console.log('[createUserRecord] POST body:', JSON.stringify(body, null, 2))
@@ -274,9 +278,9 @@ export interface UserProfileFields {
   'Work Desk Number'?: string
   'Work Cell Number'?: string
   'Personal Cell Number'?: string
-  'Quick Notes'?: string
-  'Family Details'?: string
   'Role'?: string
+  // NOTE: Quick Notes and Family Details are coach-specific — write to
+  // Coach-Person Context table via upsertCoachPersonContext, not here.
   // Linked record fields — arrays of record IDs
   'Enneagram'?: string[]
   'MBTI'?: string[]

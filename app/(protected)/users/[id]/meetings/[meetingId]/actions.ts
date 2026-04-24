@@ -1,7 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { updateMeetingNotes } from '@/lib/services/meetingsService'
+import { upsertCoachSession } from '@/lib/airtable/coachSessions'
+import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import { createFollowUpDraft, updateDraftContent, markMessageSent } from '@/lib/services/messagesService'
 import type { Message } from '@/lib/types'
 
@@ -13,8 +14,15 @@ export async function saveNotes(
   notes: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    await updateMeetingNotes(meetingId, notes)
+    const userRecord = await getCurrentUserRecord()
+    if (!userRecord.airtableId) {
+      return { ok: false, error: 'Could not resolve your coach record.' }
+    }
+    await upsertCoachSession(userRecord.airtableId, meetingId, userId, {
+      sessionNotes: notes,
+    })
     revalidatePath(`/users/${userId}/meetings/${meetingId}`)
+    revalidatePath(`/users/${userId}`)
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Unknown error' }
