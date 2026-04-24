@@ -28,6 +28,7 @@ export default async function ProtectedLayout({
     <ViewModeProvider
       initialMode={initialMode}
       currentCoachAirtableId={userRecord.airtableId}
+      userRole={userRecord.role}
     >
       <div className="flex h-screen">
         <Sidebar />

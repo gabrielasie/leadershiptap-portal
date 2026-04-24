@@ -11,6 +11,7 @@ interface ViewModeContextValue {
   setMode: (mode: ViewMode) => void
   isCoachView: boolean
   isAdminView: boolean
+  isAdmin: boolean
   currentCoachAirtableId: string | null
 }
 
@@ -19,6 +20,7 @@ const ViewModeContext = createContext<ViewModeContextValue>({
   setMode: () => {},
   isCoachView: true,
   isAdminView: false,
+  isAdmin: false,
   currentCoachAirtableId: null,
 })
 
@@ -26,10 +28,12 @@ export function ViewModeProvider({
   children,
   initialMode,
   currentCoachAirtableId,
+  userRole,
 }: {
   children: React.ReactNode
   initialMode: ViewMode
   currentCoachAirtableId: string | null
+  userRole?: string
 }) {
   const router = useRouter()
   const [mode, setModeState] = useState<ViewMode>(initialMode)
@@ -56,6 +60,8 @@ export function ViewModeProvider({
     [router],
   )
 
+  const isAdmin = userRole === 'admin'
+
   return (
     <ViewModeContext.Provider
       value={{
@@ -63,6 +69,7 @@ export function ViewModeProvider({
         setMode,
         isCoachView: mode === 'coach',
         isAdminView: mode === 'admin',
+        isAdmin,
         currentCoachAirtableId,
       }}
     >

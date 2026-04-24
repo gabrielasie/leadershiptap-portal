@@ -59,10 +59,10 @@ export async function getUsers(
   const all = await getAllUsers();
   const deduped = deduplicateUsers(all)
 
-  // Explicit coach-id filter (view mode override takes precedence over role)
+  // Explicit coach-id filter (view mode override takes precedence over role).
+  // No fallback — the explicit filter must be respected so Coach/Admin views differ.
   if (filterByCoachId) {
-    const scoped = deduped.filter((u) => u.coachIds?.includes(filterByCoachId))
-    return scoped.length > 0 ? scoped : deduped
+    return deduped.filter((u) => u.coachIds?.includes(filterByCoachId))
   }
 
   if (!sessionUser || sessionUser.role === 'admin') return deduped;

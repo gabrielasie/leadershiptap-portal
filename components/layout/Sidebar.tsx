@@ -16,9 +16,9 @@ export default function Sidebar() {
   const pathname = usePathname()
   const { user } = useUser()
   const { signOut } = useClerk()
-  const { mode, setMode, currentCoachAirtableId } = useViewMode()
+  const { mode, setMode, currentCoachAirtableId, isAdmin } = useViewMode()
 
-  const showToggle = currentCoachAirtableId !== null
+  const showToggle = currentCoachAirtableId !== null || isAdmin
 
   function handleToggle() {
     setMode(mode === 'coach' ? 'admin' : 'coach')
@@ -144,7 +144,7 @@ export default function Sidebar() {
               {mode === 'coach' ? 'Coach View' : 'Admin View'}
             </span>
             <span className="ml-auto text-[10px] text-slate-400 font-medium uppercase tracking-wide">
-              {mode === 'coach' ? 'yours' : 'all'}
+              {mode === 'coach' ? 'MY CLIENTS' : 'ALL'}
             </span>
           </button>
         )}
