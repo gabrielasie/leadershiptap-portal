@@ -47,7 +47,9 @@ export async function upsertCalendarEvent(
     'Provider Event ID': fields.providerEventId,
     EventName: fields.eventName,
     StartTime: fields.startTime,
-    SenderEmail: fields.senderEmail,
+    // SenderEmail is a Single Select — do not write to it.
+    // Write coach email to "Coach Email" (Single line text) if it exists.
+    'Coach Email': fields.senderEmail,
     ParticipantEmails: fields.participantEmails.join(', '),
   }
   if (fields.endTime) writeFields['EndTime'] = fields.endTime

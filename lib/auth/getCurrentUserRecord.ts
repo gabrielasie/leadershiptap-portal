@@ -34,22 +34,51 @@ export async function getCurrentUserRecord(): Promise<CurrentUserRecord> {
       return { clerkId: clerkUser.id, email, airtableId: null, role, name }
     }
 
-    // Use a formula filter so we fetch only the matching record — avoids the
-    // default 100-record page limit that would miss users past position 100.
     const searchEmail = email.toLowerCase().trim()
-    const safeEmail = searchEmail.replace(/'/g, "\\'")
+
+    // ── Step 1: formula lookup (fast, handles most cases) ──────────────────
+    const safeEmail = searchEmail.replace(/"/g, '\\"')
     const formula = encodeURIComponent(
       `OR(LOWER({Work Email}) = "${safeEmail}", LOWER({Email}) = "${safeEmail}")`,
     )
-    const res = await fetch(
+    const formulaRes = await fetch(
       `https://api.airtable.com/v0/${baseId}/Users?filterByFormula=${formula}&maxRecords=1`,
       { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
     )
-    const data = await res.json()
+    const formulaData = await formulaRes.json()
+    let match = (formulaData.records ?? [])[0] as
+      | { id: string; fields: Record<string, unknown> }
+      | undefined
 
-    const match = (data.records ?? [])[0] as { id: string; fields: Record<string, unknown> } | undefined
+    if (match) {
+      console.log(`[getCurrentUserRecord] found via formula email=${searchEmail} airtableId=${match.id}`)
+    } else {
+      // ── Step 2: paginated scan fallback (catches records past position 100) ─
+      console.warn(`[getCurrentUserRecord] formula returned nothing for ${searchEmail} — falling back to paginated scan`)
+      let offset: string | undefined
+      scan: do {
+        const url = `https://api.airtable.com/v0/${baseId}/Users?pageSize=100${offset ? `&offset=${offset}` : ''}`
+        const pageRes = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+        const pageData = await pageRes.json()
+        for (const r of pageData.records ?? []) {
+          const workEmail = ((r.fields['Work Email'] as string) ?? '').toLowerCase().trim()
+          const emailField = ((r.fields['Email'] as string) ?? '').toLowerCase().trim()
+          if (workEmail === searchEmail || emailField === searchEmail) {
+            match = r as { id: string; fields: Record<string, unknown> }
+            console.log(`[getCurrentUserRecord] found via paginated scan email=${searchEmail} airtableId=${match.id}`)
+            break scan
+          }
+        }
+        offset = pageData.offset as string | undefined
+      } while (offset)
 
-    console.log(`[getCurrentUserRecord] email=${searchEmail} airtableId=${match?.id ?? 'NOT FOUND'}`)
+      if (!match) {
+        console.log(`[getCurrentUserRecord] email=${searchEmail} airtableId=NOT FOUND`)
+      }
+    }
 
     if (!match) {
       console.warn('[getCurrentUserRecord] No Airtable record found for:', searchEmail)
