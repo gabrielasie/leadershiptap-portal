@@ -1,6 +1,7 @@
 import { currentUser } from '@clerk/nextjs/server'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import ManageAccountButton from './ManageAccountButton'
+import SyncCalendarSection from './SyncCalendarSection'
 
 const ROLE_BADGE: Record<string, string> = {
   admin:   'bg-purple-100 text-purple-700',
@@ -114,6 +115,12 @@ export default async function SettingsPage() {
             immediately in your Airtable base.
           </p>
         </div>
+      </section>
+
+      {/* ── Calendar Sync ───────────────────────────────────────────────── */}
+      <section className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+        <h2 className="text-base font-semibold text-slate-900 mb-4">Calendar</h2>
+        <SyncCalendarSection />
       </section>
 
       {/* ── Help & Support ──────────────────────────────────────────────── */}

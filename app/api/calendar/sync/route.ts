@@ -3,31 +3,67 @@ import { getGraphAccessToken } from '@/lib/graph/auth'
 import { fetchCalendarEvents } from '@/lib/graph/calendar'
 import { upsertCalendarEvent } from '@/lib/airtable/calendarEvents'
 
-// Sync events from the last 90 days to 30 days ahead
 const DAYS_BACK = 90
 const DAYS_AHEAD = 30
+const DOMAIN = '@leadershiptap.com'
 
-function getCoachEmails(): string[] {
+// Fetch Work Email for all Airtable users with a @leadershiptap.com address.
+async function getLeadershipTapEmails(): Promise<string[]> {
+  const apiKey = process.env.AIRTABLE_API_KEY
+  const baseId = process.env.AIRTABLE_BASE_ID
+  if (!apiKey || !baseId) throw new Error('Missing Airtable credentials')
+
+  const formula = encodeURIComponent(`SEARCH("${DOMAIN}", {Work Email})`)
+  const res = await fetch(
+    `https://api.airtable.com/v0/${baseId}/Users?filterByFormula=${formula}&fields[]=Work%20Email&maxRecords=200`,
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+  )
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Airtable Users fetch failed: ${text}`)
+  }
+  const data = await res.json()
+
   const emails: string[] = []
-  if (process.env.GRAPH_COACH_EMAIL) emails.push(process.env.GRAPH_COACH_EMAIL)
-  if (process.env.GRAPH_COACH_EMAIL_2) emails.push(process.env.GRAPH_COACH_EMAIL_2)
-  if (process.env.GRAPH_COACH_EMAIL_3) emails.push(process.env.GRAPH_COACH_EMAIL_3)
+  for (const record of data.records ?? []) {
+    const email = (record.fields['Work Email'] as string | undefined)?.trim()
+    if (email?.toLowerCase().includes(DOMAIN)) emails.push(email)
+  }
   return emails
 }
 
-export async function POST() {
-  // Verify Clerk session
+// Allow requests authenticated by either a Clerk session or the sync secret header.
+async function isAuthorized(request: Request): Promise<boolean> {
+  const syncSecret = process.env.SYNC_SECRET
+  if (syncSecret && request.headers.get('x-sync-secret') === syncSecret) return true
+
   const { userId } = await auth()
-  if (!userId) {
+  return userId !== null
+}
+
+export async function POST(request: Request) {
+  if (!(await isAuthorized(request))) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const coachEmails = getCoachEmails()
-  if (coachEmails.length === 0) {
+  let coachEmails: string[]
+  try {
+    coachEmails = await getLeadershipTapEmails()
+    console.log(`[calendar/sync] Syncing ${coachEmails.length} ${DOMAIN} users:`, coachEmails)
+  } catch (err) {
+    console.error('[calendar/sync] Failed to fetch coach emails:', err)
     return Response.json(
-      { error: 'No coach emails configured (GRAPH_COACH_EMAIL)' },
+      { error: err instanceof Error ? err.message : 'Failed to fetch coach emails from Airtable' },
       { status: 500 },
     )
+  }
+
+  if (coachEmails.length === 0) {
+    return Response.json({
+      synced: 0,
+      coaches: [],
+      errors: [`No ${DOMAIN} users found in Airtable (check Work Email field)`],
+    })
   }
 
   let accessToken: string
@@ -47,12 +83,13 @@ export async function POST() {
 
   let synced = 0
   const errors: string[] = []
+  const syncedCoaches: string[] = []
 
   for (const coachEmail of coachEmails) {
     let events
     try {
       events = await fetchCalendarEvents(accessToken, coachEmail, startDate, endDate)
-      console.log(`[calendar/sync] Fetched ${events.length} events for ${coachEmail}`)
+      console.log(`[calendar/sync] ${coachEmail}: ${events.length} events`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : `Failed to fetch events for ${coachEmail}`
       console.error(`[calendar/sync] ${msg}`)
@@ -62,17 +99,15 @@ export async function POST() {
 
     for (const event of events) {
       try {
-        const attendeeEmails = event.attendees
-          .map((a) => a.emailAddress.address)
-          .filter(Boolean)
-
         await upsertCalendarEvent({
           providerEventId: event.id,
           eventName: event.subject ?? '(No Subject)',
           startTime: event.start.dateTime,
           endTime: event.end.dateTime,
           senderEmail: coachEmail,
-          participantEmails: attendeeEmails,
+          participantEmails: event.attendees
+            .map((a) => a.emailAddress.address)
+            .filter(Boolean),
         })
         synced++
       } catch (err) {
@@ -81,7 +116,9 @@ export async function POST() {
         errors.push(msg)
       }
     }
+
+    syncedCoaches.push(coachEmail)
   }
 
-  return Response.json({ synced, errors })
+  return Response.json({ synced, coaches: syncedCoaches, errors })
 }

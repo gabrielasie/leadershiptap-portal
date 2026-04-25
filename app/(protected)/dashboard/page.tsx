@@ -14,7 +14,6 @@ import UpcomingSessionsCard, { type UpcomingItem } from './UpcomingSessionsCard'
 import DashboardTaskItem, { type DashboardTask } from './DashboardTaskItem'
 import AddTaskDashboardDialog from './AddTaskDashboardDialog'
 import ClientRowWithNotes from './ClientRowWithNotes'
-import SyncCalendarButton from './SyncCalendarButton'
 import type { User, Meeting, Message } from '@/lib/types'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -303,18 +302,15 @@ export default async function DashboardPage() {
     <div className="p-4 md:p-6 lg:p-8">
 
       {/* ── Greeting ─────────────────────────────────────────────────────────── */}
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            Good {getTimeOfDay()}, {firstName} 👋
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            {todayItems.length > 0
-              ? `You have ${todayItems.length} session${todayItems.length === 1 ? '' : 's'} today`
-              : 'No sessions scheduled for today'}
-          </p>
-        </div>
-        {(viewMode === 'admin' || sessionUser?.role === 'admin') && <SyncCalendarButton />}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-slate-900">
+          Good {getTimeOfDay()}, {firstName} 👋
+        </h1>
+        <p className="text-sm text-slate-500 mt-1">
+          {todayItems.length > 0
+            ? `You have ${todayItems.length} session${todayItems.length === 1 ? '' : 's'} today`
+            : 'No sessions scheduled for today'}
+        </p>
       </div>
 
       {/* ── Coming Up Next ───────────────────────────────────────────────────── */}
