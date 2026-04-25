@@ -56,6 +56,7 @@ export async function getCurrentUserRecord(): Promise<CurrentUserRecord> {
       // ── Step 2: paginated scan fallback (catches records past position 100) ─
       console.warn(`[getCurrentUserRecord] formula returned nothing for ${searchEmail} — falling back to paginated scan`)
       let offset: string | undefined
+      let firstRecordLogged = false
       scan: do {
         const url = `https://api.airtable.com/v0/${baseId}/Users?pageSize=100${offset ? `&offset=${offset}` : ''}`
         const pageRes = await fetch(url, {
@@ -63,12 +64,24 @@ export async function getCurrentUserRecord(): Promise<CurrentUserRecord> {
           cache: 'no-store',
         })
         const pageData = await pageRes.json()
+        // Log field names from the first record once — shows exact Airtable field names
+        if (!firstRecordLogged && pageData.records?.length > 0) {
+          console.log('[getCurrentUserRecord] Airtable Users field names:', Object.keys(pageData.records[0].fields))
+          firstRecordLogged = true
+        }
         for (const r of pageData.records ?? []) {
-          const workEmail = ((r.fields['Work Email'] as string) ?? '').toLowerCase().trim()
-          const emailField = ((r.fields['Email'] as string) ?? '').toLowerCase().trim()
-          if (workEmail === searchEmail || emailField === searchEmail) {
+          // Check all string fields for an email match (catches unexpected field names)
+          const fields = r.fields as Record<string, unknown>
+          const emailMatch = Object.entries(fields).some(([, v]) =>
+            typeof v === 'string' && v.toLowerCase().trim() === searchEmail
+          )
+          if (emailMatch) {
             match = r as { id: string; fields: Record<string, unknown> }
-            console.log(`[getCurrentUserRecord] found via paginated scan email=${searchEmail} airtableId=${match.id}`)
+            // Log which field(s) contained the match
+            const matchingFields = Object.entries(fields)
+              .filter(([, v]) => typeof v === 'string' && v.toLowerCase().trim() === searchEmail)
+              .map(([k]) => k)
+            console.log(`[getCurrentUserRecord] found via paginated scan email=${searchEmail} airtableId=${match.id} matched fields=${matchingFields.join(', ')}`)
             break scan
           }
         }
