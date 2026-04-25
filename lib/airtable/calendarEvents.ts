@@ -1,5 +1,5 @@
 const API_BASE = 'https://api.airtable.com/v0'
-const TABLE = 'Calendar Events'
+const TABLE = 'Portal Calendar Events'
 
 function getCredentials() {
   const apiKey = process.env.AIRTABLE_API_KEY

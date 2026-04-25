@@ -37,10 +37,9 @@ export async function getCurrentUserRecord(): Promise<CurrentUserRecord> {
     const searchEmail = email.toLowerCase().trim()
 
     // ── Step 1: formula lookup (fast, handles most cases) ──────────────────
+    // Field confirmed as "Work Email" from paginated scan debug log.
     const safeEmail = searchEmail.replace(/"/g, '\\"')
-    const formula = encodeURIComponent(
-      `OR(LOWER({Work Email}) = "${safeEmail}", LOWER({Email}) = "${safeEmail}")`,
-    )
+    const formula = encodeURIComponent(`LOWER({Work Email}) = "${safeEmail}"`)
     const formulaRes = await fetch(
       `https://api.airtable.com/v0/${baseId}/Users?filterByFormula=${formula}&maxRecords=1`,
       { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
