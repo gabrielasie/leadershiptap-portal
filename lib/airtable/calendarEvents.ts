@@ -10,28 +10,22 @@ function getCredentials() {
 
 export interface CalendarEventUpsertFields {
   providerEventId: string
-  eventName: string
-  startTime: string
-  endTime?: string
-  senderEmail: string
-  participantEmails: string[]
+  subject: string
+  start: string
+  end: string
 }
 
-// Find an existing Calendar Event record by Provider Event ID.
+// Find an existing Portal Calendar Events record by Provider Event ID.
 async function findByProviderEventId(
   apiKey: string,
   baseId: string,
   providerEventId: string,
 ): Promise<string | null> {
-  // Escape double quotes in the ID just in case
   const safe = providerEventId.replace(/"/g, '\\"')
-  const formula = encodeURIComponent(`{Provider Event ID} = "${safe}"`)
+  const formula = encodeURIComponent(`({Provider Event ID}="${safe}")`)
   const res = await fetch(
     `${API_BASE}/${baseId}/${encodeURIComponent(TABLE)}?filterByFormula=${formula}&maxRecords=1&fields[]=Provider%20Event%20ID`,
-    {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      cache: 'no-store',
-    },
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
   )
   if (!res.ok) return null
   const data = await res.json()
@@ -43,13 +37,13 @@ export async function upsertCalendarEvent(
 ): Promise<void> {
   const { apiKey, baseId } = getCredentials()
 
-  const writeFields: Record<string, unknown> = {
+  // Exactly the 4 fields that exist in Portal Calendar Events.
+  const writeFields = {
+    'Subject': fields.subject,
+    'Start': fields.start,
+    'End': fields.end,
     'Provider Event ID': fields.providerEventId,
-    EventName: fields.eventName,
-    StartTime: fields.startTime,
-    ParticipantEmails: fields.participantEmails.join(', '),
   }
-  if (fields.endTime) writeFields['EndTime'] = fields.endTime
 
   const existingId = await findByProviderEventId(apiKey, baseId, fields.providerEventId)
 

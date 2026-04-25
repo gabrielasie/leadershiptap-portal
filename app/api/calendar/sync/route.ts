@@ -107,15 +107,17 @@ export async function POST(request: Request) {
 
       for (const event of events) {
         try {
+          const start = event.start.dateTime ?? event.start.date
+          const end = event.end.dateTime ?? event.end.date
+          if (!start || !end) {
+            errors.push(`Skipped event ${event.id}: missing start/end`)
+            continue
+          }
           await upsertCalendarEvent({
             providerEventId: event.id,
-            eventName: event.subject ?? '(No Subject)',
-            startTime: event.start.dateTime,
-            endTime: event.end.dateTime,
-            senderEmail: coachEmail,
-            participantEmails: event.attendees
-              .map((a) => a.emailAddress.address)
-              .filter(Boolean),
+            subject: event.subject ?? '(No Subject)',
+            start,
+            end,
           })
           synced++
         } catch (err) {

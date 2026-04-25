@@ -1,8 +1,8 @@
 export interface GraphEvent {
   id: string
   subject: string
-  start: { dateTime: string; timeZone: string }
-  end: { dateTime: string; timeZone: string }
+  start: { dateTime?: string; date?: string; timeZone: string }
+  end: { dateTime?: string; date?: string; timeZone: string }
   attendees: Array<{
     emailAddress: { address: string; name: string }
     type: string
