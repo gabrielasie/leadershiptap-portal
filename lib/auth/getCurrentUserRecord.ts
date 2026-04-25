@@ -34,21 +34,25 @@ export async function getCurrentUserRecord(): Promise<CurrentUserRecord> {
       return { clerkId: clerkUser.id, email, airtableId: null, role, name }
     }
 
+    // Use a formula filter so we fetch only the matching record — avoids the
+    // default 100-record page limit that would miss users past position 100.
+    const searchEmail = email.toLowerCase().trim()
+    const safeEmail = searchEmail.replace(/'/g, "\\'")
+    const formula = encodeURIComponent(
+      `OR(LOWER({Work Email}) = "${safeEmail}", LOWER({Email}) = "${safeEmail}")`,
+    )
     const res = await fetch(
-      `https://api.airtable.com/v0/${baseId}/Users`,
+      `https://api.airtable.com/v0/${baseId}/Users?filterByFormula=${formula}&maxRecords=1`,
       { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
     )
     const data = await res.json()
 
-    const searchEmail = email.toLowerCase().trim()
-    const match = (data.records ?? []).find((r: { id: string; fields: Record<string, unknown> }) => {
-      const workEmail = ((r.fields['Work Email'] as string) ?? '').toLowerCase().trim()
-      const emailField = ((r.fields['Email'] as string) ?? '').toLowerCase().trim()
-      return workEmail === searchEmail || emailField === searchEmail
-    })
+    const match = (data.records ?? [])[0] as { id: string; fields: Record<string, unknown> } | undefined
+
+    console.log(`[getCurrentUserRecord] email=${searchEmail} airtableId=${match?.id ?? 'NOT FOUND'}`)
 
     if (!match) {
-      console.warn('[getCurrentUserRecord] No Airtable record found for:', email)
+      console.warn('[getCurrentUserRecord] No Airtable record found for:', searchEmail)
       // Fall back to Clerk role; default admin prevents blank portal during setup
       const clerkRole = (clerkUser.publicMetadata as { role?: string })?.role
       const role = clerkRole === 'admin' ? 'admin' : clerkRole === 'coach' ? 'coach' : 'admin'

@@ -314,7 +314,7 @@ export default async function DashboardPage() {
               : 'No sessions scheduled for today'}
           </p>
         </div>
-        {sessionUser?.role === 'admin' && <SyncCalendarButton />}
+        {(viewMode === 'admin' || sessionUser?.role === 'admin') && <SyncCalendarButton />}
       </div>
 
       {/* ── Coming Up Next ───────────────────────────────────────────────────── */}

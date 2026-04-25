@@ -24,6 +24,8 @@ export default async function ProtectedLayout({
   const cookieMode = cookieStore.get("lt_view_mode")?.value;
   const initialMode: ViewMode = cookieMode === "admin" ? "admin" : "coach";
 
+  console.log(`[layout] currentCoachAirtableId=${userRecord.airtableId ?? 'null'} role=${userRecord.role} mode=${initialMode}`);
+
   return (
     <ViewModeProvider
       initialMode={initialMode}
