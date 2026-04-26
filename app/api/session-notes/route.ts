@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
-import { createSessionNote, getSessionNotes } from '@/lib/airtable/sessionNotes'
+import { createSessionNote, getSessionNotes, logSessionNoteFields } from '@/lib/airtable/sessionNotes'
 
 export async function GET() {
   const { userId } = await auth()
@@ -11,6 +11,9 @@ export async function GET() {
   if (!userRecord.airtableId) {
     return NextResponse.json({ error: 'Coach record not found' }, { status: 400 })
   }
+
+  // DEV DIAGNOSTIC: log actual field names once — remove after confirming field names
+  await logSessionNoteFields()
 
   const notes = await getSessionNotes(userRecord.airtableId)
   return NextResponse.json(notes)

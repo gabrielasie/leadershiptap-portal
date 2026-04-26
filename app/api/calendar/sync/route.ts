@@ -262,21 +262,26 @@ async function upsertEvent(
     '(No Attendee)'
   const noteName = `${dateStr} // ${attendeeDisplay}`
 
-  // Match attendees against known Airtable people.
-  // Client Name: any attendee in the system (email match), comma-separated.
-  // Relationship Context ID: first attendee who also has an active context with this coach.
+  // Match attendees against known Airtable people for canonical names and context IDs.
+  // Falls back to the Graph API attendee display name when no Airtable record exists
+  // (covers external clients who don't have portal accounts).
   const coachEntry = syncIndex.emailToPerson.get(coachEmail.toLowerCase())
   const clientNames: string[] = []
   let matchedContextId = ''
-  if (coachEntry) {
-    for (const a of attendees) {
-      const clientEntry = syncIndex.emailToPerson.get(a.emailAddress.address.toLowerCase())
-      if (!clientEntry) continue
+  let airtableMatchCount = 0
+  for (const a of attendees) {
+    const clientEntry = syncIndex.emailToPerson.get(a.emailAddress.address.toLowerCase())
+    if (clientEntry) {
       clientNames.push(clientEntry.name)
-      if (!matchedContextId) {
+      airtableMatchCount++
+      if (!matchedContextId && coachEntry) {
         const contextId = syncIndex.contextByKey.get(`${coachEntry.id}|${clientEntry.id}`)
         if (contextId) matchedContextId = contextId
       }
+    } else {
+      // Not in Airtable — use the display name from the calendar event
+      const graphName = a.emailAddress.name?.trim()
+      if (graphName) clientNames.push(graphName)
     }
   }
   const matchedClientName = clientNames.join(', ')
@@ -426,16 +431,21 @@ export async function POST(request: Request) {
       })
       console.log(`[calendar/sync] ${email}: ${events.length} events after filtering`)
 
+      let coachSynced = 0
+      let coachErrors = 0
       for (const event of events) {
         try {
           await upsertEvent(apiKey, baseId, event, email, syncIndex)
+          coachSynced++
           synced++
         } catch (err) {
           const msg = err instanceof Error ? err.message : `Failed to upsert ${event.id}`
           console.error(`[calendar/sync] ${msg}`)
           errors.push(msg)
+          coachErrors++
         }
       }
+      console.log(`[calendar/sync] ${email}: ${coachSynced} upserted, ${coachErrors} errors`)
 
       syncedCoaches.push(email)
     }

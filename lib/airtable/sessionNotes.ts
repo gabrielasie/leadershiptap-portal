@@ -91,6 +91,25 @@ export interface CreateSessionNoteData {
   visibility: string
 }
 
+/**
+ * DEV DIAGNOSTIC: logs all field names from the first Session Notes record.
+ * Call once from an API route or server action to verify exact Airtable field names.
+ */
+export async function logSessionNoteFields(): Promise<void> {
+  const { apiKey, baseId } = getCredentials()
+  const res = await fetch(`${API_BASE}/${baseId}/${TABLE}?maxRecords=1`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: 'no-store',
+  })
+  const data = await res.json()
+  const record = data.records?.[0]
+  if (record) {
+    console.log('[Session Notes] Actual Airtable field names:', Object.keys(record.fields))
+  } else {
+    console.log('[Session Notes] Table is empty — no records to inspect field names from.')
+  }
+}
+
 export async function createSessionNote(data: CreateSessionNoteData): Promise<SessionNote> {
   const { apiKey, baseId } = getCredentials()
   const fields: Record<string, unknown> = {
@@ -123,6 +142,7 @@ export async function createSessionNote(data: CreateSessionNoteData): Promise<Se
   })
   if (!res.ok) {
     const detail = await res.json()
+    console.error('[createSessionNote] Airtable error — fields sent:', Object.keys(fields), 'response:', detail)
     throw new Error(`Session Notes POST failed: ${JSON.stringify(detail)}`)
   }
   return mapRecord(await res.json())
