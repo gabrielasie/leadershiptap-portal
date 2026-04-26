@@ -75,7 +75,8 @@ Open [http://localhost:3000](http://localhost:3000). You will be redirected to `
 | Table | Purpose |
 |---|---|
 | **Users** | All people — coaches, admins, clients. `Role` field distinguishes them. |
-| **Calendar Events** | Meetings imported from Microsoft Graph. Primary field: `Note Name`. |
+| **Portal Calendar Events** | Active calendar table. Synced from Microsoft Graph via `/api/calendar/sync`. Fields: Subject, Start, End, Provider Event ID, Participant Emails, Notes, Note Name. |
+| **Calendar Events** | Archived — historical snapshot only. Never queried by the portal. |
 | **Coach-Person Context** | Per coach ↔ client pair: Quick Notes, Family Details. One record per pair. |
 | **Coach Session** | Per coach ↔ meeting pair: Session Notes, Action Items. One record per meeting per coach. |
 | **Messages** | Follow-up email drafts. Status: `"Pending"` or `"Sent"` (never `"Draft"`). |

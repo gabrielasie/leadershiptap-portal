@@ -5,7 +5,7 @@ import { upsertCoachSession } from '@/lib/airtable/coachSessions'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 
 /**
- * Saves session notes to the Coach Session table (not Calendar Events.Notes).
+ * Saves session notes to the Coach Session table (not Portal Calendar Events.Notes).
  * Requires the focal person's Airtable record ID (= the user profile ID, which
  * is always available from the URL on the session detail page).
  */

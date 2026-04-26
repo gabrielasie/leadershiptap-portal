@@ -15,7 +15,7 @@ import {
 } from '@/lib/airtable/users'
 import { upsertCoachPersonContext } from '@/lib/airtable/coachPersonContext'
 import { upsertCoachSession } from '@/lib/airtable/coachSessions'
-import { updateMeetingFields } from '@/lib/airtable/meetings'
+import { updatePortalEventNotes } from '@/lib/airtable/meetings'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 
@@ -205,7 +205,7 @@ export async function updateSessionNotesAction(
     const userRecord = await getCurrentUserRecord()
     if (!userRecord.airtableId) {
       // Fall back to patching the Calendar Event if the coach record can't be resolved
-      await updateMeetingFields(meetingId, { Notes: notes })
+      await updatePortalEventNotes(meetingId, notes)
     } else {
       await upsertCoachSession(userRecord.airtableId, meetingId, userId, {
         sessionNotes: notes,

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createTask, updateTask, updateTaskStatus, deleteTask } from '@/lib/airtable/tasks'
 import { createNote, updateNote, deleteNote } from '@/lib/airtable/notes'
-import { getMeetingsByUserEmail } from '@/lib/airtable/meetings'
+import { getMeetingsByUserEmail, updatePortalEventNotes } from '@/lib/airtable/meetings'
 import { upsertCoachSession } from '@/lib/airtable/coachSessions'
 import { getUserById } from '@/lib/services/usersService'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
@@ -169,4 +169,18 @@ export async function dashboardDeleteNoteAction(
   }
   revalidatePath('/dashboard')
   return { success: true }
+}
+
+export async function savePortalEventNotesAction(
+  recordId: string,
+  notes: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await updatePortalEventNotes(recordId, notes)
+    revalidatePath('/dashboard')
+    return { success: true }
+  } catch (err) {
+    console.error('[savePortalEventNotesAction]', err)
+    return { success: false, error: String(err) }
+  }
 }

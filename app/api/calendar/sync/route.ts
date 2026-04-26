@@ -90,6 +90,11 @@ async function getGraphToken(): Promise<string> {
 
 // ── Microsoft Graph: fetch calendar events for one mailbox ───────────────────
 
+interface GraphAttendee {
+  emailAddress: { address: string; name: string }
+  type: string
+}
+
 interface GraphEventDateTime {
   dateTime?: string
   date?: string
@@ -101,6 +106,7 @@ interface GraphEvent {
   subject: string
   start: GraphEventDateTime
   end: GraphEventDateTime
+  attendees?: GraphAttendee[]
 }
 
 async function fetchEvents(token: string, email: string): Promise<GraphEvent[]> {
@@ -110,7 +116,7 @@ async function fetchEvents(token: string, email: string): Promise<GraphEvent[]> 
   const params = new URLSearchParams({
     startDateTime: now.toISOString(),
     endDateTime: end.toISOString(),
-    $select: 'id,subject,start,end',
+    $select: 'id,subject,start,end,attendees',
     $top: '500',
   })
 
@@ -149,17 +155,45 @@ async function upsertEvent(
   apiKey: string,
   baseId: string,
   event: GraphEvent,
+  coachEmail: string,
 ): Promise<void> {
   const start = event.start.dateTime ?? event.start.date
   const end = event.end.dateTime ?? event.end.date
   if (!start || !end) throw new Error(`Event ${event.id} has no start/end`)
 
-  // Exact field names confirmed from Airtable table schema
+  const coachLower = coachEmail.toLowerCase()
+
+  // Build participant list: all attendees excluding coach and other @leadershiptap.com addresses
+  const attendees = (event.attendees ?? []).filter(
+    (a) =>
+      a.emailAddress.address.toLowerCase() !== coachLower &&
+      !a.emailAddress.address.toLowerCase().includes('@leadershiptap.com'),
+  )
+
+  const participantEmails = attendees
+    .map((a) => a.emailAddress.address.trim())
+    .filter(Boolean)
+    .join(', ')
+
+  // Note Name: "YYYY-MM-DD // First Attendee Name-or-Email"
+  const dateStr = start.slice(0, 10) // YYYY-MM-DD from ISO
+  const firstAttendee = attendees[0]
+  const attendeeDisplay =
+    firstAttendee?.emailAddress.name?.trim() ||
+    firstAttendee?.emailAddress.address?.trim() ||
+    event.subject ||
+    '(No Attendee)'
+  const noteName = `${dateStr} // ${attendeeDisplay}`
+
+  // These fields are always written on both POST and PATCH.
+  // Notes is intentionally omitted — coaches fill it in manually.
   const fields = {
     'Subject': event.subject ?? '(No Subject)',
     'Start': start,
     'End': end,
     'Provider Event ID': event.id,
+    'Participant Emails': participantEmails,
+    'Note Name': noteName,
   }
 
   const table = encodeURIComponent('Portal Calendar Events')
@@ -262,7 +296,7 @@ export async function POST(request: Request) {
 
       for (const event of events) {
         try {
-          await upsertEvent(apiKey, baseId, event)
+          await upsertEvent(apiKey, baseId, event, email)
           synced++
         } catch (err) {
           const msg = err instanceof Error ? err.message : `Failed to upsert ${event.id}`

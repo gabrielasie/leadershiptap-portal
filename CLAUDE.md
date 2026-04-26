@@ -8,30 +8,21 @@
 | `lib/airtable/users.ts` | CRUD for Users table. `updateUserProfile()` is the main write path for profile edits. Never write `Quick Notes` / `Family Details` here — use Coach-Person Context. |
 | `lib/airtable/coachPersonContext.ts` | Per coach ↔ client pair notes (Quick Notes, Family Details, Relationship Flags). |
 | `lib/airtable/coachSessions.ts` | Per coach ↔ meeting session notes and action items. |
-| `lib/airtable/calendarEvents.ts` | Upserts Calendar Events from Microsoft Graph. Matches by `Provider Event ID`. |
-| `lib/graph/auth.ts` | `getGraphAccessToken()` — client credentials token for Microsoft Graph. |
-| `lib/graph/calendar.ts` | `fetchCalendarEvents()` — reads a user's calendarView from Graph. |
-| `lib/services/meetingsService.ts` | `deduplicateMeetings()` deduplicates by `providerEventId` first, falls back to `title|startTime`. |
-| `app/context/ViewModeContext.tsx` | `useViewMode()` — exposes `isAdminView`, `isCoachView`, `currentCoachAirtableId`. |
-| `app/actions/viewMode.ts` | `setViewModeCookie(mode)` server action — sets `lt_view_mode` cookie. |
-| `app/api/calendar/sync/route.ts` | POST — fetches Graph events for both coach emails, upserts to Airtable. Requires Clerk session. |
+| `lib/airtable/meetings.ts` | All Portal Calendar Events access: read, write notes, search by email. Single source of truth — the old Calendar Events table is archived and never queried. |
+| `app/api/calendar/sync/route.ts` | POST — syncs Microsoft Graph calendar events for all @leadershiptap.com coaches into Portal Calendar Events. Requires Clerk session or SYNC_SECRET header. |
 
 ## Airtable field map
 
-### Calendar Events
+### Portal Calendar Events (the active calendar table — Calendar Events is archived)
 | Airtable field | Notes |
 |---|---|
-| `Note Name` | Primary field (auto-named) |
-| `EventName` | Meeting title |
-| `StartTime` | ISO 8601 DateTime |
-| `EndTime` | ISO 8601 DateTime |
-| `SenderEmail` | Organiser / coach email |
-| `ParticipantEmails` | Comma-separated string |
-| `Provider Event ID` | Stable Microsoft Graph event ID — used for dedup |
-| `Session Status` | Single select: `Completed`, `Scheduled`, `Cancelled` |
-| `Action Items` | Long text |
-| `Notes` | Long text — legacy; prefer Coach Session for new writes |
-| `EventID` | Legacy external ID field — not used for dedup |
+| `Note Name` | Primary field — auto-set by sync as `YYYY-MM-DD // Attendee Name` |
+| `Subject` | Meeting title (from Microsoft Graph) |
+| `Start` | ISO 8601 DateTime |
+| `End` | ISO 8601 DateTime |
+| `Provider Event ID` | Stable Microsoft Graph event ID — used for upsert dedup |
+| `Participant Emails` | Comma-separated emails (coach excluded) — written by sync |
+| `Notes` | Long text — written manually by coaches via the dashboard note panel |
 
 ### Coach-Person Context
 | Airtable field | Notes |
@@ -47,7 +38,7 @@
 | Airtable field | Notes |
 |---|---|
 | `Coach` | Linked → Users (coach record IDs) |
-| `Calendar Event` | Linked → Calendar Events |
+| `Calendar Event` | Linked → Portal Calendar Events |
 | `Focal Person` | Linked → Users (client record IDs) |
 | `Session Notes` | Long text |
 | `Action Items` | Long text |
@@ -71,7 +62,7 @@
 | `Work Email` | `workEmail` | Used for meeting email matching |
 | `Role` | `role` | `"admin"`, `"coach"`, `"client"` |
 | `Coach` | `coachIds` | Linked record IDs |
-| `Associated Meetings` | `associatedMeetingIds` | Linked → Calendar Events — used for session count |
+| `Associated Meetings` | `associatedMeetingIds` | Linked → Portal Calendar Events — used for session count |
 | `Quick Notes` | — | **Do not write.** Write to Coach-Person Context instead. |
 | `Family Details` | — | **Do not write.** Write to Coach-Person Context instead. |
 
@@ -80,6 +71,7 @@ The portal Tasks live in the **`Tasks`** Airtable table (not "Linked Todoist Tas
 
 ## Key conventions
 
+- **All meetings data comes from Portal Calendar Events** — the old Calendar Events table is an archived read-only snapshot and is never queried by the portal.
 - **Never write to formula or created-time fields**: `Full Name`, `Calculation`, `Created`, `Company Name`, `Company ID`.
 - **Message status**: always `"Pending"` for drafts. Never `"Draft"`.
 - **Airtable mutations**: use direct `fetch()` to the REST API. No SDK (SDK doesn't support PATCH cleanly).
@@ -87,7 +79,6 @@ The portal Tasks live in the **`Tasks`** Airtable table (not "Linked Todoist Tas
 - **Server actions** live in `actions.ts` co-located with the page/component that uses them.
 - **Linked record filtering**: Airtable formula `filterByFormula` only returns the primary field value for linked records, not the record ID. Filter by linked record IDs in JavaScript after fetching, OR use the Airtable record ID directly in the URL path.
 - **Upsert pattern**: fetch existing record(s) → filter in JS → PATCH if found, POST if not. See `coachSessions.ts` or `coachPersonContext.ts` for the pattern.
-- **View mode**: read `lt_view_mode` cookie server-side for data filtering; use `useViewMode()` client-side for UI. After a mode change, call `router.refresh()` to re-run server components.
 
 ## Known gotchas
 
@@ -95,9 +86,8 @@ The portal Tasks live in the **`Tasks`** Airtable table (not "Linked Todoist Tas
 - **`Company Name` is a lookup** — read-only. Write the `Company` linked field (array of record IDs) to set the company.
 - **shadcn `<Select>` requires non-empty string values** — never use `value=""`. Use a sentinel like `"none"` and convert back to `undefined`/`null` before saving.
 - **Profile photos go through Cloudinary** — Airtable attachment fields can't be written via REST API with a raw file. The upload flow is: browser → `/api/upload-photo` → Cloudinary → get URL → Airtable PATCH `Avatar URL` field.
-- **`ParticipantEmails`** is stored as a comma-separated string in Airtable, but the app normalises it to `string[]` in `mapRecord`. When writing back, join with `', '`.
+- **`Participant Emails`** in Portal Calendar Events is stored as a comma-separated string; the app normalises it to `string[]` in `mapRecord`. When writing back, join with `', '`.
 - **Coach Session and Coach-Person Context records are matched in JavaScript** (not Airtable formulas) because Airtable formula filters on linked record fields return primary field values, not IDs. This means the upsert functions fetch all records for a coach and filter client-side — acceptable at current data volumes.
 - **`getRecentCoachSessionsForPerson`** takes a `personAirtableId` and returns sessions sorted by `lastUpdated` descending. It does NOT take a meeting ID — use it for the profile page "most recent session" card.
-- **Graph token is ephemeral** — do not cache or store it. `getGraphAccessToken()` fetches a fresh token on every call. Add caching only if rate limits become an issue.
-- **Calendar sync tags each event's `SenderEmail` with the coach email it came from** — this is how you know which coach's calendar an event belongs to.
-- **`lt_view_mode` cookie** is set as `httpOnly: false` so the client-side ViewModeContext can read it on first render (for SSR hydration consistency).
+- **Calendar sync** runs via POST `/api/calendar/sync`. It can be triggered from the Settings page (Clerk session auth) or by a cron job (SYNC_SECRET header auth). It does NOT overwrite the `Notes` field on existing records — only coaches write to Notes.
+- **Session note panel** on the dashboard allows coaches to attach notes to Portal Calendar Events records directly. These notes also appear on the client profile page under "Session Notes (from Calendar)".

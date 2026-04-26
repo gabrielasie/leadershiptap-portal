@@ -327,6 +327,14 @@ export default async function DashboardPage() {
   // Client list for quick-action dialogs (id + display name)
   const clientsForActions = users.map((u) => ({ id: u.id, name: getDisplayName(u) }))
 
+  // Email → client name map for the session note panel
+  const emailToClientName: Record<string, string> = {}
+  for (const user of users) {
+    const name = getDisplayName(user)
+    if (user.email) emailToClientName[user.email.toLowerCase()] = name
+    if (user.workEmail) emailToClientName[user.workEmail.toLowerCase()] = name
+  }
+
   // ── render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -424,7 +432,11 @@ export default async function DashboardPage() {
       )}
 
       {/* ── Quick Actions ─────────────────────────────────────────────────────── */}
-      <DashboardQuickActions clients={clientsForActions} />
+      <DashboardQuickActions
+        clients={clientsForActions}
+        events={upcomingItems}
+        emailToClientName={emailToClientName}
+      />
 
       {/* ── Open Tasks ───────────────────────────────────────────────────────── */}
       <div className="mb-4 md:mb-6 bg-white rounded-xl shadow-sm p-4 md:p-6">
@@ -504,7 +516,7 @@ export default async function DashboardPage() {
               </span>
             )}
           </div>
-          <UpcomingSessionsCard items={upcomingItems} />
+          <UpcomingSessionsCard items={upcomingItems} emailToClientName={emailToClientName} />
         </div>
 
         {/* RIGHT: Recent Clients with inline notes */}

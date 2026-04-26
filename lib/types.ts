@@ -43,7 +43,7 @@ export interface User {
   teamMemberIds?: string[];    // linked record IDs — team members
 
   // Session count via linked record field (avoids email matching)
-  associatedMeetingIds?: string[]   // "Associated Meetings" linked field → Calendar Events
+  associatedMeetingIds?: string[]   // "Associated Meetings" linked field → Portal Calendar Events
 
   // Raw linked record IDs — used by edit forms to pre-select current values
   enneagramIds?: string[]

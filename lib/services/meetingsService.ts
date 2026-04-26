@@ -1,4 +1,4 @@
-import { getAllMeetings, getMeetingsByUserEmail, getMeetingById, updateMeetingFields } from "@/lib/airtable/meetings";
+import { getAllMeetings, getMeetingsByUserEmail, getMeetingById, updatePortalEventNotes } from "@/lib/airtable/meetings";
 import { canAccessUser } from "@/lib/auth/isAuthorized";
 import type { SessionUser } from "@/lib/auth/getSessionUser";
 import type { Meeting, User } from "@/lib/types";
@@ -82,7 +82,7 @@ export async function getMeetingDetail(meetingId: string): Promise<Meeting | nul
 }
 
 export async function updateMeetingNotes(meetingId: string, notes: string): Promise<void> {
-  return updateMeetingFields(meetingId, { Notes: notes });
+  return updatePortalEventNotes(meetingId, notes);
 }
 
 // ── Email-based matching helpers ──────────────────────────────────────────────

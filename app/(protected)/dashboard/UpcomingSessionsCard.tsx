@@ -1,9 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
-import { Calendar, ChevronRight, X } from 'lucide-react'
-// ChevronRight still used in UnmatchedMeetingModal "Open Full Session" link
+import SessionNotePanel, { type PanelEvent } from './SessionNotePanel'
 
 export interface UpcomingItem {
   meetingId: string
@@ -19,107 +17,18 @@ export interface UpcomingItem {
   clientName: string | null
   // Shown when no client matched — already filtered/cleaned
   displayLabel: string | null
-  // For the unmatched detail modal
+  // For participant display in the note panel
   participantEmails: string[]
   notes?: string
 }
 
-function formatTimeRange(startIso: string, endIso?: string): string {
-  const fmt = (iso: string) =>
-    new Date(iso).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-  return endIso ? `${fmt(startIso)} – ${fmt(endIso)}` : fmt(startIso)
+interface Props {
+  items: UpcomingItem[]
+  emailToClientName: Record<string, string>
 }
 
-function formatFullDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
-  })
-}
-
-// ── Unmatched meeting modal ───────────────────────────────────────────────────
-
-function UnmatchedMeetingModal({
-  item,
-  onClose,
-}: {
-  item: UpcomingItem
-  onClose: () => void
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-base font-semibold text-slate-900">{item.title || 'Untitled Meeting'}</h3>
-            <p className="text-sm text-slate-500 mt-0.5">{formatFullDate(item.startTime)}</p>
-            <p className="text-xs text-slate-400 mt-0.5">{item.timeRange}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 flex-shrink-0 mt-0.5"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {item.participantEmails.length > 0 && (
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
-              Participants
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {item.participantEmails.map((e) => (
-                <span
-                  key={e}
-                  className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs"
-                >
-                  {e}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {item.notes && (
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
-              Notes
-            </p>
-            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed line-clamp-6">
-              {item.notes}
-            </p>
-          </div>
-        )}
-
-        <div className="pt-2 border-t border-slate-100">
-          {item.clientId ? (
-            <Link
-              href={`/users/${item.clientId}/sessions/${item.meetingId}`}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-[hsl(213,70%,30%)] hover:underline"
-              onClick={onClose}
-            >
-              Open Full Session
-              <ChevronRight className="h-4 w-4" />
-            </Link>
-          ) : (
-            <p className="text-xs text-slate-400">No client profile linked</p>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Main card ─────────────────────────────────────────────────────────────────
-
-export default function UpcomingSessionsCard({ items }: { items: UpcomingItem[] }) {
-  const [modalItem, setModalItem] = useState<UpcomingItem | null>(null)
+export default function UpcomingSessionsCard({ items, emailToClientName }: Props) {
+  const [openEventId, setOpenEventId] = useState<string | null>(null)
 
   if (items.length === 0) {
     return (
@@ -127,11 +36,30 @@ export default function UpcomingSessionsCard({ items }: { items: UpcomingItem[] 
     )
   }
 
+  const panelEvents: PanelEvent[] = items.map((item) => ({
+    meetingId: item.meetingId,
+    title: item.title,
+    startTime: item.startTime,
+    endTime: item.endTime,
+    clientId: item.clientId,
+    clientName: item.clientName,
+    participantEmails: item.participantEmails,
+    notes: item.notes,
+  }))
+
+  const rowClass =
+    'flex items-center gap-4 px-4 py-4 min-h-[64px] rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors w-full text-left'
+
   return (
     <>
       <div className="space-y-3">
-        {items.map((item) => {
-          const dateBlock = (
+        {items.map((item) => (
+          <button
+            key={item.meetingId}
+            onClick={() => setOpenEventId(item.meetingId)}
+            className={rowClass}
+          >
+            {/* Date block */}
             <div className="flex-shrink-0 w-11 text-center">
               <p className="text-[11px] font-bold uppercase tracking-wide text-[hsl(213,70%,30%)]">
                 {item.weekday}
@@ -141,9 +69,8 @@ export default function UpcomingSessionsCard({ items }: { items: UpcomingItem[] 
               </p>
               <p className="text-[11px] text-slate-400 mt-0.5">{item.month}</p>
             </div>
-          )
 
-          const body = (
+            {/* Body */}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-slate-900 truncate">
                 {item.title || 'Untitled Meeting'}
@@ -157,39 +84,22 @@ export default function UpcomingSessionsCard({ items }: { items: UpcomingItem[] 
                 <p className="text-xs text-slate-400 mt-1">{item.displayLabel}</p>
               ) : null}
             </div>
-          )
 
-          const rowClass =
-            'flex items-center gap-4 px-4 py-4 min-h-[64px] rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors group'
-
-          if (item.clientId) {
-            return (
-              <Link
-                key={item.meetingId}
-                href={`/users/${item.clientId}/sessions/${item.meetingId}`}
-                className={rowClass}
-              >
-                {dateBlock}
-                {body}
-              </Link>
-            )
-          }
-
-          return (
-            <button
-              key={item.meetingId}
-              onClick={() => setModalItem(item)}
-              className={`${rowClass} w-full text-left`}
-            >
-              {dateBlock}
-              {body}
-            </button>
-          )
-        })}
+            {/* Note indicator */}
+            {item.notes && (
+              <div className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-[hsl(213,70%,45%)]" title="Has notes" />
+            )}
+          </button>
+        ))}
       </div>
 
-      {modalItem && (
-        <UnmatchedMeetingModal item={modalItem} onClose={() => setModalItem(null)} />
+      {openEventId && (
+        <SessionNotePanel
+          events={panelEvents}
+          initialEventId={openEventId}
+          emailToClientName={emailToClientName}
+          onClose={() => setOpenEventId(null)}
+        />
       )}
     </>
   )
