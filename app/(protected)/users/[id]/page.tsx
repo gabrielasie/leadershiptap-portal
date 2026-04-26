@@ -263,9 +263,9 @@ export default async function UserDetailPage({ params }: Props) {
     teamLead,
     teamMemberResults,
     coachContext,
+    relationshipContext,
     recentCoachSessions,
     portalSessionEvents,
-    relationshipContext,
   ] = await Promise.all([
     getMeetingsForUser(contactEmail, sessionUser, id, currentUserRecord.email || undefined),
     getUserMessages(id),
