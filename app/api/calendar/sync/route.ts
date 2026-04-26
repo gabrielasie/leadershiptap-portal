@@ -1,4 +1,5 @@
 import { auth } from '@clerk/nextjs/server'
+import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 
 export const maxDuration = 30
 
@@ -7,11 +8,26 @@ const GRAPH_API = 'https://graph.microsoft.com/v1.0'
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
-async function isAuthorized(request: Request): Promise<boolean> {
+type AuthResult =
+  | { authorized: false }
+  | { authorized: true; scopeToEmail: string | null }
+
+/**
+ * Resolves who is allowed to trigger a sync and what scope they get:
+ * - x-sync-secret header (cron job) → sync all coaches (scopeToEmail = null)
+ * - Clerk session (manual trigger)  → sync only the logged-in coach's calendar
+ */
+async function resolveAuth(request: Request): Promise<AuthResult> {
   const secret = process.env.SYNC_SECRET
-  if (secret && request.headers.get('x-sync-secret') === secret) return true
+  if (secret && request.headers.get('x-sync-secret') === secret) {
+    return { authorized: true, scopeToEmail: null }
+  }
   const { userId } = await auth()
-  return userId !== null
+  if (!userId) return { authorized: false }
+
+  // Clerk session: scope to just this coach's Work Email (same value matched in Airtable)
+  const userRecord = await getCurrentUserRecord()
+  return { authorized: true, scopeToEmail: userRecord.email || null }
 }
 
 // ── Airtable: fetch @leadershiptap.com coach emails ──────────────────────────
@@ -246,23 +262,24 @@ async function upsertEvent(
     '(No Attendee)'
   const noteName = `${dateStr} // ${attendeeDisplay}`
 
-  // Look up the coach's Airtable record ID, then find the first attendee who is
-  // a known client with an active Relationship Context for this coach.
+  // Match attendees against known Airtable people.
+  // Client Name: any attendee in the system (email match), comma-separated.
+  // Relationship Context ID: first attendee who also has an active context with this coach.
   const coachEntry = syncIndex.emailToPerson.get(coachEmail.toLowerCase())
-  let matchedClientName = ''
+  const clientNames: string[] = []
   let matchedContextId = ''
   if (coachEntry) {
     for (const a of attendees) {
       const clientEntry = syncIndex.emailToPerson.get(a.emailAddress.address.toLowerCase())
       if (!clientEntry) continue
-      const contextId = syncIndex.contextByKey.get(`${coachEntry.id}|${clientEntry.id}`)
-      if (contextId) {
-        matchedClientName = clientEntry.name
-        matchedContextId = contextId
-        break
+      clientNames.push(clientEntry.name)
+      if (!matchedContextId) {
+        const contextId = syncIndex.contextByKey.get(`${coachEntry.id}|${clientEntry.id}`)
+        if (contextId) matchedContextId = contextId
       }
     }
   }
+  const matchedClientName = clientNames.join(', ')
 
   // These fields are always written on both POST and PATCH.
   // Notes is intentionally omitted — coaches fill it in manually.
@@ -318,19 +335,28 @@ export async function POST(request: Request) {
   try {
     console.log('[calendar/sync] Starting sync')
 
-    if (!(await isAuthorized(request))) {
+    const authResult = await resolveAuth(request)
+    if (!authResult.authorized) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // 1. Discover coach emails
-    console.log('[calendar/sync] Fetching coach emails from Airtable...')
+    const { scopeToEmail } = authResult
+    const isCron = scopeToEmail === null
+    console.log(isCron ? '[calendar/sync] Cron: syncing all coaches' : `[calendar/sync] Manual: scoped to ${scopeToEmail}`)
+
+    // 1. Discover coach emails (all for cron; just the current user for manual)
     let coachEmails: string[]
-    try {
-      coachEmails = await getCoachEmails()
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to fetch coach emails'
-      console.error('[calendar/sync]', msg)
-      return Response.json({ error: msg }, { status: 500 })
+    if (isCron) {
+      console.log('[calendar/sync] Fetching coach emails from Airtable...')
+      try {
+        coachEmails = await getCoachEmails()
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to fetch coach emails'
+        console.error('[calendar/sync]', msg)
+        return Response.json({ error: msg }, { status: 500 })
+      }
+    } else {
+      coachEmails = [scopeToEmail!]
     }
     console.log(`[calendar/sync] Found ${coachEmails.length} coaches:`, coachEmails)
 
@@ -373,13 +399,32 @@ export async function POST(request: Request) {
       let events: GraphEvent[]
       try {
         events = await fetchEvents(token, email)
-        console.log(`[calendar/sync] ${email}: ${events.length} events`)
+        console.log(`[calendar/sync] ${email}: ${events.length} events before filtering`)
       } catch (err) {
         const msg = err instanceof Error ? err.message : `Failed to fetch events for ${email}`
         console.error(`[calendar/sync] ${msg}`)
         errors.push(msg)
         continue
       }
+
+      // Filter out internal buffer/block events and meetings with no external clients.
+      const NOISE_PATTERN = /buffer|focus time|ooo|out of office|hold|block/i
+      const coachLower = email.toLowerCase()
+      events = events.filter((event) => {
+        const attendees = event.attendees ?? []
+        // Skip events with 0 or 1 attendees (no client on the invite)
+        if (attendees.length <= 1) return false
+        // Skip known buffer/block subjects
+        if (NOISE_PATTERN.test(event.subject ?? '')) return false
+        // Skip events where every attendee is @leadershiptap.com (internal-only)
+        const hasExternalClient = attendees.some(
+          (a) =>
+            !a.emailAddress.address.toLowerCase().endsWith('@leadershiptap.com') &&
+            a.emailAddress.address.toLowerCase() !== coachLower,
+        )
+        return hasExternalClient
+      })
+      console.log(`[calendar/sync] ${email}: ${events.length} events after filtering`)
 
       for (const event of events) {
         try {

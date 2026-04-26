@@ -8,6 +8,7 @@ import { buildEmailToUserMap, findClientForMeeting, groupMeetingsByUser } from '
 import { fetchAllMessages } from '@/lib/airtable/messages'
 import { getAllOpenTasks } from '@/lib/airtable/tasks'
 import { getAllRecentNotes } from '@/lib/airtable/notes'
+import { getSessionNotes } from '@/lib/airtable/sessionNotes'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import DashboardQuickActions from './DashboardQuickActions'
 import UpcomingSessionsCard, { type UpcomingItem } from './UpcomingSessionsCard'
@@ -120,7 +121,7 @@ export default async function DashboardPage() {
   // calendar — prevents Coach A from ever seeing Coach B's events.
   const ownerEmail = userRecord.email || undefined
 
-  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, allRecentNotes, portalEvents, coachContexts] = await Promise.all([
+  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, allRecentNotes, portalEvents, coachContexts, coachSessionNotes] = await Promise.all([
     // Admins see all users; coaches see only clients with an active Relationship Context.
     isAdmin || !userRecord.airtableId
       ? getUsers(sessionUser)
@@ -135,11 +136,20 @@ export default async function DashboardPage() {
     !isAdmin && userRecord.airtableId
       ? getRelationshipContexts(userRecord.airtableId)
       : Promise.resolve([]),
+    // Session notes for "has note" indicator on meeting cards
+    userRecord.airtableId
+      ? getSessionNotes(userRecord.airtableId)
+      : Promise.resolve([]),
   ])
 
   // Build email → user lookup (matches both email and workEmail, normalised)
   const emailToUser = buildEmailToUserMap(users)
   const now = new Date()
+
+  // Provider Event IDs that already have a session note — used for card badge
+  const notedProviderIds = new Set(
+    coachSessionNotes.map((n) => n.eventProviderId).filter(Boolean),
+  )
 
   // For coaches: only show calendar events whose Relationship Context ID is
   // in their active contexts. Events with no context ID (internal meetings) are
@@ -188,6 +198,7 @@ export default async function DashboardPage() {
 
     return {
       meetingId: meeting.id,
+      providerEventId: meeting.providerEventId ?? null,
       title: meeting.title,
       startTime: meeting.startTime,
       endTime: meeting.endTime,
@@ -212,7 +223,9 @@ export default async function DashboardPage() {
         return domains.slice(0, 2).join(', ') || null
       })(),
       participantEmails: externalEmails,
-      notes: meeting.notes,
+      hasNote: meeting.providerEventId
+        ? notedProviderIds.has(meeting.providerEventId)
+        : false,
     }
   })
 
@@ -519,12 +532,16 @@ export default async function DashboardPage() {
           <div className="flex items-center gap-2 mb-5">
             <Calendar className="h-5 w-5 text-slate-400" />
             <h2 className="text-lg font-semibold text-slate-900">Upcoming This Week</h2>
-            {upcomingItems.length > 0 && (
-              <span className="ml-auto text-xs text-slate-400 font-medium">
-                {upcomingItems.length}{' '}
-                {upcomingItems.length === 1 ? 'meeting' : 'meetings'}
-              </span>
-            )}
+            {upcomingItems.length > 0 && (() => {
+              const clientCount = upcomingItems.filter((i) => i.clientId).length
+              return (
+                <span className="ml-auto text-xs text-slate-400 font-medium">
+                  {clientCount > 0
+                    ? `${clientCount} client ${clientCount === 1 ? 'meeting' : 'meetings'}`
+                    : `${upcomingItems.length} ${upcomingItems.length === 1 ? 'meeting' : 'meetings'}`}
+                </span>
+              )
+            })()}
           </div>
           <UpcomingSessionsCard items={upcomingItems} />
         </div>

@@ -26,6 +26,7 @@ import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import { getPermissionLevel, canWrite } from '@/lib/auth/permissions'
 import { getCoachPersonContext } from '@/lib/airtable/coachPersonContext'
 import { getRecentCoachSessionsForPerson } from '@/lib/airtable/coachSessions'
+import { getRelationshipContext } from '@/lib/airtable/relationships'
 import PlaceholderSection from '@/components/ui/PlaceholderSection'
 import UserActionsBar from './UserActionsBar'
 import RecentSessionCard from './RecentSessionCard'
@@ -264,6 +265,7 @@ export default async function UserDetailPage({ params }: Props) {
     coachContext,
     recentCoachSessions,
     portalSessionEvents,
+    relationshipContext,
   ] = await Promise.all([
     getMeetingsForUser(contactEmail, sessionUser, id, currentUserRecord.email || undefined),
     getUserMessages(id),
@@ -276,6 +278,9 @@ export default async function UserDetailPage({ params }: Props) {
     Promise.all(teamMemberIdList.map((tid) => getUserById(tid))),
     currentUserRecord.airtableId
       ? getCoachPersonContext(currentUserRecord.airtableId, id).catch(() => null)
+      : Promise.resolve(null),
+    currentUserRecord.airtableId
+      ? getRelationshipContext(currentUserRecord.airtableId, id).catch(() => null)
       : Promise.resolve(null),
     currentUserRecord.airtableId
       ? getRecentCoachSessionsForPerson(currentUserRecord.airtableId, id, 10).catch(() => [])
@@ -369,6 +374,42 @@ export default async function UserDetailPage({ params }: Props) {
         <ArrowLeft className="h-4 w-4" />
         Back to Clients
       </Link>
+
+      {/* ── Relationship context badge ────────────────────────────────────── */}
+      {currentUserRecord.role !== 'admin' && (
+        relationshipContext ? (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-700">
+            <span className="font-semibold">
+              {relationshipContext.relationshipType || 'Relationship'}
+            </span>
+            {relationshipContext.permissionLevel && (
+              <>
+                <span className="text-emerald-300">·</span>
+                <span className="capitalize">
+                  {relationshipContext.permissionLevel.replace(/_/g, ' ')}
+                </span>
+              </>
+            )}
+            {relationshipContext.startDate && (
+              <>
+                <span className="text-emerald-300">·</span>
+                <span>
+                  Active since{' '}
+                  {new Date(relationshipContext.startDate + 'T12:00:00').toLocaleDateString(
+                    'en-US',
+                    { month: 'short', year: 'numeric' },
+                  )}
+                </span>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700">
+            <span>⚠️</span>
+            <span>No formal relationship context — you&apos;re seeing this client via legacy access</span>
+          </div>
+        )
+      )}
 
       {/* ── Actions bar ──────────────────────────────────────────────────── */}
       {userCanWrite && <UserActionsBar userId={id} />}

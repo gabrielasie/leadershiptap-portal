@@ -15,6 +15,41 @@ function getDisplayName(user: User): string {
   return user.preferredName ?? user.email
 }
 
+function formatSessionDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+// Fetch all Portal Calendar Events for one coach — only the fields needed
+// for last/next session computation. One call, filtered server-side.
+interface CoachSession {
+  clientName: string
+  startTime: string
+  endTime: string
+}
+
+async function getCoachCalendarSessions(ownerEmail: string): Promise<CoachSession[]> {
+  const apiKey = process.env.AIRTABLE_API_KEY
+  const baseId = process.env.AIRTABLE_BASE_ID
+  if (!apiKey || !baseId) return []
+  const safeEmail = ownerEmail.toLowerCase().replace(/"/g, '\\"')
+  const formula = encodeURIComponent(`AND(LOWER({Calendar Owner})="${safeEmail}",{Client Name}!="")`)
+  const res = await fetch(
+    `https://api.airtable.com/v0/${baseId}/${encodeURIComponent('Portal Calendar Events')}` +
+      `?filterByFormula=${formula}` +
+      `&fields[]=Client%20Name&fields[]=Start&fields[]=End` +
+      `&sort%5B0%5D%5Bfield%5D=Start&sort%5B0%5D%5Bdirection%5D=desc` +
+      `&maxRecords=2000`,
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+  )
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.records ?? []).map((r: { fields: Record<string, unknown> }) => ({
+    clientName: (r.fields['Client Name'] as string) ?? '',
+    startTime: (r.fields['Start'] as string) ?? '',
+    endTime: (r.fields['End'] as string) ?? '',
+  }))
+}
+
 export default async function UsersPage() {
   const [sessionUser, userRecord] = await Promise.all([
     getSessionUser(),
@@ -24,11 +59,12 @@ export default async function UsersPage() {
   const isAdmin = userRecord.role === 'admin'
   const filterByCoachId = isAdmin ? undefined : (userRecord.airtableId ?? undefined)
 
-  const [users, allRecentNotes, openTasks, allUsersForOptions] = await Promise.all([
+  const [users, allRecentNotes, openTasks, allUsersForOptions, coachSessions] = await Promise.all([
     getUsers(sessionUser, filterByCoachId),
     getAllRecentNotes(300),
     getAllOpenTasks(),
     getAllUsers(),
+    userRecord.email ? getCoachCalendarSessions(userRecord.email) : Promise.resolve([]),
   ])
 
   const profileOptions = await fetchProfileOptions(allUsersForOptions)
@@ -47,15 +83,45 @@ export default async function UsersPage() {
     openTaskCountByUser.set(task.userId, (openTaskCountByUser.get(task.userId) ?? 0) + 1)
   }
 
+  // ── Last & next session per client name ──────────────────────────────────
+  // coachSessions is sorted Start DESC: future events first, then past.
+  // For nextSession (nearest upcoming): overwrite on each future event → ends on nearest.
+  // For lastSession (most recent past): only set once on first past event encountered.
+  const now = new Date()
+  const lastSessionByName = new Map<string, string>() // name → formatted date
+  const nextSessionByName = new Map<string, string>()
+
+  for (const session of coachSessions) {
+    if (!session.startTime) continue
+    const start = new Date(session.startTime)
+    const end = session.endTime ? new Date(session.endTime) : start
+    // Split comma-separated client names (set during sync for multi-client events)
+    const names = session.clientName.split(',').map((n) => n.trim().toLowerCase()).filter(Boolean)
+
+    for (const name of names) {
+      if (end < now) {
+        // Past event — first one encountered (DESC order) is most recent
+        if (!lastSessionByName.has(name)) {
+          lastSessionByName.set(name, formatSessionDate(session.startTime))
+        }
+      } else if (start > now) {
+        // Future event — overwrite to keep nearest (we walk from far future → near future)
+        nextSessionByName.set(name, formatSessionDate(session.startTime))
+      }
+    }
+  }
+
   // ── Enrich users — session count from linked "Associated Meetings" field ──
-  // No email matching. Airtable already tracks which meetings belong to each user.
   const enrichedUsers: EnrichedUser[] = users.map((user) => {
     const meetingCount = user.associatedMeetingIds?.length ?? 0
+    const displayNameLower = getDisplayName(user).toLowerCase()
     return {
       user,
       noteCount: noteCountByUser.get(user.id) ?? 0,
       openTaskCount: openTaskCountByUser.get(user.id) ?? 0,
       meetingCount,
+      lastSession: lastSessionByName.get(displayNameLower) ?? null,
+      nextSession: nextSessionByName.get(displayNameLower) ?? null,
     }
   })
 

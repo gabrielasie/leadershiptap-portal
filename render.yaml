@@ -9,7 +9,7 @@ services:
     schedule: "0 * * * *"
     startCommand: >
       curl -s -f -X POST
-      "https://portal-leadershiptap.com/api/calendar/sync"
+      "http://leadershiptap-portal:10000/api/calendar/sync"
       -H "x-sync-secret: $SYNC_SECRET"
     envVars:
       - key: SYNC_SECRET

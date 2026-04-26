@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
-import { ChevronRight, Search, Users, X } from 'lucide-react'
+import { ChevronRight, Search, Users, X, LayoutGrid, Building2 } from 'lucide-react'
 import type { User } from '@/lib/types'
 import AddClientDialog from './AddClientDialog'
 
@@ -13,6 +13,8 @@ export interface EnrichedUser {
   noteCount: number
   openTaskCount: number
   meetingCount: number  // from user.associatedMeetingIds.length
+  lastSession: string | null   // "Mar 12" — most recent past session
+  nextSession: string | null   // "May 2"  — nearest upcoming session
 }
 
 interface Props {
@@ -21,6 +23,8 @@ interface Props {
   companies: Array<{ id: string; name: string }>
   currentCoachId?: string
 }
+
+type ViewMode = 'clients' | 'company'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -75,7 +79,7 @@ function RoleBadge({ role }: { role: string }) {
 }
 
 function ClientCard({ enriched }: { enriched: EnrichedUser }) {
-  const { user, meetingCount, noteCount, openTaskCount } = enriched
+  const { user, meetingCount, noteCount, openTaskCount, lastSession, nextSession } = enriched
   const name = getDisplayName(user)
   const subtitle = [user.title ?? user.jobTitle, user.companyName].filter(Boolean).join(' · ')
   const role = user.role && !isRecordId(user.role) ? user.role : null
@@ -115,21 +119,45 @@ function ClientCard({ enriched }: { enriched: EnrichedUser }) {
             <p className="text-sm text-slate-500 truncate mt-0.5">{subtitle}</p>
           )}
 
+          {/* Session dates */}
+          {(lastSession || nextSession) && (
+            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+              {lastSession && (
+                <span className="text-xs text-slate-400">
+                  Last: <span className="text-slate-600">{lastSession}</span>
+                </span>
+              )}
+              {nextSession && (
+                <span className="text-xs text-[hsl(213,70%,40%)] font-medium">
+                  Next: {nextSession}
+                </span>
+              )}
+              {lastSession && !nextSession && (
+                <span className="text-xs text-slate-300 italic">No upcoming</span>
+              )}
+            </div>
+          )}
+
           {/* Stats row */}
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            {noteCount > 0 && (
-              <>
-                <span className="text-slate-200 text-xs">·</span>
-                <span className="text-xs text-slate-400">Notes: {noteCount}</span>
-              </>
-            )}
-            {openTaskCount > 0 && (
-              <>
-                <span className="text-slate-200 text-xs">·</span>
-                <span className="text-xs text-slate-400">Tasks: {openTaskCount}</span>
-              </>
-            )}
-          </div>
+          {(noteCount > 0 || openTaskCount > 0 || meetingCount > 0) && (
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              {meetingCount > 0 && (
+                <span className="text-xs text-slate-400">{meetingCount} session{meetingCount !== 1 ? 's' : ''}</span>
+              )}
+              {noteCount > 0 && (
+                <>
+                  <span className="text-slate-200 text-xs">·</span>
+                  <span className="text-xs text-slate-400">{noteCount} note{noteCount !== 1 ? 's' : ''}</span>
+                </>
+              )}
+              {openTaskCount > 0 && (
+                <>
+                  <span className="text-slate-200 text-xs">·</span>
+                  <span className="text-xs text-amber-600 font-medium">{openTaskCount} task{openTaskCount !== 1 ? 's' : ''}</span>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </Link>
@@ -159,6 +187,37 @@ function FilterSelect({
   )
 }
 
+// ── View toggle ───────────────────────────────────────────────────────────────
+
+function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
+  return (
+    <div className="inline-flex rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <button
+        onClick={() => onChange('clients')}
+        className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
+          mode === 'clients'
+            ? 'bg-[hsl(213,70%,30%)] text-white'
+            : 'text-slate-600 hover:bg-slate-50'
+        }`}
+      >
+        <LayoutGrid className="h-3.5 w-3.5" />
+        By Client
+      </button>
+      <button
+        onClick={() => onChange('company')}
+        className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-l border-slate-200 ${
+          mode === 'company'
+            ? 'bg-[hsl(213,70%,30%)] text-white'
+            : 'text-slate-600 hover:bg-slate-50'
+        }`}
+      >
+        <Building2 className="h-3.5 w-3.5" />
+        By Company
+      </button>
+    </div>
+  )
+}
+
 // ── Main grid ─────────────────────────────────────────────────────────────────
 
 export default function ClientsGrid({ users, coaches, companies, currentCoachId }: Props) {
@@ -166,6 +225,18 @@ export default function ClientsGrid({ users, coaches, companies, currentCoachId 
   const [selectedRole, setSelectedRole] = useState('all')
   const [selectedCoach, setSelectedCoach] = useState('all')
   const [sortBy, setSortBy] = useState('recent')
+  const [viewMode, setViewMode] = useState<ViewMode>('clients')
+
+  // Restore view mode from localStorage after mount
+  useEffect(() => {
+    const saved = localStorage.getItem('clientsViewMode')
+    if (saved === 'clients' || saved === 'company') setViewMode(saved)
+  }, [])
+
+  function handleViewModeChange(mode: ViewMode) {
+    setViewMode(mode)
+    localStorage.setItem('clientsViewMode', mode)
+  }
 
   // Unique roles from data
   const roles = useMemo(() => {
@@ -206,12 +277,26 @@ export default function ClientsGrid({ users, coaches, companies, currentCoachId 
     } else if (sortBy === 'name-desc') {
       result.sort((a, b) => getDisplayName(b.user).localeCompare(getDisplayName(a.user)))
     } else {
-      // 'recent' and 'sessions' both sort by session count descending
       result.sort((a, b) => b.meetingCount - a.meetingCount)
     }
 
     return result
   }, [users, query, selectedRole, selectedCoach, sortBy])
+
+  // Group by company for company view
+  const groupedByCompany = useMemo(() => {
+    const map = new Map<string, EnrichedUser[]>()
+    for (const enriched of filtered) {
+      const company = enriched.user.companyName?.trim() || 'Individual'
+      if (!map.has(company)) map.set(company, [])
+      map.get(company)!.push(enriched)
+    }
+    return [...map.entries()].sort(([a], [b]) => {
+      if (a === 'Individual') return 1
+      if (b === 'Individual') return -1
+      return a.localeCompare(b)
+    })
+  }, [filtered])
 
   function clearFilters() {
     setQuery('')
@@ -265,6 +350,9 @@ export default function ClientsGrid({ users, coaches, companies, currentCoachId 
           <option value="sessions">Most Sessions</option>
         </FilterSelect>
 
+        {/* View toggle */}
+        <ViewToggle mode={viewMode} onChange={handleViewModeChange} />
+
         {/* Add Client button */}
         <div className="ml-auto">
           <AddClientDialog coaches={coaches} companies={companies} currentCoachId={currentCoachId} />
@@ -291,7 +379,30 @@ export default function ClientsGrid({ users, coaches, companies, currentCoachId 
             </button>
           )}
         </div>
+      ) : viewMode === 'company' ? (
+        /* ── Company grouped view ─────────────────────────────────────────── */
+        <div className="space-y-8">
+          {groupedByCompany.map(([company, members]) => (
+            <div key={company}>
+              <div className="flex items-center gap-2 mb-3">
+                <Building2 className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                <h3 className="text-sm font-semibold text-slate-700">{company}</h3>
+                {members.length > 1 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-xs font-medium">
+                    {members.length}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {members.map((enriched) => (
+                  <ClientCard key={enriched.user.id} enriched={enriched} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
+        /* ── Default flat grid ────────────────────────────────────────────── */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((enriched) => (
             <ClientCard key={enriched.user.id} enriched={enriched} />

@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 export interface UpcomingItem {
   meetingId: string
+  providerEventId: string | null
   title: string
   startTime: string
   endTime?: string
@@ -16,7 +17,7 @@ export interface UpcomingItem {
   displayLabel: string | null
   // For participant display in the note panel
   participantEmails: string[]
-  notes?: string
+  hasNote: boolean
 }
 
 interface Props {
@@ -30,16 +31,13 @@ export default function UpcomingSessionsCard({ items }: Props) {
     )
   }
 
-  const rowClass =
-    'flex items-center gap-4 px-4 py-4 min-h-[64px] rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors w-full text-left'
-
   return (
     <div className="space-y-3">
       {items.map((item) => (
         <Link
           key={item.meetingId}
           href={`/sessions/${item.meetingId}`}
-          className={rowClass}
+          className="flex items-center gap-4 px-4 py-4 min-h-[64px] rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors"
         >
           {/* Date block */}
           <div className="flex-shrink-0 w-11 text-center">
@@ -60,17 +58,19 @@ export default function UpcomingSessionsCard({ items }: Props) {
             <p className="text-xs text-slate-400 mt-0.5">{item.timeRange}</p>
             {item.clientName ? (
               <p className="text-xs font-medium text-[hsl(213,70%,30%)] mt-1">
-                {item.clientName}
+                with {item.clientName}
               </p>
             ) : item.displayLabel ? (
               <p className="text-xs text-slate-400 mt-1">{item.displayLabel}</p>
-            ) : null}
+            ) : (
+              <p className="text-xs text-slate-300 italic mt-1">Internal meeting</p>
+            )}
           </div>
 
-          {/* Note indicator */}
-          {item.notes && (
-            <div className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-[hsl(213,70%,45%)]" title="Has notes" />
-          )}
+          {/* Note CTA */}
+          <span className="flex-shrink-0 text-xs font-medium text-[hsl(213,70%,40%)] whitespace-nowrap">
+            {item.hasNote ? '📝 View Note' : 'Log Note →'}
+          </span>
         </Link>
       ))}
     </div>

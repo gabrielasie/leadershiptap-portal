@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useUser, useClerk } from '@clerk/nextjs'
-import { Users, LayoutDashboard, Settings, LogOut } from 'lucide-react'
+import { Users, LayoutDashboard, Settings, LogOut, Network } from 'lucide-react'
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', enabled: true },
@@ -50,6 +50,19 @@ export default function Sidebar() {
             </Link>
           )
         })}
+        {user?.publicMetadata?.role === 'admin' && (
+          <Link
+            href="/admin/relationships"
+            className={`flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors ${
+              pathname.startsWith('/admin')
+                ? 'text-[hsl(213,70%,30%)]'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <Network className="h-5 w-5" />
+            <span className="text-[10px] font-medium">Admin</span>
+          </Link>
+        )}
         <button
           onClick={() => signOut({ redirectUrl: '/sign-in' })}
           className="flex flex-1 flex-col items-center justify-center gap-0.5 text-slate-500 hover:text-slate-900 transition-colors"
@@ -109,6 +122,23 @@ export default function Sidebar() {
           )
         })}
       </nav>
+
+      {/* Admin */}
+      {user?.publicMetadata?.role === 'admin' && (
+        <div className="px-3 pb-1">
+          <Link
+            href="/admin/relationships"
+            className={`flex items-center gap-3 pl-[9px] pr-3 py-2 min-h-[48px] rounded-lg border-l-[3px] text-base transition-colors ${
+              pathname.startsWith('/admin')
+                ? 'border-[hsl(213,70%,30%)] bg-[hsl(213,60%,94%)] text-[hsl(213,70%,30%)] font-medium'
+                : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <Network className="h-5 w-5 flex-shrink-0" />
+            Relationships
+          </Link>
+        </div>
+      )}
 
       {/* Bottom: user + sign out */}
       <div className="px-3 py-4 border-t border-slate-200 space-y-1">

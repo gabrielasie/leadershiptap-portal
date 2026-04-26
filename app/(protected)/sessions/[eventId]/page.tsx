@@ -1,11 +1,11 @@
 import Link from 'next/link'
-import { ArrowLeft, Lock, Users, Eye } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { getMeetingById } from '@/lib/airtable/meetings'
-import { getNotesByMeetingId } from '@/lib/airtable/notes'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import { getRelationshipContexts } from '@/lib/airtable/relationships'
+import { getSessionNoteByEventId } from '@/lib/airtable/sessionNotes'
 import { getPermissionLevel, canWrite } from '@/lib/auth/permissions'
-import NoteForm from '../NoteForm'
+import SessionNoteForm from './SessionNoteForm'
 
 interface Props {
   params: Promise<{ eventId: string }>
@@ -23,39 +23,13 @@ function formatDateTime(iso: string): string {
   })
 }
 
-function VisibilityBadge({ value }: { value: string }) {
-  if (value === 'shared_with_client') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-        <Eye className="h-3 w-3" />
-        Shared with client
-      </span>
-    )
-  }
-  if (value === 'internal_only') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
-        <Users className="h-3 w-3" />
-        Internal
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-500">
-      <Lock className="h-3 w-3" />
-      Private
-    </span>
-  )
-}
-
 export default async function SessionPage({ params }: Props) {
   const { eventId } = await params
 
   const userRecord = await getCurrentUserRecord()
 
-  const [meeting, allNotes, contexts] = await Promise.all([
+  const [meeting, contexts] = await Promise.all([
     getMeetingById(eventId),
-    getNotesByMeetingId(eventId),
     userRecord.airtableId
       ? getRelationshipContexts(userRecord.airtableId)
       : Promise.resolve([]),
@@ -69,23 +43,28 @@ export default async function SessionPage({ params }: Props) {
     )
   }
 
-  // Resolve client Airtable ID from the matched Relationship Context
+  // Resolve the client from the matched Relationship Context
   const matchedContext = meeting.relationshipContextId
     ? contexts.find((c) => c.id === meeting.relationshipContextId)
     : null
   const clientAirtableId = matchedContext?.clientAirtableId ?? undefined
 
-  // Permission level relative to this session's client
+  // Permission level for this session's client
   const permissionLevel = clientAirtableId
     ? await getPermissionLevel(userRecord.airtableId, userRecord.role, clientAirtableId)
     : userRecord.role === 'admin' ? 'internal_admin' : 'coach_owner'
 
   const userCanWrite = canWrite(permissionLevel)
 
-  // Read-only users only see notes shared with the client
-  const notes = userCanWrite
-    ? allNotes
-    : allNotes.filter((n) => n.visibility === 'shared_with_client')
+  // Fetch the session note for this event (scoped to this coach)
+  const existingNote =
+    meeting.providerEventId && userRecord.airtableId
+      ? await getSessionNoteByEventId(meeting.providerEventId, userRecord.airtableId)
+      : null
+
+  const sessionDate = meeting.startTime
+    ? meeting.startTime.slice(0, 10)
+    : new Date().toISOString().slice(0, 10)
 
   return (
     <div className="px-4 py-5 md:p-8 max-w-2xl mx-auto space-y-6">
@@ -112,57 +91,48 @@ export default async function SessionPage({ params }: Props) {
         )}
         {meeting.clientName && (
           <p className="text-sm font-medium text-[hsl(213,70%,30%)] mt-1">
-            {meeting.clientName}
+            with {meeting.clientName}
           </p>
         )}
       </div>
 
-      {/* Existing notes */}
-      <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
-        <h2 className="text-base font-semibold text-slate-900">
-          Notes
-          {notes.length > 0 && (
-            <span className="ml-2 text-sm font-normal text-slate-400">({notes.length})</span>
-          )}
+      {/* Session note — create or edit */}
+      <div className="bg-white rounded-xl shadow-sm p-5">
+        <h2 className="text-base font-semibold text-slate-900 mb-1">
+          {existingNote ? 'Session Note' : 'Add a Session Note'}
         </h2>
+        {existingNote && (
+          <p className="text-xs text-slate-400 mb-5">
+            Last updated{' '}
+            {existingNote.sessionDate
+              ? new Date(existingNote.sessionDate + 'T12:00:00').toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
+              : ''}
+          </p>
+        )}
 
-        {notes.length === 0 ? (
-          <p className="text-sm text-slate-400">No notes yet — add one below.</p>
-        ) : (
-          <div className="space-y-4">
-            {notes.map((note) => (
-              <div key={note.id} className="border border-slate-100 rounded-lg p-4 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs text-slate-400">
-                    {note.createdDate
-                      ? new Date(note.createdDate + 'T12:00:00').toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })
-                      : ''}
-                  </p>
-                  <VisibilityBadge value={note.visibility} />
-                </div>
-                <p className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
-                  {note.body}
-                </p>
-              </div>
-            ))}
+        {userCanWrite ? (
+          <SessionNoteForm
+            eventProviderId={meeting.providerEventId ?? eventId}
+            clientAirtableId={clientAirtableId}
+            sessionDate={sessionDate}
+            existingNote={existingNote ?? undefined}
+          />
+        ) : existingNote ? (
+          // Read-only view for non-coaches
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-slate-900">{existingNote.title}</h3>
+            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+              {existingNote.content}
+            </p>
           </div>
+        ) : (
+          <p className="text-sm text-slate-400">No session note yet.</p>
         )}
       </div>
-
-      {/* Add note form — only for coaches and admins */}
-      {userCanWrite && (
-        <div className="bg-white rounded-xl shadow-sm p-5">
-          <h2 className="text-base font-semibold text-slate-900 mb-4">Add a Note</h2>
-          <NoteForm
-            eventId={eventId}
-            clientAirtableId={clientAirtableId}
-          />
-        </div>
-      )}
 
     </div>
   )

@@ -77,7 +77,7 @@ export default async function SettingsPage() {
         <div className="space-y-3 text-sm">
           <div className="flex justify-between items-center">
             <span className="text-slate-500">Version</span>
-            <span className="font-medium text-slate-900">Week 8 Build</span>
+            <span className="font-medium text-slate-900">v1.0 — April 2026</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-slate-500">Airtable</span>
