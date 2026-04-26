@@ -38,15 +38,18 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Mee
 }
 
 // All upcoming meetings in the next N days (used by dashboard "Upcoming This Week")
-export async function getAllUpcomingMeetings(daysAhead = 7): Promise<Meeting[]> {
+// ownerEmail: when provided, only returns events where {Calendar Owner} matches this email.
+export async function getAllUpcomingMeetings(daysAhead = 7, ownerEmail?: string): Promise<Meeting[]> {
   const { apiKey, baseId } = getCredentials();
   const now = new Date().toISOString();
   const cutoff = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
-  const formula = encodeURIComponent(
-    `AND(IS_AFTER({Start}, "${now}"), IS_BEFORE({Start}, "${cutoff}"))`,
-  );
+  const timeFilter = `AND(IS_AFTER({Start}, "${now}"), IS_BEFORE({Start}, "${cutoff}"))`;
+  const safeOwner = ownerEmail ? ownerEmail.toLowerCase().replace(/"/g, '\\"') : null;
+  const formula = safeOwner
+    ? `AND(${timeFilter}, LOWER({Calendar Owner}) = "${safeOwner}")`
+    : timeFilter;
   const res = await fetch(
-    `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${formula}&sort%5B0%5D%5Bfield%5D=Start&sort%5B0%5D%5Bdirection%5D=asc&maxRecords=50`,
+    `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${encodeURIComponent(formula)}&sort%5B0%5D%5Bfield%5D=Start&sort%5B0%5D%5Bdirection%5D=asc&maxRecords=50`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: "no-store" },
   );
   if (!res.ok) {
@@ -58,10 +61,15 @@ export async function getAllUpcomingMeetings(daysAhead = 7): Promise<Meeting[]> 
 }
 
 // All meetings sorted by Start desc (used by dashboard client activity section)
-export async function getAllMeetings(): Promise<Meeting[]> {
+// ownerEmail: when provided, only returns events where {Calendar Owner} matches this email.
+export async function getAllMeetings(ownerEmail?: string): Promise<Meeting[]> {
   const { apiKey, baseId } = getCredentials();
+  const safeOwner = ownerEmail ? ownerEmail.toLowerCase().replace(/"/g, '\\"') : null;
+  const filterParam = safeOwner
+    ? `filterByFormula=${encodeURIComponent(`LOWER({Calendar Owner}) = "${safeOwner}"`)}&`
+    : '';
   const res = await fetch(
-    `${API_BASE}/${baseId}/${TABLE}?sort%5B0%5D%5Bfield%5D=Start&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=500`,
+    `${API_BASE}/${baseId}/${TABLE}?${filterParam}sort%5B0%5D%5Bfield%5D=Start&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=500`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: "no-store" },
   );
   if (!res.ok) {
@@ -72,13 +80,19 @@ export async function getAllMeetings(): Promise<Meeting[]> {
   return (data.records ?? []).map(mapRecord);
 }
 
-// Meetings where Participant Emails contains the given address
-export async function getMeetingsByUserEmail(email: string): Promise<Meeting[]> {
+// Meetings where Participant Emails contains the given address.
+// ownerEmail: when provided, also filters by {Calendar Owner} so Coach A never
+// sees Coach B's events for the same client.
+export async function getMeetingsByUserEmail(email: string, ownerEmail?: string): Promise<Meeting[]> {
   const { apiKey, baseId } = getCredentials();
   const safeEmail = email.toLowerCase().trim().replace(/"/g, '\\"');
-  const formula = encodeURIComponent(`SEARCH("${safeEmail}", LOWER({Participant Emails}))`);
+  const participantFilter = `SEARCH("${safeEmail}", LOWER({Participant Emails}))`;
+  const safeOwner = ownerEmail ? ownerEmail.toLowerCase().replace(/"/g, '\\"') : null;
+  const formula = safeOwner
+    ? `AND(${participantFilter}, LOWER({Calendar Owner}) = "${safeOwner}")`
+    : participantFilter;
   const res = await fetch(
-    `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${formula}&sort%5B0%5D%5Bfield%5D=Start&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=100`,
+    `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${encodeURIComponent(formula)}&sort%5B0%5D%5Bfield%5D=Start&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=100`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: "no-store" },
   );
   if (!res.ok) {
@@ -126,6 +140,6 @@ export async function updatePortalEventNotes(
 
 // Meetings for a client's profile page — same as getMeetingsByUserEmail
 // (kept as a named alias for clarity at the call site)
-export async function getPortalEventsByClientEmail(email: string): Promise<Meeting[]> {
-  return getMeetingsByUserEmail(email);
+export async function getPortalEventsByClientEmail(email: string, ownerEmail?: string): Promise<Meeting[]> {
+  return getMeetingsByUserEmail(email, ownerEmail);
 }

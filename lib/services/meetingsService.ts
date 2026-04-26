@@ -48,18 +48,22 @@ export async function getMeetings(): Promise<SplitMeetings> {
  * - Admin: proceeds normally
  * - Coach: returns empty if userId is not in their assigned client list
  * - No sessionUser: proceeds (open-access dev mode)
+ *
+ * ownerEmail: when provided, only returns events where {Calendar Owner} matches
+ * this address, preventing Coach A from seeing Coach B's events.
  */
 export async function getMeetingsForUser(
   userEmail: string,
   sessionUser?: SessionUser | null,
   userId?: string,
+  ownerEmail?: string,
 ): Promise<SplitMeetings> {
   if (sessionUser && userId) {
     const allowed = await canAccessUser(userId, sessionUser);
     if (!allowed) return { upcoming: [], past: [] };
   }
 
-  const meetings = deduplicateMeetings(await getMeetingsByUserEmail(userEmail));
+  const meetings = deduplicateMeetings(await getMeetingsByUserEmail(userEmail, ownerEmail));
   const now = new Date();
 
   const upcoming: Meeting[] = [];

@@ -264,7 +264,7 @@ export default async function UserDetailPage({ params }: Props) {
     recentCoachSessions,
     portalSessionEvents,
   ] = await Promise.all([
-    getMeetingsForUser(contactEmail, sessionUser, id),
+    getMeetingsForUser(contactEmail, sessionUser, id, currentUserRecord.email || undefined),
     getUserMessages(id),
     getNotesByUser(id, sessionUser).catch(() => [] as Note[]),
     getTasksByUser(id).catch(() => [] as Task[]),
@@ -280,7 +280,7 @@ export default async function UserDetailPage({ params }: Props) {
       ? getRecentCoachSessionsForPerson(currentUserRecord.airtableId, id, 10).catch(() => [])
       : Promise.resolve([]),
     contactEmail
-      ? getPortalEventsByClientEmail(contactEmail).catch(() => [])
+      ? getPortalEventsByClientEmail(contactEmail, currentUserRecord.email || undefined).catch(() => [])
       : Promise.resolve([]),
   ])
 

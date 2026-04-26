@@ -80,16 +80,16 @@ interface PortalCalendarEvent {
   start: string
 }
 
-async function getUpcomingPortalEvents(): Promise<PortalCalendarEvent[]> {
+async function getUpcomingPortalEvents(ownerEmail: string): Promise<PortalCalendarEvent[]> {
   const apiKey = process.env.AIRTABLE_API_KEY
   const baseId = process.env.AIRTABLE_BASE_ID
   if (!apiKey || !baseId) return []
 
   const now = new Date()
   const cutoff = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-  // IS_AFTER/IS_BEFORE work on Date fields; Start must be after now and within 30 days
+  const safeOwner = ownerEmail.toLowerCase().replace(/"/g, '\\"')
   const formula = encodeURIComponent(
-    `AND(IS_AFTER({Start}, "${now.toISOString()}"), IS_BEFORE({Start}, "${cutoff.toISOString()}"))`,
+    `AND(IS_AFTER({Start}, "${now.toISOString()}"), IS_BEFORE({Start}, "${cutoff.toISOString()}"), LOWER({Calendar Owner}) = "${safeOwner}")`,
   )
   try {
     const res = await fetch(
@@ -116,15 +116,18 @@ export default async function DashboardPage() {
 
   const isAdmin = userRecord.role === 'admin'
   const filterByCoachId = isAdmin ? undefined : (userRecord.airtableId ?? undefined)
+  // ownerEmail scopes all Portal Calendar Events queries to the logged-in coach's
+  // calendar — prevents Coach A from ever seeing Coach B's events.
+  const ownerEmail = userRecord.email || undefined
 
   const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, allRecentNotes, portalEvents] = await Promise.all([
     getUsers(sessionUser, filterByCoachId),
-    getAllUpcomingMeetings(7),   // Airtable-filtered: StartTime in next 7 days, sorted asc
-    getAllMeetings(),            // All-time: for client activity section
+    getAllUpcomingMeetings(7, ownerEmail),
+    getAllMeetings(ownerEmail),
     fetchAllMessages(),
     getAllOpenTasks(),
-    getAllRecentNotes(100),      // Fetch enough to cover all clients
-    isAdmin ? getUpcomingPortalEvents() : Promise.resolve([]),
+    getAllRecentNotes(100),
+    isAdmin && ownerEmail ? getUpcomingPortalEvents(ownerEmail) : Promise.resolve([]),
   ])
 
   // Build email → user lookup (matches both email and workEmail, normalised)

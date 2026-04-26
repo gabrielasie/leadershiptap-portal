@@ -194,6 +194,7 @@ async function upsertEvent(
     'Provider Event ID': event.id,
     'Participant Emails': participantEmails,
     'Note Name': noteName,
+    'Calendar Owner': coachEmail,
   }
 
   const table = encodeURIComponent('Portal Calendar Events')
