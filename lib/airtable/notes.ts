@@ -168,6 +168,48 @@ export async function getNotesByUser(
   return matching.map(mapRecord)
 }
 
+// ── Session notes (new schema: Body, Visibility, Created Date, Coach, Meeting) ─
+
+export interface SessionNote {
+  id: string
+  body: string
+  visibility: string   // 'private_to_author' | 'shared_with_client' | 'internal_only'
+  createdDate: string  // YYYY-MM-DD
+  coachIds: string[]
+  clientIds: string[]
+}
+
+/**
+ * Fetch notes attached to a specific Portal Calendar Events record.
+ * Linked-record fields can't be filtered by ID in Airtable formulas, so we
+ * fetch all notes and filter in JavaScript — same pattern as coachSessions.ts.
+ */
+export async function getNotesByMeetingId(eventId: string): Promise<SessionNote[]> {
+  const { apiKey, baseId } = getCredentials()
+  const res = await fetch(
+    `${API_BASE}/${baseId}/Notes` +
+      `?sort%5B0%5D%5Bfield%5D=Created%20Date&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=500`,
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+  )
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.records ?? [])
+    .filter((r: { id: string; fields: Record<string, unknown> }) => {
+      const ids = r.fields['Meeting']
+      return Array.isArray(ids) && ids.includes(eventId)
+    })
+    .map(
+      (r: { id: string; fields: Record<string, unknown> }): SessionNote => ({
+        id: r.id,
+        body: (r.fields['Body'] as string) ?? '',
+        visibility: (r.fields['Visibility'] as string) ?? 'private_to_author',
+        createdDate: (r.fields['Created Date'] as string) ?? '',
+        coachIds: Array.isArray(r.fields['Coach']) ? (r.fields['Coach'] as string[]) : [],
+        clientIds: Array.isArray(r.fields['Client']) ? (r.fields['Client'] as string[]) : [],
+      }),
+    )
+}
+
 export async function updateNote(
   noteId: string,
   content: string,

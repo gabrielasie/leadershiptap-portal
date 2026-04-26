@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Calendar, Users, ChevronRight, Clock, CheckSquare, CalendarDays } from 'lucide-react'
-import { getUsers } from '@/lib/services/usersService'
+import { getUsers, getClientsByRelationship } from '@/lib/services/usersService'
+import { getRelationshipContexts } from '@/lib/airtable/relationships'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getAllMeetings, getAllUpcomingMeetings } from '@/lib/airtable/meetings'
 import { buildEmailToUserMap, findClientForMeeting, groupMeetingsByUser } from '@/lib/services/meetingsService'
@@ -115,29 +116,45 @@ export default async function DashboardPage() {
   const userRecord = await getCurrentUserRecord()
 
   const isAdmin = userRecord.role === 'admin'
-  const filterByCoachId = isAdmin ? undefined : (userRecord.airtableId ?? undefined)
   // ownerEmail scopes all Portal Calendar Events queries to the logged-in coach's
   // calendar — prevents Coach A from ever seeing Coach B's events.
   const ownerEmail = userRecord.email || undefined
 
-  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, allRecentNotes, portalEvents] = await Promise.all([
-    getUsers(sessionUser, filterByCoachId),
+  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, allRecentNotes, portalEvents, coachContexts] = await Promise.all([
+    // Admins see all users; coaches see only clients with an active Relationship Context.
+    isAdmin || !userRecord.airtableId
+      ? getUsers(sessionUser)
+      : getClientsByRelationship(userRecord.airtableId),
     getAllUpcomingMeetings(7, ownerEmail),
     getAllMeetings(ownerEmail),
     fetchAllMessages(),
     getAllOpenTasks(),
     getAllRecentNotes(100),
     isAdmin && ownerEmail ? getUpcomingPortalEvents(ownerEmail) : Promise.resolve([]),
+    // Fetch active relationship context IDs so we can filter calendar events.
+    !isAdmin && userRecord.airtableId
+      ? getRelationshipContexts(userRecord.airtableId)
+      : Promise.resolve([]),
   ])
 
   // Build email → user lookup (matches both email and workEmail, normalised)
   const emailToUser = buildEmailToUserMap(users)
   const now = new Date()
 
+  // For coaches: only show calendar events whose Relationship Context ID is
+  // in their active contexts. Events with no context ID (internal meetings) are
+  // always shown. Admins skip this filter.
+  const activeContextIds = new Set(coachContexts.map((c) => c.id))
+  const ownershipFilteredUpcoming = isAdmin
+    ? upcomingMeetings
+    : upcomingMeetings.filter(
+        (m) => !m.relationshipContextId || activeContextIds.has(m.relationshipContextId),
+      )
+
   // Dedup upcoming meetings — prefer Provider Event ID, fall back to title+startTime
   const seenById = new Set<string>()
   const seenKeys = new Set<string>()
-  const dedupedUpcoming = upcomingMeetings.filter((m) => {
+  const dedupedUpcoming = ownershipFilteredUpcoming.filter((m) => {
     if (m.providerEventId) {
       if (seenById.has(m.providerEventId)) return false
       seenById.add(m.providerEventId)
@@ -179,7 +196,9 @@ export default async function DashboardPage() {
       month: d.toLocaleString('en-US', { month: 'short' }),
       timeRange,
       clientId: client?.id ?? null,
-      clientName: client ? getDisplayName(client) : null,
+      // Prefer the name stored on the calendar event (set during sync from the
+      // Relationship Context lookup) over the runtime email-match fallback.
+      clientName: meeting.clientName ?? (client ? getDisplayName(client) : null),
       displayLabel: client ? null : (() => {
         const allEmails = [meeting.senderEmail, ...meeting.participantEmails]
           .filter(Boolean)
@@ -330,14 +349,6 @@ export default async function DashboardPage() {
   // Client list for quick-action dialogs (id + display name)
   const clientsForActions = users.map((u) => ({ id: u.id, name: getDisplayName(u) }))
 
-  // Email → client name map for the session note panel
-  const emailToClientName: Record<string, string> = {}
-  for (const user of users) {
-    const name = getDisplayName(user)
-    if (user.email) emailToClientName[user.email.toLowerCase()] = name
-    if (user.workEmail) emailToClientName[user.workEmail.toLowerCase()] = name
-  }
-
   // ── render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -435,11 +446,7 @@ export default async function DashboardPage() {
       )}
 
       {/* ── Quick Actions ─────────────────────────────────────────────────────── */}
-      <DashboardQuickActions
-        clients={clientsForActions}
-        events={upcomingItems}
-        emailToClientName={emailToClientName}
-      />
+      <DashboardQuickActions clients={clientsForActions} />
 
       {/* ── Open Tasks ───────────────────────────────────────────────────────── */}
       <div className="mb-4 md:mb-6 bg-white rounded-xl shadow-sm p-4 md:p-6">
@@ -519,7 +526,7 @@ export default async function DashboardPage() {
               </span>
             )}
           </div>
-          <UpcomingSessionsCard items={upcomingItems} emailToClientName={emailToClientName} />
+          <UpcomingSessionsCard items={upcomingItems} />
         </div>
 
         {/* RIGHT: Recent Clients with inline notes */}

@@ -1,4 +1,5 @@
 import { getAllUsers, getUserById as fetchUserById } from "@/lib/airtable/users";
+import { getRelationshipContexts } from "@/lib/airtable/relationships";
 import type { User } from "@/lib/types";
 import type { SessionUser } from "@/lib/auth/getSessionUser";
 
@@ -87,4 +88,27 @@ export async function getUsers(
 
 export async function getUserById(id: string): Promise<User | null> {
   return fetchUserById(id);
+}
+
+/**
+ * Returns the clients a coach has an active Relationship Context with.
+ *
+ * Falls back to filtering by the legacy Coach linked field on Users if no
+ * Relationship Context records exist yet (migration period safety net).
+ */
+export async function getClientsByRelationship(coachAirtableId: string): Promise<User[]> {
+  const [contexts, all] = await Promise.all([
+    getRelationshipContexts(coachAirtableId),
+    getAllUsers(),
+  ])
+  const deduped = deduplicateUsers(all)
+
+  if (contexts.length === 0) {
+    // No relationship contexts configured yet — fall back to Coach-field filtering.
+    const scoped = deduped.filter((u) => u.coachIds?.includes(coachAirtableId))
+    return scoped
+  }
+
+  const clientIds = new Set(contexts.map((c) => c.clientAirtableId))
+  return deduped.filter((u) => clientIds.has(u.id))
 }

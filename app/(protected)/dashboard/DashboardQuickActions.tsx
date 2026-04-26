@@ -1,9 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import Link from 'next/link'
 import { FileText, CheckSquare, Calendar } from 'lucide-react'
 import AddTaskDashboardDialog from './AddTaskDashboardDialog'
-import SessionNotePanel, { type PanelEvent } from './SessionNotePanel'
 
 interface Client {
   id: string
@@ -12,8 +11,6 @@ interface Client {
 
 interface Props {
   clients: Client[]
-  events: PanelEvent[]
-  emailToClientName: Record<string, string>
 }
 
 // ── Shared card shell ─────────────────────────────────────────────────────────
@@ -50,61 +47,49 @@ function ActionCard({
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function DashboardQuickActions({ clients, events, emailToClientName }: Props) {
-  const [notesPanelOpen, setNotesPanelOpen] = useState(false)
-
+export default function DashboardQuickActions({ clients }: Props) {
   return (
-    <>
-      <div className="bg-white rounded-xl shadow-sm p-4 md:p-6 mb-4 md:mb-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Quick Actions</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <ActionCard
-            icon={<FileText className="w-5 h-5 text-blue-600" />}
-            iconBg="bg-blue-100"
-            label="Log a Note"
-            description="Record coaching observations"
-          >
-            <button
-              onClick={() => setNotesPanelOpen(true)}
-              className="w-full min-h-[72px] rounded-xl border border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40 transition-colors"
-            />
-          </ActionCard>
-
-          <AddTaskDashboardDialog
-            clients={clients}
-            trigger={
-              <ActionCard
-                icon={<CheckSquare className="w-5 h-5 text-emerald-600" />}
-                iconBg="bg-emerald-100"
-                label="Add Task"
-                description="Assign a follow-up to a client"
-              >
-                <button className="w-full min-h-[72px] rounded-xl border border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/40 transition-colors" />
-              </ActionCard>
-            }
+    <div className="bg-white rounded-xl shadow-sm p-4 md:p-6 mb-4 md:mb-6">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Quick Actions</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <ActionCard
+          icon={<FileText className="w-5 h-5 text-blue-600" />}
+          iconBg="bg-blue-100"
+          label="Log a Note"
+          description="Record coaching observations"
+        >
+          <Link
+            href="/sessions/new"
+            className="block w-full min-h-[72px] rounded-xl border border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40 transition-colors"
           />
+        </ActionCard>
 
-          <ActionCard
-            icon={<Calendar className="w-5 h-5 text-violet-600" />}
-            iconBg="bg-violet-100"
-            label="My Schedule"
-            description="Jump to upcoming sessions"
-          >
-            <a
-              href="#upcoming"
-              className="block w-full min-h-[72px] rounded-xl border border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/40 transition-colors"
-            />
-          </ActionCard>
-        </div>
-      </div>
-
-      {notesPanelOpen && (
-        <SessionNotePanel
-          events={events}
-          emailToClientName={emailToClientName}
-          onClose={() => setNotesPanelOpen(false)}
+        <AddTaskDashboardDialog
+          clients={clients}
+          trigger={
+            <ActionCard
+              icon={<CheckSquare className="w-5 h-5 text-emerald-600" />}
+              iconBg="bg-emerald-100"
+              label="Add Task"
+              description="Assign a follow-up to a client"
+            >
+              <button className="w-full min-h-[72px] rounded-xl border border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/40 transition-colors" />
+            </ActionCard>
+          }
         />
-      )}
-    </>
+
+        <ActionCard
+          icon={<Calendar className="w-5 h-5 text-violet-600" />}
+          iconBg="bg-violet-100"
+          label="My Schedule"
+          description="Jump to upcoming sessions"
+        >
+          <a
+            href="#upcoming"
+            className="block w-full min-h-[72px] rounded-xl border border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/40 transition-colors"
+          />
+        </ActionCard>
+      </div>
+    </div>
   )
 }

@@ -42,6 +42,66 @@ async function getCoachEmails(): Promise<string[]> {
   return emails
 }
 
+// ── Sync index: people + relationship contexts ────────────────────────────────
+// Built once per sync run; passed into each upsertEvent call so we never
+// make per-event Airtable lookups.
+
+interface PersonEntry {
+  id: string
+  name: string
+}
+
+interface SyncIndex {
+  // Lowercase email → PersonEntry (both Work Email and Email fields indexed)
+  emailToPerson: Map<string, PersonEntry>
+  // "coachAirtableId|clientAirtableId" → relationship context record ID
+  contextByKey: Map<string, string>
+}
+
+async function buildSyncIndex(apiKey: string, baseId: string): Promise<SyncIndex> {
+  // Fetch all Users: need record IDs, names, and emails for matching
+  const usersRes = await fetch(
+    `${AIRTABLE_API}/${baseId}/Users?fields[]=Full%20Name&fields[]=First%20Name&fields[]=Last%20Name&fields[]=Work%20Email&fields[]=Email&maxRecords=5000`,
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+  )
+  const usersData = usersRes.ok ? await usersRes.json() : { records: [] }
+
+  const emailToPerson = new Map<string, PersonEntry>()
+  for (const r of usersData.records ?? []) {
+    const f = r.fields as Record<string, unknown>
+    const fullName = (f['Full Name'] as string | undefined)?.trim()
+    const firstName = (f['First Name'] as string | undefined)?.trim()
+    const lastName = (f['Last Name'] as string | undefined)?.trim()
+    const name = fullName || [firstName, lastName].filter(Boolean).join(' ') || '(Unknown)'
+    const entry: PersonEntry = { id: r.id as string, name }
+    const workEmail = (f['Work Email'] as string | undefined)?.toLowerCase().trim()
+    const email = (f['Email'] as string | undefined)?.toLowerCase().trim()
+    if (workEmail) emailToPerson.set(workEmail, entry)
+    if (email && email !== workEmail) emailToPerson.set(email, entry)
+  }
+
+  // Fetch all active Relationship Contexts: Coach + Client linked IDs
+  const ctxRes = await fetch(
+    `${AIRTABLE_API}/${baseId}/${encodeURIComponent('Relationship Contexts')}?filterByFormula=${encodeURIComponent('{Status}="active"')}&fields[]=Coach&fields[]=Client&maxRecords=5000`,
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+  )
+  const ctxData = ctxRes.ok ? await ctxRes.json() : { records: [] }
+
+  const contextByKey = new Map<string, string>()
+  for (const r of ctxData.records ?? []) {
+    const f = r.fields as Record<string, unknown>
+    const coachIds = Array.isArray(f['Coach']) ? (f['Coach'] as string[]) : []
+    const clientIds = Array.isArray(f['Client']) ? (f['Client'] as string[]) : []
+    for (const coachId of coachIds) {
+      for (const clientId of clientIds) {
+        contextByKey.set(`${coachId}|${clientId}`, r.id as string)
+      }
+    }
+  }
+
+  return { emailToPerson, contextByKey }
+}
+
 // ── Microsoft Graph: get access token ────────────────────────────────────────
 
 async function getGraphToken(): Promise<string> {
@@ -156,6 +216,7 @@ async function upsertEvent(
   baseId: string,
   event: GraphEvent,
   coachEmail: string,
+  syncIndex: SyncIndex,
 ): Promise<void> {
   const start = event.start.dateTime ?? event.start.date
   const end = event.end.dateTime ?? event.end.date
@@ -185,6 +246,24 @@ async function upsertEvent(
     '(No Attendee)'
   const noteName = `${dateStr} // ${attendeeDisplay}`
 
+  // Look up the coach's Airtable record ID, then find the first attendee who is
+  // a known client with an active Relationship Context for this coach.
+  const coachEntry = syncIndex.emailToPerson.get(coachEmail.toLowerCase())
+  let matchedClientName = ''
+  let matchedContextId = ''
+  if (coachEntry) {
+    for (const a of attendees) {
+      const clientEntry = syncIndex.emailToPerson.get(a.emailAddress.address.toLowerCase())
+      if (!clientEntry) continue
+      const contextId = syncIndex.contextByKey.get(`${coachEntry.id}|${clientEntry.id}`)
+      if (contextId) {
+        matchedClientName = clientEntry.name
+        matchedContextId = contextId
+        break
+      }
+    }
+  }
+
   // These fields are always written on both POST and PATCH.
   // Notes is intentionally omitted — coaches fill it in manually.
   const fields = {
@@ -195,6 +274,8 @@ async function upsertEvent(
     'Participant Emails': participantEmails,
     'Note Name': noteName,
     'Calendar Owner': coachEmail,
+    'Client Name': matchedClientName,
+    'Relationship Context ID': matchedContextId,
   }
 
   const table = encodeURIComponent('Portal Calendar Events')
@@ -276,7 +357,12 @@ export async function POST(request: Request) {
     const apiKey = process.env.AIRTABLE_API_KEY!
     const baseId = process.env.AIRTABLE_BASE_ID!
 
-    // 3. Sync each mailbox
+    // 3. Build the people + relationship-context index (one fetch, used per-event)
+    console.log('[calendar/sync] Building sync index...')
+    const syncIndex = await buildSyncIndex(apiKey, baseId)
+    console.log(`[calendar/sync] Index: ${syncIndex.emailToPerson.size} people, ${syncIndex.contextByKey.size} context keys`)
+
+    // 4. Sync each mailbox
     let synced = 0
     const errors: string[] = []
     const syncedCoaches: string[] = []
@@ -297,7 +383,7 @@ export async function POST(request: Request) {
 
       for (const event of events) {
         try {
-          await upsertEvent(apiKey, baseId, event, email)
+          await upsertEvent(apiKey, baseId, event, email, syncIndex)
           synced++
         } catch (err) {
           const msg = err instanceof Error ? err.message : `Failed to upsert ${event.id}`

@@ -23,6 +23,7 @@ import { getTasksByUser } from '@/lib/airtable/tasks'
 import { getPortalEventsByClientEmail } from '@/lib/airtable/meetings'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
+import { getPermissionLevel, canWrite } from '@/lib/auth/permissions'
 import { getCoachPersonContext } from '@/lib/airtable/coachPersonContext'
 import { getRecentCoachSessionsForPerson } from '@/lib/airtable/coachSessions'
 import PlaceholderSection from '@/components/ui/PlaceholderSection'
@@ -287,6 +288,13 @@ export default async function UserDetailPage({ params }: Props) {
   const directReports = reportResults.filter((u): u is User => u !== null)
   const teamMembers = teamMemberResults.filter((u): u is User => u !== null)
 
+  const permissionLevel = await getPermissionLevel(
+    currentUserRecord.airtableId,
+    currentUserRecord.role,
+    id,
+  )
+  const userCanWrite = canWrite(permissionLevel)
+
   const upcomingSorted = [...upcoming].sort(
     (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
   )
@@ -363,14 +371,16 @@ export default async function UserDetailPage({ params }: Props) {
       </Link>
 
       {/* ── Actions bar ──────────────────────────────────────────────────── */}
-      <UserActionsBar userId={id} />
+      {userCanWrite && <UserActionsBar userId={id} />}
 
       {/* ── Profile card ─────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-        <div className="flex items-start justify-between gap-2 mb-4 sm:mb-0">
-          <span />
-          <EditProfileDialog user={user} coachContext={coachContext} />
-        </div>
+        {userCanWrite && (
+          <div className="flex items-start justify-between gap-2 mb-4 sm:mb-0">
+            <span />
+            <EditProfileDialog user={user} coachContext={coachContext} />
+          </div>
+        )}
         <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-5">
           {(user.profilePhoto ?? user.avatarUrl) ? (
             <img
@@ -701,22 +711,24 @@ export default async function UserDetailPage({ params }: Props) {
         </div>
       )}
 
-      {/* ── Coach Notes ───────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <BookOpen className="h-5 w-5 text-slate-400" />
-          <h2 className="text-lg font-semibold text-slate-900">Coach Notes</h2>
-        </div>
-        {sessionNotes.length === 0 ? (
-          <p className="text-sm text-slate-400">No coach notes yet — use the Log a Note button above.</p>
-        ) : (
-          <div className="space-y-3">
-            {sessionNotes.map((note) => (
-              <NoteItem key={note.id} note={note} />
-            ))}
+      {/* ── Coach Notes — only visible to coaches and admins ─────────────── */}
+      {userCanWrite && (
+        <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <BookOpen className="h-5 w-5 text-slate-400" />
+            <h2 className="text-lg font-semibold text-slate-900">Coach Notes</h2>
           </div>
-        )}
-      </div>
+          {sessionNotes.length === 0 ? (
+            <p className="text-sm text-slate-400">No coach notes yet — use the Log a Note button above.</p>
+          ) : (
+            <div className="space-y-3">
+              {sessionNotes.map((note) => (
+                <NoteItem key={note.id} note={note} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Team ─────────────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
@@ -725,10 +737,12 @@ export default async function UserDetailPage({ params }: Props) {
             <Network className="h-5 w-5 text-slate-400" />
             <h2 className="text-lg font-semibold text-slate-900">Team</h2>
           </div>
-          <AddTeamMemberDialog
-            leaderId={id}
-            existingMemberIds={teamMemberIdList}
-          />
+          {userCanWrite && (
+            <AddTeamMemberDialog
+              leaderId={id}
+              existingMemberIds={teamMemberIdList}
+            />
+          )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
 
@@ -925,12 +939,14 @@ export default async function UserDetailPage({ params }: Props) {
             <MessageSquare className="h-5 w-5 text-slate-400" />
             <h2 className="text-lg font-semibold text-slate-900">Messages & Follow-ups</h2>
           </div>
-          <Link
-            href={`/users/${id}/messages/new`}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[hsl(213,70%,30%)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[hsl(213,70%,25%)] transition-colors"
-          >
-            + Create Follow-up Draft
-          </Link>
+          {userCanWrite && (
+            <Link
+              href={`/users/${id}/messages/new`}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[hsl(213,70%,30%)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[hsl(213,70%,25%)] transition-colors"
+            >
+              + Create Follow-up Draft
+            </Link>
+          )}
         </div>
 
         {messages.length === 0 ? (

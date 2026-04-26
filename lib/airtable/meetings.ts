@@ -34,6 +34,8 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Mee
     notes: (record.fields["Notes"] as string) || undefined,
     sessionStatus: null,
     actionItems: null,
+    clientName: (record.fields["Client Name"] as string) || undefined,
+    relationshipContextId: (record.fields["Relationship Context ID"] as string) || undefined,
   };
 }
 

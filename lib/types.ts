@@ -82,6 +82,9 @@ export interface Meeting {
   notes?: string;
   sessionStatus?: string | null;
   actionItems?: string | null;
+  // Set during calendar sync when a participant matches a known Relationship Context
+  clientName?: string;
+  relationshipContextId?: string;
 }
 
 export interface Note {
