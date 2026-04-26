@@ -19,6 +19,7 @@ function parseEmails(raw: unknown): string[] {
   return items.map((e) => e.trim()).filter(Boolean);
 }
 
+// Maps a record from the old (read-only) Calendar Events table
 function mapRecord(record: { id: string; fields: Record<string, unknown> }): Meeting {
   return {
     id: record.id,
@@ -34,15 +35,31 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Mee
   };
 }
 
+// Maps a record from Portal Calendar Events (Subject, Start, End, Provider Event ID only)
+function mapPortalRecord(record: { id: string; fields: Record<string, unknown> }): Meeting {
+  return {
+    id: record.id,
+    providerEventId: record.fields["Provider Event ID"] as string | undefined,
+    title: (record.fields["Subject"] as string) ?? "",
+    startTime: (record.fields["Start"] as string) ?? "",
+    endTime: record.fields["End"] as string | undefined,
+    senderEmail: undefined,
+    participantEmails: [],
+    notes: undefined,
+    sessionStatus: null,
+    actionItems: null,
+  };
+}
+
 export async function getAllUpcomingMeetings(daysAhead = 7): Promise<Meeting[]> {
   const { apiKey, baseId } = getCredentials();
   const now = new Date().toISOString();
   const cutoff = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
   const formula = encodeURIComponent(
-    `AND(IS_AFTER({StartTime}, "${now}"), IS_BEFORE({StartTime}, "${cutoff}"))`,
+    `AND(IS_AFTER({Start}, "${now}"), IS_BEFORE({Start}, "${cutoff}"))`,
   );
   const res = await fetch(
-    `${API_BASE}/${baseId}/Calendar%20Events?filterByFormula=${formula}&sort%5B0%5D%5Bfield%5D=StartTime&sort%5B0%5D%5Bdirection%5D=asc&maxRecords=50`,
+    `${API_BASE}/${baseId}/Portal%20Calendar%20Events?filterByFormula=${formula}&sort%5B0%5D%5Bfield%5D=Start&sort%5B0%5D%5Bdirection%5D=asc&maxRecords=50`,
     {
       headers: { Authorization: `Bearer ${apiKey}` },
       cache: 'no-store',
@@ -53,7 +70,7 @@ export async function getAllUpcomingMeetings(daysAhead = 7): Promise<Meeting[]> 
     throw new Error(`Airtable GET failed: ${text}`);
   }
   const data = await res.json();
-  return (data.records ?? []).map(mapRecord);
+  return (data.records ?? []).map(mapPortalRecord);
 }
 
 export async function getAllMeetings(): Promise<Meeting[]> {

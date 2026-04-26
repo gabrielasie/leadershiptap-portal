@@ -3,8 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useUser, useClerk } from '@clerk/nextjs'
-import { Users, LayoutDashboard, Settings, LogOut, Eye } from 'lucide-react'
-import { useViewMode } from '@/app/context/ViewModeContext'
+import { Users, LayoutDashboard, Settings, LogOut } from 'lucide-react'
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', enabled: true },
@@ -16,13 +15,6 @@ export default function Sidebar() {
   const pathname = usePathname()
   const { user } = useUser()
   const { signOut } = useClerk()
-  const { mode, setMode, currentCoachAirtableId, isAdmin } = useViewMode()
-
-  const showToggle = currentCoachAirtableId !== null || isAdmin
-
-  function handleToggle() {
-    setMode(mode === 'coach' ? 'admin' : 'coach')
-  }
 
   return (
     <>
@@ -58,18 +50,6 @@ export default function Sidebar() {
             </Link>
           )
         })}
-        {showToggle && (
-          <button
-            onClick={handleToggle}
-            className="flex flex-1 flex-col items-center justify-center gap-0.5 text-slate-500 hover:text-slate-900 transition-colors"
-            title={mode === 'coach' ? 'Switch to Admin View' : 'Switch to Coach View'}
-          >
-            <Eye className="h-5 w-5" />
-            <span className="text-[10px] font-medium">
-              {mode === 'coach' ? 'Coach' : 'Admin'}
-            </span>
-          </button>
-        )}
         <button
           onClick={() => signOut({ redirectUrl: '/sign-in' })}
           className="flex flex-1 flex-col items-center justify-center gap-0.5 text-slate-500 hover:text-slate-900 transition-colors"
@@ -130,25 +110,8 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Bottom: view toggle + user + sign out */}
+      {/* Bottom: user + sign out */}
       <div className="px-3 py-4 border-t border-slate-200 space-y-1">
-        {/* View mode toggle — only shown when the user has an Airtable record */}
-        {showToggle && (
-          <button
-            onClick={handleToggle}
-            className="flex w-full items-center gap-3 px-3 py-2 min-h-[44px] rounded-lg text-sm transition-colors border border-slate-200 bg-white hover:bg-slate-50"
-            title={mode === 'coach' ? 'Switch to Admin View (see all clients)' : 'Switch to Coach View (your clients only)'}
-          >
-            <Eye className="h-4 w-4 flex-shrink-0 text-slate-500" />
-            <span className="text-slate-700 font-medium">
-              {mode === 'coach' ? 'Coach View' : 'Admin View'}
-            </span>
-            <span className="ml-auto text-[10px] text-slate-400 font-medium uppercase tracking-wide">
-              {mode === 'coach' ? 'MY CLIENTS' : 'ALL'}
-            </span>
-          </button>
-        )}
-
         {user && (
           <div className="flex items-center gap-3 px-3 py-2 rounded-lg">
             {user.imageUrl ? (

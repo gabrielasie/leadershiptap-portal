@@ -1,4 +1,3 @@
-import { cookies } from 'next/headers'
 import { getUsers } from '@/lib/services/usersService'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
@@ -17,17 +16,13 @@ function getDisplayName(user: User): string {
 }
 
 export default async function UsersPage() {
-  const [sessionUser, userRecord, cookieStore] = await Promise.all([
+  const [sessionUser, userRecord] = await Promise.all([
     getSessionUser(),
     getCurrentUserRecord(),
-    cookies(),
   ])
 
-  const viewMode = cookieStore.get('lt_view_mode')?.value === 'admin' ? 'admin' : 'coach'
-  // In coach view, filter by the logged-in user's Airtable record ID.
-  // In admin view, pass no filter so all users are returned.
-  const filterByCoachId =
-    viewMode === 'coach' && userRecord.airtableId ? userRecord.airtableId : undefined
+  const isAdmin = userRecord.role === 'admin'
+  const filterByCoachId = isAdmin ? undefined : (userRecord.airtableId ?? undefined)
 
   const [users, allRecentNotes, openTasks, allUsersForOptions] = await Promise.all([
     getUsers(sessionUser, filterByCoachId),

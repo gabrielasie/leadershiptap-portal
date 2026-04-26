@@ -1,6 +1,5 @@
 import Link from 'next/link'
-import { cookies } from 'next/headers'
-import { Calendar, Users, ChevronRight, Clock, CheckSquare } from 'lucide-react'
+import { Calendar, Users, ChevronRight, Clock, CheckSquare, CalendarDays } from 'lucide-react'
 import { getUsers } from '@/lib/services/usersService'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getAllMeetings, getAllUpcomingMeetings } from '@/lib/airtable/meetings'
@@ -73,27 +72,59 @@ function formatSessionLabel(iso: string): string {
   return `${weekday} ${month} ${day} · ${time}`
 }
 
+// ── Portal Calendar Events ────────────────────────────────────────────────────
+
+interface PortalCalendarEvent {
+  id: string
+  subject: string
+  start: string
+}
+
+async function getUpcomingPortalEvents(): Promise<PortalCalendarEvent[]> {
+  const apiKey = process.env.AIRTABLE_API_KEY
+  const baseId = process.env.AIRTABLE_BASE_ID
+  if (!apiKey || !baseId) return []
+
+  const now = new Date()
+  const cutoff = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+  // IS_AFTER/IS_BEFORE work on Date fields; Start must be after now and within 30 days
+  const formula = encodeURIComponent(
+    `AND(IS_AFTER({Start}, "${now.toISOString()}"), IS_BEFORE({Start}, "${cutoff.toISOString()}"))`,
+  )
+  try {
+    const res = await fetch(
+      `https://api.airtable.com/v0/${baseId}/${encodeURIComponent('Portal Calendar Events')}?filterByFormula=${formula}&sort[0][field]=Start&sort[0][direction]=asc&maxRecords=10`,
+      { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+    )
+    if (!res.ok) return []
+    const data = await res.json()
+    return (data.records ?? []).map((r: { id: string; fields: Record<string, unknown> }) => ({
+      id: r.id,
+      subject: (r.fields['Subject'] as string) ?? '(No Subject)',
+      start: (r.fields['Start'] as string) ?? '',
+    })).filter((e: PortalCalendarEvent) => e.start)
+  } catch {
+    return []
+  }
+}
+
 // ── page ──────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
   const sessionUser = await getSessionUser()
+  const userRecord = await getCurrentUserRecord()
 
-  const [cookieStore, userRecord] = await Promise.all([
-    cookies(),
-    getCurrentUserRecord(),
-  ])
+  const isAdmin = userRecord.role === 'admin'
+  const filterByCoachId = isAdmin ? undefined : (userRecord.airtableId ?? undefined)
 
-  const viewMode = cookieStore.get('lt_view_mode')?.value === 'admin' ? 'admin' : 'coach'
-  const filterByCoachId =
-    viewMode === 'coach' && userRecord.airtableId ? userRecord.airtableId : undefined
-
-  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, allRecentNotes] = await Promise.all([
+  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, allRecentNotes, portalEvents] = await Promise.all([
     getUsers(sessionUser, filterByCoachId),
     getAllUpcomingMeetings(7),   // Airtable-filtered: StartTime in next 7 days, sorted asc
     getAllMeetings(),            // All-time: for client activity section
     fetchAllMessages(),
     getAllOpenTasks(),
     getAllRecentNotes(100),      // Fetch enough to cover all clients
+    isAdmin ? getUpcomingPortalEvents() : Promise.resolve([]),
   ])
 
   // Build email → user lookup (matches both email and workEmail, normalised)
@@ -420,6 +451,44 @@ export default async function DashboardPage() {
         )}
       </div>
 
+      {/* ── Upcoming Sessions (from Calendar) ────────────────────────────────── */}
+      {isAdmin && portalEvents.length > 0 && (
+        <div className="mb-4 md:mb-6 bg-white rounded-xl shadow-sm p-4 md:p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <CalendarDays className="h-5 w-5 text-slate-400" />
+            <h2 className="text-lg font-semibold text-slate-900">Upcoming Sessions (from Calendar)</h2>
+            <span className="ml-auto text-xs text-slate-400 font-medium">
+              {portalEvents.length} {portalEvents.length === 1 ? 'event' : 'events'}
+            </span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {portalEvents.map((event) => (
+              <div key={event.id} className="py-3 flex items-center gap-3">
+                <div className="flex-shrink-0 text-center w-10">
+                  <p className="text-xs font-medium text-slate-400 uppercase">
+                    {new Date(event.start).toLocaleString('en-US', { month: 'short' })}
+                  </p>
+                  <p className="text-lg font-bold text-slate-900 leading-none">
+                    {new Date(event.start).getDate()}
+                  </p>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900 truncate">{event.subject}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {new Date(event.start).toLocaleString('en-US', {
+                      weekday: 'short',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: true,
+                    })}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Main grid ─────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
 
@@ -483,7 +552,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── Admin: All Recent Activity ─────────────────────────────────────── */}
-      {sessionUser?.role === 'admin' && allRecentNotes.length > 0 && (
+      {isAdmin && allRecentNotes.length > 0 && (
         <div className="mt-4 md:mt-6 bg-white rounded-xl shadow-sm p-4 md:p-6">
           <h2 className="text-sm font-semibold text-slate-900 mb-3">All Recent Activity</h2>
           <div className="space-y-2">
