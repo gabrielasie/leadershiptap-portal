@@ -1,16 +1,12 @@
 services:
-  # Hourly cron job: POST to the calendar sync endpoint using the shared secret.
-  # Deploy this as a standalone Render cron service (separate from the Vercel web app).
   - type: cron
-    name: leadershiptap-calendar-sync
-    runtime: image
-    image:
-      url: docker.io/curlimages/curl:latest
+    name: calendar-sync-cron
+    runtime: node
     schedule: "0 * * * *"
-    startCommand: >
-      curl -s -f -X POST
-      "http://leadershiptap-portal:10000/api/calendar/sync"
-      -H "x-sync-secret: $SYNC_SECRET"
+    buildCommand: ""
+    startCommand: node scripts/sync-calendar.mjs
     envVars:
       - key: SYNC_SECRET
-        sync: false   # Set this manually in the Render dashboard
+        sync: false
+      - key: SYNC_HOST
+        value: portal-leadershiptap.com
