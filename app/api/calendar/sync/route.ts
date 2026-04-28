@@ -358,6 +358,36 @@ async function upsertEvent(
   }
 }
 
+// ── Event pre-filter ──────────────────────────────────────────────────────────
+
+const NOISE_PATTERN = /buffer|focus day|recovery day|ooo|out of office|hold|block|haircut|lunch w\//i
+
+function shouldSyncEvent(event: GraphEvent, coachEmail: string): boolean {
+  const attendees = event.attendees ?? []
+
+  // No attendees at all — personal appointment, skip
+  if (attendees.length === 0) return false
+
+  const coachLower = coachEmail.toLowerCase()
+  const otherAttendees = attendees
+    .map((a) => a.emailAddress.address.toLowerCase())
+    .filter((email) => email !== coachLower)
+
+  // No one else invited — solo block, skip
+  if (otherAttendees.length === 0) return false
+
+  // All other attendees are @leadershiptap.com — internal meeting, skip
+  const hasExternalAttendee = otherAttendees.some(
+    (email) => !email.endsWith('@leadershiptap.com'),
+  )
+  if (!hasExternalAttendee) return false
+
+  // Subject-based noise filter
+  if (NOISE_PATTERN.test(event.subject ?? '')) return false
+
+  return true
+}
+
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
@@ -436,23 +466,7 @@ export async function POST(request: Request) {
         continue
       }
 
-      // Filter out internal buffer/block events and meetings with no external clients.
-      const NOISE_PATTERN = /buffer|focus time|ooo|out of office|hold|block/i
-      const coachLower = email.toLowerCase()
-      events = events.filter((event) => {
-        const attendees = event.attendees ?? []
-        // Skip events with 0 or 1 attendees (no client on the invite)
-        if (attendees.length <= 1) return false
-        // Skip known buffer/block subjects
-        if (NOISE_PATTERN.test(event.subject ?? '')) return false
-        // Skip events where every attendee is @leadershiptap.com (internal-only)
-        const hasExternalClient = attendees.some(
-          (a) =>
-            !a.emailAddress.address.toLowerCase().endsWith('@leadershiptap.com') &&
-            a.emailAddress.address.toLowerCase() !== coachLower,
-        )
-        return hasExternalClient
-      })
+      events = events.filter((e) => shouldSyncEvent(e, email))
       console.log(`[calendar/sync] ${email}: ${events.length} events after noise filtering`)
 
       // Filter to only events that include at least one known portal client.
