@@ -4,13 +4,14 @@ import Link from 'next/link'
 import { Calendar } from 'lucide-react'
 import type { Meeting } from '@/lib/types'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { formatEastern } from '@/lib/utils/dateFormat'
 
-function getMonthDay(iso: string): { month: string; day: string; time: string } {
-  const d = new Date(iso)
-  const month = d.toLocaleString('en-US', { month: 'short' }).toUpperCase()
-  const day = String(d.getDate())
-  const time = d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-  return { month, day, time }
+function getMonthDay(iso: string, timezone: string = 'America/New_York'): { month: string; day: string; time: string } {
+  return {
+    month: formatEastern(iso, { month: 'short' }, timezone).toUpperCase(),
+    day: formatEastern(iso, { day: 'numeric' }, timezone),
+    time: formatEastern(iso, { hour: 'numeric', minute: '2-digit', hour12: true }, timezone) + ' ET',
+  }
 }
 
 function MeetingRow({
@@ -22,7 +23,7 @@ function MeetingRow({
   userId: string
   upcoming: boolean
 }) {
-  const { month, day, time } = getMonthDay(meeting.startTime)
+  const { month, day, time } = getMonthDay(meeting.startTime, meeting.timezone)
 
   return (
     <Link

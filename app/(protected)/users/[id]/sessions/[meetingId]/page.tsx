@@ -5,15 +5,15 @@ import { getUserById } from '@/lib/services/usersService'
 import { getMeetingById } from '@/lib/airtable/meetings'
 import { getCoachSession } from '@/lib/airtable/coachSessions'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
+import { formatEastern } from '@/lib/utils/dateFormat'
 import SessionNotesEditor from './SessionNotesEditor'
 
 interface Props {
   params: Promise<{ id: string; meetingId: string }>
 }
 
-function formatDateTime(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleString('en-US', {
+function formatDateTime(iso: string, timezone: string = 'America/New_York'): string {
+  return formatEastern(iso, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
@@ -21,15 +21,15 @@ function formatDateTime(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
-  })
+  }, timezone)
 }
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
+function formatTime(iso: string, timezone: string = 'America/New_York'): string {
+  return formatEastern(iso, {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
-  })
+  }, timezone)
 }
 
 const SESSION_STATUS_STYLES: Record<string, string> = {
@@ -60,9 +60,10 @@ export default async function SessionDetailPage({ params }: Props) {
 
   const userName = user?.fullName ?? user?.preferredName ?? user?.firstName ?? 'Client'
 
+  const tz = meeting.timezone || 'America/New_York'
   const dateLabel = meeting.endTime
-    ? `${formatDateTime(meeting.startTime)} – ${formatTime(meeting.endTime)}`
-    : formatDateTime(meeting.startTime)
+    ? `${formatDateTime(meeting.startTime, tz)} – ${formatTime(meeting.endTime, tz)} ET`
+    : `${formatDateTime(meeting.startTime, tz)} ET`
 
   const statusStyle = meeting.sessionStatus
     ? (SESSION_STATUS_STYLES[meeting.sessionStatus] ?? 'bg-slate-100 text-slate-600 border-slate-200')

@@ -6,21 +6,23 @@ import { getMeetingDetail } from '@/lib/services/meetingsService'
 import { getMeetingMessages } from '@/lib/services/messagesService'
 import NotesEditor from '@/components/NotesEditor'
 import FollowUpSection from '@/components/FollowUpSection'
+import { formatEastern } from '@/lib/utils/dateFormat'
 import { saveNotes, createDraft, updateDraft, markSent } from './actions'
 
 interface Props {
   params: Promise<{ id: string; meetingId: string }>
 }
 
-// Formats as "Mon 14 Apr 2025, 22:00"
-function formatDateTime(iso: string): string {
-  const d = new Date(iso)
-  const weekday = d.toLocaleString('en-GB', { weekday: 'short' })
-  const day = d.getDate()
-  const month = d.toLocaleString('en-GB', { month: 'short' })
-  const year = d.getFullYear()
-  const time = d.toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
-  return `${weekday} ${day} ${month} ${year}, ${time}`
+function formatDateTime(iso: string, timezone: string = 'America/New_York'): string {
+  return formatEastern(iso, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }, timezone)
 }
 
 export default async function MeetingDetailPage({ params }: Props) {
@@ -36,9 +38,10 @@ export default async function MeetingDetailPage({ params }: Props) {
   const userName = user?.fullName ?? user?.preferredName ?? user?.firstName ?? 'User'
   const existingMessage = messages[0] ?? null
 
+  const tz = meeting.timezone || 'America/New_York'
   const formattedDate = meeting.endTime
-    ? `${formatDateTime(meeting.startTime)} – ${new Date(meeting.endTime).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
-    : formatDateTime(meeting.startTime)
+    ? `${formatDateTime(meeting.startTime, tz)} – ${formatEastern(meeting.endTime, { hour: 'numeric', minute: '2-digit', hour12: true }, tz)} ET`
+    : `${formatDateTime(meeting.startTime, tz)} ET`
 
   return (
     <div className="p-8 max-w-3xl mx-auto">

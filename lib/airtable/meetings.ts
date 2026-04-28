@@ -21,7 +21,7 @@ function parseEmails(raw: unknown): string[] {
 }
 
 // Maps a record from Portal Calendar Events
-// Fields: Subject, Start, End, Provider Event ID, Participant Emails, Notes, Note Name
+// Fields: Subject, Start, End, Provider Event ID, Participant Emails, Notes, Note Name, Timezone
 function mapRecord(record: { id: string; fields: Record<string, unknown> }): Meeting {
   return {
     id: record.id,
@@ -29,6 +29,7 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Mee
     title: (record.fields["Subject"] as string) ?? "",
     startTime: (record.fields["Start"] as string) ?? "",
     endTime: record.fields["End"] as string | undefined,
+    timezone: (record.fields["Timezone"] as string) || undefined,
     senderEmail: undefined,
     participantEmails: parseEmails(record.fields["Participant Emails"]),
     notes: (record.fields["Notes"] as string) || undefined,

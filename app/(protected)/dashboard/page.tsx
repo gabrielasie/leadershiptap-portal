@@ -66,12 +66,11 @@ function avatarColor(id: string): string {
 }
 
 function formatSessionLabel(iso: string): string {
-  const d = new Date(iso)
-  const weekday = d.toLocaleString('en-US', { weekday: 'short' })
-  const month = d.toLocaleString('en-US', { month: 'short' })
-  const day = d.getDate()
-  const time = d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-  return `${weekday} ${month} ${day} · ${time}`
+  const weekday = new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short' })
+  const month = new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short' })
+  const day = new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', day: 'numeric' })
+  const time = new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', hour12: true })
+  return `${weekday} ${month} ${day} · ${time} ET`
 }
 
 // ── Portal Calendar Events ────────────────────────────────────────────────────
@@ -80,6 +79,7 @@ interface PortalCalendarEvent {
   id: string
   subject: string
   start: string
+  timezone: string
 }
 
 async function getUpcomingPortalEvents(ownerEmail: string): Promise<PortalCalendarEvent[]> {
@@ -104,6 +104,7 @@ async function getUpcomingPortalEvents(ownerEmail: string): Promise<PortalCalend
       id: r.id,
       subject: (r.fields['Subject'] as string) ?? '(No Subject)',
       start: (r.fields['Start'] as string) ?? '',
+      timezone: (r.fields['Timezone'] as string) || 'America/New_York',
     })).filter((e: PortalCalendarEvent) => e.start)
   } catch {
     return []
@@ -186,10 +187,12 @@ export default async function DashboardPage() {
         ? (emailToUser.get(meeting.senderEmail.toLowerCase().trim()) ?? null)
         : null)
     const d = new Date(meeting.startTime)
-    const timeRange =
-      meeting.endTime
-        ? `${d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })} – ${new Date(meeting.endTime).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`
-        : d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    const tz = meeting.timezone || 'America/New_York'
+    const fmt = (iso: string) =>
+      new Date(iso).toLocaleString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true })
+    const timeRange = meeting.endTime
+      ? `${fmt(meeting.startTime)} – ${fmt(meeting.endTime)} ET`
+      : `${fmt(meeting.startTime)} ET`
 
     // External (non-internal, non-coach) participants — used only in the unmatched modal
     const externalEmails = meeting.participantEmails.filter(
@@ -202,9 +205,9 @@ export default async function DashboardPage() {
       title: meeting.title,
       startTime: meeting.startTime,
       endTime: meeting.endTime,
-      weekday: d.toLocaleString('en-US', { weekday: 'short' }),
-      day: d.getDate(),
-      month: d.toLocaleString('en-US', { month: 'short' }),
+      weekday: new Date(meeting.startTime).toLocaleString('en-US', { timeZone: tz, weekday: 'short' }),
+      day: parseInt(new Date(meeting.startTime).toLocaleString('en-US', { timeZone: tz, day: 'numeric' }), 10),
+      month: new Date(meeting.startTime).toLocaleString('en-US', { timeZone: tz, month: 'short' }),
       timeRange,
       clientId: client?.id ?? null,
       // Prefer the name stored on the calendar event (set during sync from the
@@ -501,21 +504,22 @@ export default async function DashboardPage() {
               <div key={event.id} className="py-3 flex items-center gap-3">
                 <div className="flex-shrink-0 text-center w-10">
                   <p className="text-xs font-medium text-slate-400 uppercase">
-                    {new Date(event.start).toLocaleString('en-US', { month: 'short' })}
+                    {new Date(event.start).toLocaleString('en-US', { timeZone: event.timezone, month: 'short' })}
                   </p>
                   <p className="text-lg font-bold text-slate-900 leading-none">
-                    {new Date(event.start).getDate()}
+                    {new Date(event.start).toLocaleString('en-US', { timeZone: event.timezone, day: 'numeric' })}
                   </p>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-900 truncate">{event.subject}</p>
                   <p className="text-xs text-slate-400 mt-0.5">
                     {new Date(event.start).toLocaleString('en-US', {
+                      timeZone: event.timezone,
                       weekday: 'short',
                       hour: 'numeric',
                       minute: '2-digit',
                       hour12: true,
-                    })}
+                    })} ET
                   </p>
                 </div>
               </div>

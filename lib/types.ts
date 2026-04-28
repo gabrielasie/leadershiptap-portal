@@ -77,6 +77,7 @@ export interface Meeting {
   title: string;
   startTime: string; // ISO 8601
   endTime?: string;
+  timezone?: string; // IANA timezone from the calendar event (e.g. "America/New_York")
   senderEmail?: string;
   participantEmails: string[];
   notes?: string;

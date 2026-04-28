@@ -27,6 +27,7 @@ import { getPermissionLevel, canWrite } from '@/lib/auth/permissions'
 import { getCoachPersonContext } from '@/lib/airtable/coachPersonContext'
 import { getRecentCoachSessionsForPerson } from '@/lib/airtable/coachSessions'
 import { getRelationshipContext } from '@/lib/airtable/relationships'
+import { formatEastern } from '@/lib/utils/dateFormat'
 import PlaceholderSection from '@/components/ui/PlaceholderSection'
 import UserActionsBar from './UserActionsBar'
 import RecentSessionCard from './RecentSessionCard'
@@ -56,8 +57,8 @@ function getInitials(user: User): string {
   return `${first[0] ?? ''}${last[0] ?? ''}`.toUpperCase() || user.email[0].toUpperCase()
 }
 
-function formatMeetingDate(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
+function formatMeetingDate(iso: string, timezone: string = 'America/New_York'): string {
+  return formatEastern(iso, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -65,7 +66,7 @@ function formatMeetingDate(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
-  }).replace(',', '').replace(/(\d{4}),/, '$1 at')
+  }, timezone).replace(',', '').replace(/(\d{4}),/, '$1 at') + ' ET'
 }
 
 function formatMessageDate(iso: string): string {
@@ -76,13 +77,12 @@ function formatMessageDate(iso: string): string {
   })
 }
 
-function formatMeetingDay(iso: string): { weekday: string; day: number; month: string; time: string } {
-  const d = new Date(iso)
+function formatMeetingDay(iso: string, timezone: string = 'America/New_York'): { weekday: string; day: number; month: string; time: string } {
   return {
-    weekday: d.toLocaleString('en-US', { weekday: 'short' }),
-    day: d.getDate(),
-    month: d.toLocaleString('en-US', { month: 'short' }),
-    time: d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+    weekday: formatEastern(iso, { weekday: 'short' }, timezone),
+    day: parseInt(formatEastern(iso, { day: 'numeric' }, timezone), 10),
+    month: formatEastern(iso, { month: 'short' }, timezone),
+    time: formatEastern(iso, { hour: 'numeric', minute: '2-digit', hour12: true }, timezone) + ' ET',
   }
 }
 
@@ -169,7 +169,7 @@ function MeetingRow({ meeting, userId }: { meeting: Meeting; userId: string }) {
         <p className="text-sm font-medium text-slate-900 truncate">
           {meeting.title || 'Untitled Meeting'}
         </p>
-        <p className="text-xs text-slate-400 mt-0.5">{formatMeetingDate(meeting.startTime)}</p>
+        <p className="text-xs text-slate-400 mt-0.5">{formatMeetingDate(meeting.startTime, meeting.timezone)}</p>
       </div>
       <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0 transition-colors" />
     </Link>
@@ -520,9 +520,7 @@ export default async function UserDetailPage({ params }: Props) {
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-900 truncate">{m.title || 'Untitled Meeting'}</p>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      {new Date(m.startTime).toLocaleDateString('en-US', {
-                        month: 'short', day: 'numeric', year: 'numeric',
-                      })}
+                      {formatEastern(m.startTime, { month: 'short', day: 'numeric', year: 'numeric' }, m.timezone)}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
@@ -562,9 +560,7 @@ export default async function UserDetailPage({ params }: Props) {
                   <div>
                     <p className="text-sm font-medium text-slate-900">{event.title || 'Untitled Session'}</p>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      {new Date(event.startTime).toLocaleDateString('en-US', {
-                        weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
-                      })}
+                      {formatEastern(event.startTime, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }, event.timezone)}
                     </p>
                   </div>
                 </div>
@@ -853,7 +849,7 @@ export default async function UserDetailPage({ params }: Props) {
                 Next Session
               </p>
               {nextMeeting ? (() => {
-                const { weekday, day, month, time } = formatMeetingDay(nextMeeting.startTime)
+                const { weekday, day, month, time } = formatMeetingDay(nextMeeting.startTime, nextMeeting.timezone)
                 const label = relativeDays(nextMeeting.startTime)
                 return (
                   <Link
@@ -888,7 +884,7 @@ export default async function UserDetailPage({ params }: Props) {
                 Last Session
               </p>
               {lastMeeting ? (() => {
-                const { weekday, day, month, time } = formatMeetingDay(lastMeeting.startTime)
+                const { weekday, day, month, time } = formatMeetingDay(lastMeeting.startTime, lastMeeting.timezone)
                 const label = relativeDays(lastMeeting.startTime)
                 return (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">

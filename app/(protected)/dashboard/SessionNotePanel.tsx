@@ -36,11 +36,11 @@ interface Props {
 
 function formatPanelDate(startIso: string, endIso?: string): string {
   const fmt = (iso: string) =>
-    new Date(iso).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-  const date = new Date(startIso).toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric',
+    new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', hour12: true })
+  const date = new Date(startIso).toLocaleString('en-US', {
+    timeZone: 'America/New_York', weekday: 'long', month: 'long', day: 'numeric',
   })
-  return endIso ? `${date} · ${fmt(startIso)} – ${fmt(endIso)}` : `${date} · ${fmt(startIso)}`
+  return endIso ? `${date} · ${fmt(startIso)} – ${fmt(endIso)} ET` : `${date} · ${fmt(startIso)} ET`
 }
 
 export default function SessionNotePanel({

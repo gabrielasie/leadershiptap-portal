@@ -1,4 +1,5 @@
 import { getUsers } from '@/lib/services/usersService'
+import { formatEastern } from '@/lib/utils/dateFormat'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import { getAllRecentNotes } from '@/lib/airtable/notes'
@@ -16,7 +17,7 @@ function getDisplayName(user: User): string {
 }
 
 function formatSessionDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return formatEastern(iso, { month: 'short', day: 'numeric' })
 }
 
 // Fetch all Portal Calendar Events for one coach — only the fields needed

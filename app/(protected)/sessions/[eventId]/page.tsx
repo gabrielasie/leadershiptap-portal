@@ -5,14 +5,15 @@ import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import { getRelationshipContexts } from '@/lib/airtable/relationships'
 import { getSessionNoteByEventId } from '@/lib/airtable/sessionNotes'
 import { getPermissionLevel, canWrite } from '@/lib/auth/permissions'
+import { formatEastern } from '@/lib/utils/dateFormat'
 import SessionNoteForm from './SessionNoteForm'
 
 interface Props {
   params: Promise<{ eventId: string }>
 }
 
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
+function formatDateTime(iso: string, timezone: string = 'America/New_York'): string {
+  return formatEastern(iso, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
@@ -20,7 +21,7 @@ function formatDateTime(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
-  })
+  }, timezone) + ' ET'
 }
 
 export default async function SessionPage({ params }: Props) {
@@ -87,7 +88,7 @@ export default async function SessionPage({ params }: Props) {
           {meeting.title || 'Untitled Meeting'}
         </h1>
         {meeting.startTime && (
-          <p className="text-sm text-slate-500">{formatDateTime(meeting.startTime)}</p>
+          <p className="text-sm text-slate-500">{formatDateTime(meeting.startTime, meeting.timezone)}</p>
         )}
         {meeting.clientName && (
           <p className="text-sm font-medium text-[hsl(213,70%,30%)] mt-1">

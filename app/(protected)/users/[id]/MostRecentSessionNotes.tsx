@@ -8,9 +8,11 @@ import { updateSessionNotesAction } from './actions'
 import type { Meeting } from '@/lib/types'
 import type { CoachSession } from '@/lib/airtable/coachSessions'
 
+import { formatEastern } from '@/lib/utils/dateFormat'
+
 function formatMeetingDate(iso: string): string {
   if (!iso) return ''
-  return new Date(iso).toLocaleDateString('en-US', {
+  return formatEastern(iso, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',

@@ -7,16 +7,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { formatEastern } from '@/lib/utils/dateFormat'
 
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
+function formatDateTime(iso: string, timezone: string = 'America/New_York'): string {
+  return formatEastern(iso, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  })
+  }, timezone) + ' ET'
 }
 
 interface MeetingDetailModalProps {
@@ -33,8 +34,8 @@ export default function MeetingDetailModal({ meeting, onClose }: MeetingDetailMo
             <DialogHeader>
               <DialogTitle className="text-lg leading-snug">{meeting.title || 'Untitled Event'}</DialogTitle>
               <p className="text-sm text-muted-foreground pt-1">
-                {formatDateTime(meeting.startTime)}
-                {meeting.endTime && ` — ${formatDateTime(meeting.endTime)}`}
+                {formatDateTime(meeting.startTime, meeting.timezone)}
+                {meeting.endTime && ` — ${formatDateTime(meeting.endTime, meeting.timezone)}`}
               </p>
             </DialogHeader>
 

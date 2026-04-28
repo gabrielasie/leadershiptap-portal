@@ -72,6 +72,8 @@ interface SyncIndex {
   emailToPerson: Map<string, PersonEntry>
   // "coachAirtableId|clientAirtableId" → relationship context record ID
   contextByKey: Map<string, string>
+  // Lowercase coach email → Set of lowercase client emails with an active context
+  coachClientEmails: Map<string, Set<string>>
 }
 
 async function buildSyncIndex(apiKey: string, baseId: string): Promise<SyncIndex> {
@@ -115,7 +117,28 @@ async function buildSyncIndex(apiKey: string, baseId: string): Promise<SyncIndex
     }
   }
 
-  return { emailToPerson, contextByKey }
+  // Build inverse: airtable record ID → all known emails for that person
+  const idToEmails = new Map<string, string[]>()
+  for (const [email, entry] of emailToPerson) {
+    const list = idToEmails.get(entry.id) ?? []
+    list.push(email)
+    idToEmails.set(entry.id, list)
+  }
+
+  // Build coachEmail → Set<clientEmail> from the coach|client ID pairs in contextByKey
+  const coachClientEmails = new Map<string, Set<string>>()
+  for (const key of contextByKey.keys()) {
+    const [coachId, clientId] = key.split('|')
+    const coachEmails = idToEmails.get(coachId) ?? []
+    const clientEmails = idToEmails.get(clientId) ?? []
+    for (const coachEmail of coachEmails) {
+      if (!coachClientEmails.has(coachEmail)) coachClientEmails.set(coachEmail, new Set())
+      const clientSet = coachClientEmails.get(coachEmail)!
+      for (const ce of clientEmails) clientSet.add(ce)
+    }
+  }
+
+  return { emailToPerson, contextByKey, coachClientEmails }
 }
 
 // ── Microsoft Graph: get access token ────────────────────────────────────────
@@ -298,6 +321,7 @@ async function upsertEvent(
     'Calendar Owner': coachEmail,
     'Client Name': matchedClientName,
     'Relationship Context ID': matchedContextId,
+    'Timezone': event.start.timeZone ?? 'America/New_York',
   }
 
   const table = encodeURIComponent('Portal Calendar Events')
@@ -429,11 +453,27 @@ export async function POST(request: Request) {
         )
         return hasExternalClient
       })
-      console.log(`[calendar/sync] ${email}: ${events.length} events after filtering`)
+      console.log(`[calendar/sync] ${email}: ${events.length} events after noise filtering`)
+
+      // Filter to only events that include at least one known portal client.
+      // Fall back to all noise-filtered events if no relationship contexts are set up.
+      const clientSet = syncIndex.coachClientEmails.get(email.toLowerCase())
+      let filteredEvents: typeof events
+      if (!clientSet || clientSet.size === 0) {
+        console.warn(`[calendar/sync] No relationship contexts found for ${email} — syncing all events as fallback`)
+        filteredEvents = events
+      } else {
+        filteredEvents = events.filter((event) =>
+          (event.attendees ?? []).some(
+            (a) => clientSet.has(a.emailAddress.address.toLowerCase()),
+          ),
+        )
+        console.log(`[calendar/sync] ${email}: ${filteredEvents.length} client events (filtered from ${events.length} total)`)
+      }
 
       let coachSynced = 0
       let coachErrors = 0
-      for (const event of events) {
+      for (const event of filteredEvents) {
         try {
           await upsertEvent(apiKey, baseId, event, email, syncIndex)
           coachSynced++
