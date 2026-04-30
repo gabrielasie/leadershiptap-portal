@@ -203,6 +203,7 @@ interface GraphEventDateTime {
 interface GraphEvent {
   id: string
   subject: string
+  isCancelled?: boolean
   start: GraphEventDateTime
   end: GraphEventDateTime
   attendees?: GraphAttendee[]
@@ -215,7 +216,7 @@ async function fetchEvents(token: string, email: string): Promise<GraphEvent[]> 
   const params = new URLSearchParams({
     startDateTime: now.toISOString(),
     endDateTime: end.toISOString(),
-    $select: 'id,subject,start,end,attendees',
+    $select: 'id,subject,isCancelled,start,end,attendees',
     $top: '500',
   })
 
@@ -321,7 +322,7 @@ async function upsertEvent(
     'Calendar Owner': coachEmail,
     'Client Name': matchedClientName,
     'Relationship Context ID': matchedContextId,
-    'Timezone': event.start.timeZone ?? 'America/New_York',
+    'Timezone': 'America/New_York',
   }
 
   const table = encodeURIComponent('Portal Calendar Events')
@@ -363,6 +364,10 @@ async function upsertEvent(
 const NOISE_PATTERN = /buffer|focus day|recovery day|ooo|out of office|hold|block|haircut|lunch w\//i
 
 function shouldSyncEvent(event: GraphEvent, coachEmail: string): boolean {
+  // Skip cancelled events
+  if (event.isCancelled === true) return false
+  if (/^cancelled:/i.test(event.subject ?? '')) return false
+
   const attendees = event.attendees ?? []
 
   // No attendees at all — personal appointment, skip
