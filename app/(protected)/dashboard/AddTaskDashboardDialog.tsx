@@ -17,41 +17,48 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
 import { Plus } from 'lucide-react'
 import { dashboardCreateTaskAction } from './actions'
 
-interface Client {
+interface Assignee {
   id: string
   name: string
 }
 
 interface Props {
-  clients: Client[]
+  clients: Assignee[]
+  coaches: Assignee[]
   /** Optional custom trigger element. If omitted, renders a default "+ Add Task" button. */
   trigger?: React.ReactNode
 }
 
-export default function AddTaskDashboardDialog({ clients, trigger }: Props) {
+// Sentinel value for "Just me" — no real airtable ID
+const PERSONAL_VALUE = '__personal__'
+
+export default function AddTaskDashboardDialog({ clients, coaches, trigger }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [clientId, setClientId] = useState('')
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
-  const [notes, setNotes] = useState('')
+  // assignTo is PERSONAL_VALUE | a client/coach airtable record ID
+  const [assignTo, setAssignTo] = useState(PERSONAL_VALUE)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const canSubmit = title.trim().length > 0 && clientId.length > 0 && !saving
+  const canSubmit = title.trim().length > 0 && !saving
 
   function handleOpen() {
-    setClientId('')
     setTitle('')
+    setDescription('')
     setDueDate('')
-    setNotes('')
+    setAssignTo(PERSONAL_VALUE)
     setError('')
     setOpen(true)
   }
@@ -66,12 +73,28 @@ export default function AddTaskDashboardDialog({ clients, trigger }: Props) {
     if (!canSubmit) return
     setSaving(true)
     setError('')
-    const result = await dashboardCreateTaskAction(
-      clientId,
-      title.trim(),
-      dueDate || null,
-      notes.trim() || null,
-    )
+
+    const isClient = clients.some((c) => c.id === assignTo)
+    const isCoach = coaches.some((c) => c.id === assignTo)
+    const assignee = isClient
+      ? clients.find((c) => c.id === assignTo)
+      : isCoach
+        ? coaches.find((c) => c.id === assignTo)
+        : null
+
+    const result = await dashboardCreateTaskAction({
+      title: title.trim(),
+      description: description.trim() || undefined,
+      dueDate: dueDate || undefined,
+      assignedToId: assignee?.id,
+      assignedToName: assignee?.name,
+      assignmentType: isClient
+        ? 'shared_with_client'
+        : isCoach
+          ? 'delegated_to_coach'
+          : 'personal',
+    })
+
     setSaving(false)
     if (!result.success) {
       setError('Failed to add task — please try again')
@@ -101,26 +124,8 @@ export default function AddTaskDashboardDialog({ clients, trigger }: Props) {
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="add-task-client">
-                Client <span className="text-destructive">*</span>
-              </Label>
-              <Select value={clientId} onValueChange={setClientId}>
-                <SelectTrigger id="add-task-client">
-                  <SelectValue placeholder="Select a client..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
               <Label htmlFor="add-task-title">
-                Task name <span className="text-destructive">*</span>
+                Title <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="add-task-title"
@@ -128,6 +133,18 @@ export default function AddTaskDashboardDialog({ clients, trigger }: Props) {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+                disabled={saving}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="add-task-desc">Description</Label>
+              <Textarea
+                id="add-task-desc"
+                placeholder="Optional details…"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
                 disabled={saving}
               />
             </div>
@@ -144,15 +161,35 @@ export default function AddTaskDashboardDialog({ clients, trigger }: Props) {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="add-task-notes">Notes</Label>
-              <Textarea
-                id="add-task-notes"
-                placeholder="Optional notes..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={2}
-                disabled={saving}
-              />
+              <Label htmlFor="add-task-assign">Assign To</Label>
+              <Select value={assignTo} onValueChange={setAssignTo} disabled={saving}>
+                <SelectTrigger id="add-task-assign">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={PERSONAL_VALUE}>Just me</SelectItem>
+                  {clients.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>My Clients</SelectLabel>
+                      {clients.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  {coaches.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Co-coaches</SelectLabel>
+                      {coaches.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

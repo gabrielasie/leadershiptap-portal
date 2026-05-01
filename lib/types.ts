@@ -103,6 +103,10 @@ export interface Task {
   notes?: string;
   coachName?: string;
   userId?: string;     // first linked Client record ID
+  coachAirtableId?: string;   // 'Coach Airtable ID' plain text field — for getTasks filter
+  assignedToId?: string;      // Airtable record ID of the assignee
+  assignedToName?: string;    // denormalized display name
+  assignmentType?: 'personal' | 'shared_with_client' | 'delegated_to_coach';
 }
 
 export interface Message {

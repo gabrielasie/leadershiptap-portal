@@ -6,9 +6,8 @@ export async function POST(req: Request) {
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { body, visibility, eventId, clientAirtableId } = await req.json() as {
+  const { body, eventId, clientAirtableId } = await req.json() as {
     body: string
-    visibility: string
     eventId?: string
     clientAirtableId?: string
   }
@@ -30,7 +29,7 @@ export async function POST(req: Request) {
 
   const fields: Record<string, unknown> = {
     Body: body.trim(),
-    Visibility: visibility ?? 'private_to_author',
+    Visibility: 'coach_only',
     Coach: [userRecord.airtableId],
     'Created Date': new Date().toISOString().slice(0, 10),
   }

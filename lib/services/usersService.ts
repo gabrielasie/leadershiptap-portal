@@ -112,3 +112,16 @@ export async function getClientsByRelationship(coachAirtableId: string): Promise
   const clientIds = new Set(contexts.map((c) => c.clientAirtableId))
   return deduped.filter((u) => clientIds.has(u.id))
 }
+
+/**
+ * Returns all portal users with a @leadershiptap.com work email (i.e. coaches),
+ * optionally excluding a specific coach by Airtable record ID.
+ */
+export async function getPortalCoaches(excludeId?: string): Promise<User[]> {
+  const all = await getAllUsers()
+  const deduped = deduplicateUsers(all)
+  return deduped.filter((u) => {
+    const email = (u.workEmail ?? '').toLowerCase()
+    return email.includes('@leadershiptap.com') && (!excludeId || u.id !== excludeId)
+  })
+}

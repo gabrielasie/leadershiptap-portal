@@ -1,12 +1,12 @@
 import Link from 'next/link'
 import { Calendar, Users, ChevronRight, Clock, CheckSquare, CalendarDays } from 'lucide-react'
-import { getUsers, getClientsByRelationship } from '@/lib/services/usersService'
+import { getUsers, getClientsByRelationship, getPortalCoaches } from '@/lib/services/usersService'
 import { getRelationshipContexts } from '@/lib/airtable/relationships'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getAllMeetings, getAllUpcomingMeetings } from '@/lib/airtable/meetings'
 import { buildEmailToUserMap, findClientForMeeting, groupMeetingsByUser } from '@/lib/services/meetingsService'
 import { fetchAllMessages } from '@/lib/airtable/messages'
-import { getAllOpenTasks } from '@/lib/airtable/tasks'
+import { getTasks } from '@/lib/airtable/tasks'
 import { getAllRecentNotes } from '@/lib/airtable/notes'
 import { getSessionNotes } from '@/lib/airtable/sessionNotes'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
@@ -122,7 +122,7 @@ export default async function DashboardPage() {
   // calendar — prevents Coach A from ever seeing Coach B's events.
   const ownerEmail = userRecord.email || undefined
 
-  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, allRecentNotes, portalEvents, coachContexts, coachSessionNotes] = await Promise.all([
+  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, allRecentNotes, portalEvents, coachContexts, coachSessionNotes, coachUsers] = await Promise.all([
     // Admins see all users; coaches see only clients with an active Relationship Context.
     isAdmin || !userRecord.airtableId
       ? getUsers(sessionUser)
@@ -130,7 +130,7 @@ export default async function DashboardPage() {
     getAllUpcomingMeetings(7, ownerEmail),
     getAllMeetings(ownerEmail),
     fetchAllMessages(),
-    getAllOpenTasks(),
+    userRecord.airtableId ? getTasks(userRecord.airtableId) : Promise.resolve([]),
     getAllRecentNotes(100),
     isAdmin && ownerEmail ? getUpcomingPortalEvents(ownerEmail) : Promise.resolve([]),
     // Fetch active relationship context IDs so we can filter calendar events.
@@ -141,6 +141,8 @@ export default async function DashboardPage() {
     userRecord.airtableId
       ? getSessionNotes(userRecord.airtableId)
       : Promise.resolve([]),
+    // Co-coaches for the task assignment dropdown (exclude current user)
+    getPortalCoaches(userRecord.airtableId ?? undefined),
   ])
 
   // Build email → user lookup (matches both email and workEmail, normalised)
@@ -275,6 +277,9 @@ export default async function DashboardPage() {
       notes: task.notes ?? null,
       clientId: client?.id ?? null,
       clientName: client ? getDisplayName(client) : null,
+      assignedToId: task.assignedToId ?? null,
+      assignedToName: task.assignedToName ?? null,
+      assignmentType: task.assignmentType ?? null,
     }
   })
 
@@ -364,6 +369,8 @@ export default async function DashboardPage() {
 
   // Client list for quick-action dialogs (id + display name)
   const clientsForActions = users.map((u) => ({ id: u.id, name: getDisplayName(u) }))
+  // Co-coaches for task assignment dropdown
+  const coachesForActions = coachUsers.map((u) => ({ id: u.id, name: getDisplayName(u) }))
 
   // ── render ─────────────────────────────────────────────────────────────────
 
@@ -475,7 +482,7 @@ export default async function DashboardPage() {
             </span>
           )}
           <div className="ml-auto">
-            <AddTaskDashboardDialog clients={clientsForActions} />
+            <AddTaskDashboardDialog clients={clientsForActions} coaches={coachesForActions} />
           </div>
         </div>
         {openTasks.length === 0 ? (

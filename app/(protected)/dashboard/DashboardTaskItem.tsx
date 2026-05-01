@@ -17,6 +17,9 @@ export interface DashboardTask {
   notes: string | null
   clientId: string | null
   clientName: string | null
+  assignedToId?: string | null
+  assignedToName?: string | null
+  assignmentType?: 'personal' | 'shared_with_client' | 'delegated_to_coach' | null
 }
 
 export default function DashboardTaskItem({ task }: { task: DashboardTask }) {
@@ -77,7 +80,17 @@ export default function DashboardTaskItem({ task }: { task: DashboardTask }) {
             {task.name}
           </p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            {task.clientId && task.clientName && (
+            {task.assignmentType === 'shared_with_client' && task.assignedToName && (
+              <span className="text-xs font-medium text-blue-700">
+                → {task.assignedToName}
+              </span>
+            )}
+            {task.assignmentType === 'delegated_to_coach' && task.assignedToName && (
+              <span className="text-xs font-medium text-purple-700">
+                → {task.assignedToName}
+              </span>
+            )}
+            {!task.assignmentType && task.clientId && task.clientName && (
               <Link
                 href={`/users/${task.clientId}`}
                 className="text-xs text-[hsl(213,70%,30%)] hover:underline"

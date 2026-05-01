@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createNote } from '@/lib/airtable/notes'
-import { createTask, updateTaskStatus } from '@/lib/airtable/tasks'
+import { createClientTask, updateTaskStatus } from '@/lib/airtable/tasks'
 import {
   updateUserProfile,
   type UserProfileFields,
@@ -250,7 +250,7 @@ export async function saveTaskAction(
   notes: string | null,
 ): Promise<void> {
   console.log('[saveTaskAction] userId:', userId, '| title:', taskName, '| dueDate:', dueDate)
-  await createTask(
+  await createClientTask(
     userId,
     taskName,
     dueDate ?? undefined,

@@ -28,16 +28,9 @@ interface Props {
   redirectTo?: string
 }
 
-const VISIBILITY_OPTIONS = [
-  { value: 'private_to_author', label: 'Private (only me)' },
-  { value: 'internal_only', label: 'Internal (coaching team)' },
-  { value: 'shared_with_client', label: 'Shared with client' },
-]
-
 export default function NoteForm({ eventId, clientAirtableId, clients, redirectTo }: Props) {
   const router = useRouter()
   const [body, setBody] = useState('')
-  const [visibility, setVisibility] = useState('private_to_author')
   const [selectedClientId, setSelectedClientId] = useState(clientAirtableId ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -66,7 +59,6 @@ export default function NoteForm({ eventId, clientAirtableId, clients, redirectT
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           body: body.trim(),
-          visibility,
           eventId: eventId || undefined,
           clientAirtableId: resolvedClientId || undefined,
         }),
@@ -81,7 +73,6 @@ export default function NoteForm({ eventId, clientAirtableId, clients, redirectT
       setSaved(true)
       setBody('')
       setSelectedClientId(clientAirtableId ?? '')
-      setVisibility('private_to_author')
 
       if (redirectTo) {
         router.push(redirectTo)
@@ -132,25 +123,6 @@ export default function NoteForm({ eventId, clientAirtableId, clients, redirectT
           disabled={saving}
           className="resize-y"
         />
-      </div>
-
-      {/* Visibility */}
-      <div className="space-y-1.5">
-        <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Visibility
-        </label>
-        <Select value={visibility} onValueChange={setVisibility}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {VISIBILITY_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       {error && <p className="text-sm text-rose-500">{error}</p>}

@@ -88,7 +88,6 @@ export interface CreateSessionNoteData {
   clientAirtableId?: string
   eventProviderId?: string
   sessionDate: string
-  visibility: string
 }
 
 /**
@@ -117,7 +116,7 @@ export async function createSessionNote(data: CreateSessionNoteData): Promise<Se
     'Content': data.content,
     'Coach Airtable ID': data.coachAirtableId,
     'Session Date': data.sessionDate,
-    'Visibility': data.visibility,
+    'Visibility': 'coach_only',
   }
   if (data.clientAirtableId) fields['Client Airtable ID'] = data.clientAirtableId
   if (data.eventProviderId) fields['Event Provider ID'] = data.eventProviderId
@@ -152,7 +151,6 @@ export interface UpdateSessionNoteData {
   title?: string
   content?: string
   sessionDate?: string
-  visibility?: string
 }
 
 export async function updateSessionNote(
@@ -164,7 +162,6 @@ export async function updateSessionNote(
   if (data.title !== undefined) fields['Title'] = data.title
   if (data.content !== undefined) fields['Content'] = data.content
   if (data.sessionDate !== undefined) fields['Session Date'] = data.sessionDate
-  if (data.visibility !== undefined) fields['Visibility'] = data.visibility
 
   const res = await fetch(`${API_BASE}/${baseId}/${TABLE}/${recordId}`, {
     method: 'PATCH',

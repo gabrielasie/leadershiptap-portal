@@ -20,10 +20,47 @@ function mapTaskRecord(record: { id: string; fields: Record<string, unknown> }):
     userId: Array.isArray(record.fields['Client'])
       ? (record.fields['Client'] as string[])[0]
       : undefined,
+    coachAirtableId: (record.fields['Coach Airtable ID'] as string) || undefined,
+    assignedToId: (record.fields['Assigned To'] as string) || undefined,
+    assignedToName: (record.fields['Assigned To Name'] as string) || undefined,
+    assignmentType: (record.fields['Assignment Type'] as Task['assignmentType']) || undefined,
   };
 }
 
 // ── Portal tasks (Tasks table) ────────────────────────────────────────────────
+
+/**
+ * Fetch all non-completed tasks created by a coach (filtered by Coach Airtable ID).
+ * Requires the "Coach Airtable ID" plain-text field to exist on the Tasks table.
+ */
+export async function getTasks(coachAirtableId: string): Promise<Task[]> {
+  try {
+    const { apiKey, baseId } = getCredentials()
+    const safe = coachAirtableId.replace(/"/g, '\\"')
+    const formula = encodeURIComponent(`AND({Coach Airtable ID}="${safe}",{Status}!="completed")`)
+    const res = await fetch(
+      `${API_BASE}/${baseId}/Tasks?filterByFormula=${formula}&maxRecords=500`,
+      { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+    )
+    if (!res.ok) {
+      const text = await res.text()
+      console.warn('[getTasks] query failed:', text)
+      return []
+    }
+    const data = await res.json()
+    const tasks = (data.records ?? []).map(mapTaskRecord)
+    tasks.sort((a: Task, b: Task) => {
+      if (!a.dueDate && !b.dueDate) return 0
+      if (!a.dueDate) return 1
+      if (!b.dueDate) return -1
+      return a.dueDate.localeCompare(b.dueDate)
+    })
+    return tasks
+  } catch (err) {
+    console.warn('[getTasks] unexpected error:', err)
+    return []
+  }
+}
 
 export async function getTasksByUser(userId: string): Promise<Task[]> {
   try {
@@ -64,7 +101,8 @@ export async function getTasksByUser(userId: string): Promise<Task[]> {
   }
 }
 
-export async function createTask(
+/** Create a task linked to a client (used from the client profile page). */
+export async function createClientTask(
   userId: string,
   title: string,
   dueDate?: string,
@@ -80,8 +118,6 @@ export async function createTask(
   if (dueDate) fields['Due Date'] = dueDate;
   if (notes) fields['Notes'] = notes;
 
-  console.log('[createTask] POST body:', JSON.stringify({ fields }, null, 2));
-
   const res = await fetch(`${API_BASE}/${baseId}/Tasks`, {
     method: 'POST',
     headers: {
@@ -91,12 +127,54 @@ export async function createTask(
     body: JSON.stringify({ fields }),
   });
   const data = await res.json();
-  console.log('[createTask] Airtable status:', res.status);
-  console.log('[createTask] Airtable response:', JSON.stringify(data, null, 2));
   if (!res.ok) {
     throw new Error(`Airtable POST failed (${res.status}): ${JSON.stringify(data)}`);
   }
   return data.id as string;
+}
+
+export interface CreateTaskData {
+  title: string
+  description?: string
+  dueDate?: string
+  coachAirtableId: string
+  assignedToId?: string
+  assignedToName?: string
+  assignmentType: 'personal' | 'shared_with_client' | 'delegated_to_coach'
+}
+
+/** Create a task scoped to a coach with optional assignment. */
+export async function createTask(data: CreateTaskData): Promise<string> {
+  const { apiKey, baseId } = getCredentials()
+
+  const fields: Record<string, unknown> = {
+    Title: data.title,
+    Status: 'pending',
+    'Coach Airtable ID': data.coachAirtableId,
+    'Assignment Type': data.assignmentType,
+  }
+  if (data.description) fields['Notes'] = data.description
+  if (data.dueDate) fields['Due Date'] = data.dueDate
+  if (data.assignedToId) fields['Assigned To'] = data.assignedToId
+  if (data.assignedToName) fields['Assigned To Name'] = data.assignedToName
+  // For shared_with_client, also link the Client field for client profile display
+  if (data.assignmentType === 'shared_with_client' && data.assignedToId) {
+    fields['Client'] = [data.assignedToId]
+  }
+
+  const res = await fetch(`${API_BASE}/${baseId}/Tasks`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ fields }),
+  })
+  const result = await res.json()
+  if (!res.ok) {
+    throw new Error(`Airtable POST failed (${res.status}): ${JSON.stringify(result)}`)
+  }
+  return result.id as string
 }
 
 export async function updateTaskStatus(

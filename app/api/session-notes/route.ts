@@ -34,7 +34,6 @@ export async function POST(req: Request) {
     clientAirtableId?: string
     eventProviderId?: string
     sessionDate: string
-    visibility: string
   }
 
   if (!body.title?.trim()) {
@@ -51,7 +50,6 @@ export async function POST(req: Request) {
     clientAirtableId: body.clientAirtableId,
     eventProviderId: body.eventProviderId,
     sessionDate: body.sessionDate,
-    visibility: body.visibility,
   })
   return NextResponse.json(note, { status: 201 })
 }

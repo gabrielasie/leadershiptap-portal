@@ -5,13 +5,6 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import type { SessionNote } from '@/lib/airtable/sessionNotes'
 
 interface Props {
@@ -20,12 +13,6 @@ interface Props {
   sessionDate: string        // YYYY-MM-DD, pre-filled from the meeting's start time
   existingNote?: SessionNote // present when editing
 }
-
-const VISIBILITY_OPTIONS = [
-  { value: 'coach_only', label: 'Coach only (private)' },
-  { value: 'admin_visible', label: 'Visible to admins' },
-  { value: 'shared_with_client', label: 'Shared with client' },
-]
 
 export default function SessionNoteForm({
   eventProviderId,
@@ -38,9 +25,6 @@ export default function SessionNoteForm({
 
   const [title, setTitle] = useState(existingNote?.title ?? '')
   const [content, setContent] = useState(existingNote?.content ?? '')
-  const [visibility, setVisibility] = useState<'coach_only' | 'shared_with_client' | 'admin_visible'>(
-    existingNote?.visibility ?? 'coach_only',
-  )
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
@@ -59,7 +43,7 @@ export default function SessionNoteForm({
         res = await fetch(`/api/session-notes/${existingNote.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: title.trim(), content: content.trim(), visibility }),
+          body: JSON.stringify({ title: title.trim(), content: content.trim() }),
         })
       } else {
         res = await fetch('/api/session-notes', {
@@ -68,7 +52,6 @@ export default function SessionNoteForm({
           body: JSON.stringify({
             title: title.trim(),
             content: content.trim(),
-            visibility,
             eventProviderId,
             clientAirtableId,
             sessionDate,
@@ -118,25 +101,6 @@ export default function SessionNoteForm({
           disabled={saving}
           className="resize-y"
         />
-      </div>
-
-      {/* Visibility */}
-      <div className="space-y-1.5">
-        <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Visibility
-        </label>
-        <Select value={visibility} onValueChange={(v) => { setVisibility(v as typeof visibility); setSaved(false) }}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {VISIBILITY_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       {error && <p className="text-sm text-rose-500">{error}</p>}

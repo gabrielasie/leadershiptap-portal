@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createTask, updateTask, updateTaskStatus, deleteTask } from '@/lib/airtable/tasks'
+import { createTask, updateTask, updateTaskStatus, deleteTask, type CreateTaskData } from '@/lib/airtable/tasks'
 import { createNote, updateNote, deleteNote } from '@/lib/airtable/notes'
 import { getMeetingsByUserEmail, updatePortalEventNotes } from '@/lib/airtable/meetings'
 import { upsertCoachSession } from '@/lib/airtable/coachSessions'
@@ -55,13 +55,14 @@ export async function dashboardDeleteTaskAction(
 }
 
 export async function dashboardCreateTaskAction(
-  userId: string,
-  title: string,
-  dueDate: string | null,
-  notes: string | null,
+  data: Omit<CreateTaskData, 'coachAirtableId'>,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await createTask(userId, title, dueDate ?? undefined, notes ?? undefined)
+    const userRecord = await getCurrentUserRecord()
+    if (!userRecord.airtableId) {
+      return { success: false, error: 'Could not resolve your coach record.' }
+    }
+    await createTask({ ...data, coachAirtableId: userRecord.airtableId })
     revalidatePath('/dashboard')
     return { success: true }
   } catch (err) {
