@@ -469,7 +469,7 @@ export default async function DashboardPage() {
       )}
 
       {/* ── Quick Actions ─────────────────────────────────────────────────────── */}
-      <DashboardQuickActions clients={clientsForActions} />
+      <DashboardQuickActions clients={clientsForActions} coaches={coachesForActions} />
 
       {/* ── Open Tasks ───────────────────────────────────────────────────────── */}
       <div className="mb-4 md:mb-6 bg-white rounded-xl shadow-sm p-4 md:p-6">

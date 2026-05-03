@@ -9,8 +9,14 @@ interface Client {
   name: string
 }
 
+interface Coach {
+  id: string
+  name: string
+}
+
 interface Props {
   clients: Client[]
+  coaches: Coach[]
 }
 
 // ── Shared card shell ─────────────────────────────────────────────────────────
@@ -47,7 +53,7 @@ function ActionCard({
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function DashboardQuickActions({ clients }: Props) {
+export default function DashboardQuickActions({ clients, coaches }: Props) {
   return (
     <div className="bg-white rounded-xl shadow-sm p-4 md:p-6 mb-4 md:mb-6">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Quick Actions</p>
@@ -66,6 +72,7 @@ export default function DashboardQuickActions({ clients }: Props) {
 
         <AddTaskDashboardDialog
           clients={clients}
+          coaches={coaches}
           trigger={
             <ActionCard
               icon={<CheckSquare className="w-5 h-5 text-emerald-600" />}
