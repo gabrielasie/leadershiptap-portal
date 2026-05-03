@@ -279,6 +279,12 @@ export default async function DashboardPage() {
     }
   })
 
+  // ── Relationship type per client (for labels + grouping) ─────────────────
+  const contextByPersonId = new Map(coachContexts.map((c) => [c.personId, c]))
+  const hasReportingRelationships = coachContexts.some((c) => c.relationshipType === 'reports_to')
+  const hasCoachingRelationships = coachContexts.some((c) => c.relationshipType === 'coaching')
+  const showRelationshipGroups = hasReportingRelationships && hasCoachingRelationships
+
   // ── Notes grouped by client ────────────────────────────────────────────────
 
   const notesByClient = new Map<string, Array<{ id: string; body: string; createdAt: string }>>()
@@ -568,31 +574,60 @@ export default async function DashboardPage() {
 
           {recentClients.length === 0 ? (
             <p className="text-sm text-slate-400">No clients yet.</p>
-          ) : (
-            <div>
-              {recentClients.map(({ user, lastMeeting, nextMeeting }) => {
-                const subtitle = [user.title ?? user.jobTitle, user.companyName]
-                  .filter(Boolean)
-                  .join(' · ') || null
-                const clientNotes = notesByClient.get(user.id) ?? []
-                return (
-                  <ClientRowWithNotes
-                    key={user.id}
-                    clientId={user.id}
-                    clientName={getDisplayName(user)}
-                    subtitle={subtitle}
-                    initials={getInitials(user)}
-                    avatarColorClass={avatarColor(user.id)}
-                    profilePhoto={user.profilePhoto ?? user.avatarUrl ?? null}
-                    notes={clientNotes}
-                    totalNoteCount={clientNotes.length}
-                    nextSessionLabel={nextMeeting ? formatSessionLabel(nextMeeting.startTime) : null}
-                    lastSessionLabel={lastMeeting ? formatSessionLabel(lastMeeting.startTime) : null}
-                  />
-                )
-              })}
-            </div>
-          )}
+          ) : (() => {
+            const coachingClients = showRelationshipGroups
+              ? recentClients.filter(({ user }) => contextByPersonId.get(user.id)?.relationshipType !== 'reports_to')
+              : recentClients
+            const reportingClients = showRelationshipGroups
+              ? recentClients.filter(({ user }) => contextByPersonId.get(user.id)?.relationshipType === 'reports_to')
+              : []
+
+            function renderClientRow({ user, lastMeeting, nextMeeting }: typeof recentClients[0]) {
+              const ctx = contextByPersonId.get(user.id)
+              const relationshipLabel = showRelationshipGroups
+                ? null  // label redundant when section headers are shown
+                : ctx?.relationshipType === 'reports_to'
+                  ? 'Reports to you'
+                  : ctx?.relationshipType === 'coaching'
+                    ? null  // coaching is the default — no label needed when only one type
+                    : null
+              const subtitle = [user.title ?? user.jobTitle, user.companyName].filter(Boolean).join(' · ') || null
+              const clientNotes = notesByClient.get(user.id) ?? []
+              return (
+                <ClientRowWithNotes
+                  key={user.id}
+                  clientId={user.id}
+                  clientName={getDisplayName(user)}
+                  subtitle={subtitle}
+                  initials={getInitials(user)}
+                  avatarColorClass={avatarColor(user.id)}
+                  profilePhoto={user.profilePhoto ?? user.avatarUrl ?? null}
+                  notes={clientNotes}
+                  totalNoteCount={clientNotes.length}
+                  nextSessionLabel={nextMeeting ? formatSessionLabel(nextMeeting.startTime) : null}
+                  lastSessionLabel={lastMeeting ? formatSessionLabel(lastMeeting.startTime) : null}
+                  relationshipLabel={relationshipLabel}
+                />
+              )
+            }
+
+            return (
+              <div>
+                {showRelationshipGroups && coachingClients.length > 0 && (
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 px-1 mb-2">
+                    Coaching
+                  </p>
+                )}
+                {coachingClients.map(renderClientRow)}
+                {showRelationshipGroups && reportingClients.length > 0 && (
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 px-1 mt-4 mb-2">
+                    Reports to you
+                  </p>
+                )}
+                {reportingClients.map(renderClientRow)}
+              </div>
+            )
+          })()}
         </div>
 
       </div>

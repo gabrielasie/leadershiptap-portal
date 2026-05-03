@@ -27,6 +27,7 @@ export interface ClientRowProps {
   totalNoteCount: number           // for "View all N notes →"
   nextSessionLabel: string | null  // e.g. "Fri Apr 24 · 9:00 AM"
   lastSessionLabel: string | null  // e.g. "Fri Apr 17 · 11:30 AM"
+  relationshipLabel?: string | null // e.g. "Coaching" or "Reports to you"
 }
 
 function formatNoteDate(dateStr: string): string {
@@ -48,6 +49,7 @@ export default function ClientRowWithNotes({
   totalNoteCount,
   nextSessionLabel,
   lastSessionLabel,
+  relationshipLabel,
 }: ClientRowProps) {
   const router = useRouter()
   const [expanded, setExpanded] = useState(false)
@@ -155,9 +157,16 @@ export default function ClientRowWithNotes({
 
           {/* Text block */}
           <div className="flex-1 min-w-0">
-            <p className="text-base font-semibold text-slate-900 truncate leading-snug">
-              {clientName}
-            </p>
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="text-base font-semibold text-slate-900 truncate leading-snug">
+                {clientName}
+              </p>
+              {relationshipLabel && (
+                <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500">
+                  {relationshipLabel}
+                </span>
+              )}
+            </div>
             {subtitle && (
               <p className="text-xs text-slate-500 truncate mt-0.5">{subtitle}</p>
             )}

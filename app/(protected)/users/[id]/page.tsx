@@ -26,7 +26,7 @@ import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import { getPermissionLevel, canWrite } from '@/lib/auth/permissions'
 import { getCoachPersonContext } from '@/lib/airtable/coachPersonContext'
 import { getRecentCoachSessionsForPerson } from '@/lib/airtable/coachSessions'
-import { getRelationshipContext } from '@/lib/airtable/relationships'
+import { getRelationshipContext, getDownstreamPeople } from '@/lib/airtable/relationships'
 import { formatEastern } from '@/lib/utils/dateFormat'
 import PlaceholderSection from '@/components/ui/PlaceholderSection'
 import UserActionsBar from './UserActionsBar'
@@ -258,7 +258,6 @@ export default async function UserDetailPage({ params }: Props) {
     sessionNotes,
     tasks,
     manager,
-    reportResults,
     coach,
     teamLead,
     teamMemberResults,
@@ -266,13 +265,13 @@ export default async function UserDetailPage({ params }: Props) {
     relationshipContext,
     recentCoachSessions,
     portalSessionEvents,
+    downstreamPeople,
   ] = await Promise.all([
     getMeetingsForUser(contactEmail, sessionUser, id, currentUserRecord.email || undefined),
     getUserMessages(id),
     getNotesByUser(id).catch(() => [] as Note[]),
     getTasksByUser(id).catch(() => [] as Task[]),
     managerId ? getUserById(managerId) : Promise.resolve(null),
-    Promise.all(reportIds.map((rid) => getUserById(rid))),
     coachId ? getUserById(coachId) : Promise.resolve(null),
     teamLeadId ? getUserById(teamLeadId) : Promise.resolve(null),
     Promise.all(teamMemberIdList.map((tid) => getUserById(tid))),
@@ -288,9 +287,10 @@ export default async function UserDetailPage({ params }: Props) {
     contactEmail
       ? getPortalEventsByClientEmail(contactEmail, currentUserRecord.email || undefined).catch(() => [])
       : Promise.resolve([]),
+    getDownstreamPeople(id, 1).catch(() => [] as User[]),
   ])
 
-  const directReports = reportResults.filter((u): u is User => u !== null)
+  const directReports = downstreamPeople
   const teamMembers = teamMemberResults.filter((u): u is User => u !== null)
 
   const permissionLevel = await getPermissionLevel(

@@ -224,6 +224,52 @@ async function getStandardPermissionProfileId(
   return _standardProfileId
 }
 
+// ── Downstream traversal ──────────────────────────────────────────────────────
+
+/**
+ * Returns all people who report to (or are coached by) `personAirtableId`,
+ * resolved to full User records so callers can render name, title, avatar, etc.
+ *
+ * depth = 1  → direct reports only (default, used on profile pages)
+ * depth = 2+ → recurse through the org tree; capped at 3 to prevent runaway queries
+ *
+ * Dynamic import of getAllUsers avoids a circular module dependency.
+ */
+export async function getDownstreamPeople(
+  personAirtableId: string,
+  depth: number = 1,
+): Promise<import('@/lib/types').User[]> {
+  const safeDepth = Math.min(Math.max(Math.round(depth), 1), 3)
+
+  const contexts = await getRelationshipContexts(personAirtableId)
+  if (contexts.length === 0) return []
+
+  // Lazy-load to avoid circular deps (users.ts ↔ relationships.ts)
+  const { getAllUsers } = await import('@/lib/airtable/users')
+  const allUsers = await getAllUsers()
+  const byId = new Map(allUsers.map((u) => [u.id, u]))
+
+  const direct = contexts
+    .map((c) => byId.get(c.personId))
+    .filter((u): u is import('@/lib/types').User => u != null)
+
+  if (safeDepth <= 1) return direct
+
+  // Recurse one level deeper, deduplicating by ID
+  const seen = new Set([personAirtableId, ...direct.map((u) => u.id)])
+  const nested = await Promise.all(direct.map((u) => getDownstreamPeople(u.id, safeDepth - 1)))
+  for (const group of nested) {
+    for (const u of group) {
+      if (!seen.has(u.id)) {
+        seen.add(u.id)
+        direct.push(u)
+      }
+    }
+  }
+
+  return direct
+}
+
 // ── Write: onboarding row generation ─────────────────────────────────────────
 
 /**

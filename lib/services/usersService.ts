@@ -91,10 +91,8 @@ export async function getUserById(id: string): Promise<User | null> {
 }
 
 /**
- * Returns the clients a coach has an active Relationship Context with.
- *
- * Falls back to filtering by the legacy Coach linked field on Users if no
- * Relationship Context records exist yet (migration period safety net).
+ * Returns the clients a coach has an active Relationship Context with,
+ * sorted by relationship type (coaching before reports_to) then by name.
  */
 export async function getClientsByRelationship(coachAirtableId: string): Promise<User[]> {
   const [contexts, all] = await Promise.all([
@@ -103,14 +101,20 @@ export async function getClientsByRelationship(coachAirtableId: string): Promise
   ])
   const deduped = deduplicateUsers(all)
 
-  if (contexts.length === 0) {
-    // No relationship contexts configured yet — fall back to Coach-field filtering.
-    const scoped = deduped.filter((u) => u.coachIds?.includes(coachAirtableId))
-    return scoped
-  }
+  if (contexts.length === 0) return []
 
+  const typeByPersonId = new Map(contexts.map((c) => [c.personId, c.relationshipType]))
   const clientIds = new Set(contexts.map((c) => c.personId))
-  return deduped.filter((u) => clientIds.has(u.id))
+  const clients = deduped.filter((u) => clientIds.has(u.id))
+
+  const typeOrder = (id: string) => (typeByPersonId.get(id) === 'coaching' ? 0 : 1)
+  const nameOf = (u: User) =>
+    (u.fullName ?? ([u.firstName, u.lastName].filter(Boolean).join(' ') || u.email)).toLowerCase()
+
+  return clients.sort((a, b) => {
+    const diff = typeOrder(a.id) - typeOrder(b.id)
+    return diff !== 0 ? diff : nameOf(a).localeCompare(nameOf(b))
+  })
 }
 
 /**
