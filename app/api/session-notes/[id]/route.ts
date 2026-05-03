@@ -29,14 +29,12 @@ export async function PATCH(req: Request, { params }: Props) {
     title?: string
     content?: string
     sessionDate?: string
-    visibility?: string
   }
 
   const updated = await updateSessionNote(id, {
     title: body.title?.trim(),
     content: body.content?.trim(),
     sessionDate: body.sessionDate,
-    visibility: body.visibility,
   })
   return NextResponse.json(updated)
 }
