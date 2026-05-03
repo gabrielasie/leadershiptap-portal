@@ -12,31 +12,58 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+const NOTE_TYPES = [
+  { value: 'general_context', label: 'General Context' },
+  { value: 'meeting_note', label: 'Meeting Note' },
+  { value: 'observation', label: 'Observation' },
+  { value: 'action_item', label: 'Action Item' },
+] as const
+
 interface Client {
   id: string
   name: string
+  relationshipContextId?: string
 }
 
 interface Props {
-  /** Airtable record ID of the Portal Calendar Events record. Omit for /sessions/new. */
-  eventId?: string
-  /** Pre-selected client (event page). When absent, a dropdown is shown. */
-  clientAirtableId?: string
-  /** Available clients for the dropdown (new note page). */
+  /** Available clients for the dropdown. */
   clients?: Client[]
-  /** Where to navigate after a successful save. Defaults to refreshing the current page. */
+  /** Pre-selected client when accessed from a meeting card. */
+  clientAirtableId?: string
+  /** Pre-resolved relationship context ID (set when a client is pre-selected). */
+  relationshipContextId?: string
+  /** Airtable record ID of the associated Meeting. Omit for standalone notes. */
+  meetingId?: string
+  /** Default note type — 'meeting_note' when accessed from a meeting card. */
+  defaultNoteType?: string
+  /** Where to navigate after a successful save. */
   redirectTo?: string
 }
 
-export default function NoteForm({ eventId, clientAirtableId, clients, redirectTo }: Props) {
+export default function NoteForm({
+  clients,
+  clientAirtableId,
+  relationshipContextId: initialContextId,
+  meetingId,
+  defaultNoteType,
+  redirectTo,
+}: Props) {
   const router = useRouter()
   const [body, setBody] = useState('')
+  const [noteType, setNoteType] = useState(defaultNoteType ?? 'general_context')
   const [selectedClientId, setSelectedClientId] = useState(clientAirtableId ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
 
   const showClientDropdown = !clientAirtableId && Array.isArray(clients) && clients.length > 0
+
+  // Resolve the relationship context ID for the currently selected client
+  const resolvedContextId =
+    initialContextId ??
+    (selectedClientId
+      ? clients?.find((c) => c.id === selectedClientId)?.relationshipContextId
+      : undefined)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -54,13 +81,15 @@ export default function NoteForm({ eventId, clientAirtableId, clients, redirectT
 
     setSaving(true)
     try {
-      const res = await fetch('/api/notes/create', {
+      const res = await fetch('/api/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           body: body.trim(),
-          eventId: eventId || undefined,
-          clientAirtableId: resolvedClientId || undefined,
+          subjectPersonId: resolvedClientId || undefined,
+          relationshipContextId: resolvedContextId || undefined,
+          meetingId: meetingId || undefined,
+          noteType,
         }),
       })
 
@@ -77,7 +106,6 @@ export default function NoteForm({ eventId, clientAirtableId, clients, redirectT
       if (redirectTo) {
         router.push(redirectTo)
       } else {
-        // Refresh server data on the session page to show the new note
         router.refresh()
         setTimeout(() => setSaved(false), 3000)
       }
@@ -109,6 +137,25 @@ export default function NoteForm({ eventId, clientAirtableId, clients, redirectT
           </Select>
         </div>
       )}
+
+      {/* Note Type */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Note Type
+        </label>
+        <Select value={noteType} onValueChange={setNoteType}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {NOTE_TYPES.map((t) => (
+              <SelectItem key={t.value} value={t.value}>
+                {t.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Body */}
       <div className="space-y-1.5">

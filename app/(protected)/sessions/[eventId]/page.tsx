@@ -3,7 +3,7 @@ import { ArrowLeft } from 'lucide-react'
 import { getMeetingById } from '@/lib/airtable/meetings'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import { getRelationshipContexts } from '@/lib/airtable/relationships'
-import { getSessionNoteByEventId } from '@/lib/airtable/sessionNotes'
+import { getNotesByMeetingId } from '@/lib/airtable/notes'
 import { getPermissionLevel, canWrite } from '@/lib/auth/permissions'
 import { formatEastern } from '@/lib/utils/dateFormat'
 import SessionNoteForm from './SessionNoteForm'
@@ -48,7 +48,7 @@ export default async function SessionPage({ params }: Props) {
   const matchedContext = meeting.relationshipContextId
     ? contexts.find((c) => c.id === meeting.relationshipContextId)
     : null
-  const clientAirtableId = matchedContext?.clientAirtableId ?? undefined
+  const clientAirtableId = matchedContext?.personId ?? undefined
 
   // Permission level for this session's client
   const permissionLevel = clientAirtableId
@@ -57,15 +57,11 @@ export default async function SessionPage({ params }: Props) {
 
   const userCanWrite = canWrite(permissionLevel)
 
-  // Fetch the session note for this event (scoped to this coach)
-  const existingNote =
-    meeting.providerEventId && userRecord.airtableId
-      ? await getSessionNoteByEventId(meeting.providerEventId, userRecord.airtableId)
-      : null
-
-  const sessionDate = meeting.startTime
-    ? meeting.startTime.slice(0, 10)
-    : new Date().toISOString().slice(0, 10)
+  // Fetch the session note for this meeting written by this author
+  const allMeetingNotes = await getNotesByMeetingId(eventId)
+  const existingNote = userRecord.airtableId
+    ? allMeetingNotes.find((n) => n.authorPersonId === userRecord.airtableId) ?? null
+    : null
 
   return (
     <div className="px-4 py-5 md:p-8 max-w-2xl mx-auto space-y-6">
@@ -105,8 +101,8 @@ export default async function SessionPage({ params }: Props) {
         {existingNote && (
           <p className="text-xs text-slate-400 mb-5">
             Last updated{' '}
-            {existingNote.sessionDate
-              ? new Date(existingNote.sessionDate + 'T12:00:00').toLocaleDateString('en-US', {
+            {existingNote.createdAt
+              ? new Date(existingNote.createdAt).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
                   year: 'numeric',
@@ -117,17 +113,16 @@ export default async function SessionPage({ params }: Props) {
 
         {userCanWrite ? (
           <SessionNoteForm
-            eventProviderId={meeting.providerEventId ?? eventId}
-            clientAirtableId={clientAirtableId}
-            sessionDate={sessionDate}
+            meetingId={eventId}
+            subjectPersonId={clientAirtableId}
+            relationshipContextId={matchedContext?.id}
             existingNote={existingNote ?? undefined}
           />
         ) : existingNote ? (
           // Read-only view for non-coaches
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-slate-900">{existingNote.title}</h3>
             <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-              {existingNote.content}
+              {existingNote.body}
             </p>
           </div>
         ) : (

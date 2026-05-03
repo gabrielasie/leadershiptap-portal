@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
-import { getSessionNotes, updateSessionNote } from '@/lib/airtable/sessionNotes'
+import { getNotesByAuthor, updateNote } from '@/lib/airtable/notes'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -13,28 +13,26 @@ export async function PATCH(req: Request, { params }: Props) {
 
   const userRecord = await getCurrentUserRecord()
   if (!userRecord.airtableId) {
-    return NextResponse.json({ error: 'Coach record not found' }, { status: 400 })
+    return NextResponse.json({ error: 'User record not found' }, { status: 400 })
   }
 
   const { id } = await params
 
   // Verify ownership: only the note's author can update it
-  const notes = await getSessionNotes(userRecord.airtableId)
-  const existing = notes.find((n) => n.id === id)
+  const authorNotes = await getNotesByAuthor(userRecord.airtableId)
+  const existing = authorNotes.find((n) => n.id === id)
   if (!existing) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const body = (await req.json()) as {
-    title?: string
-    content?: string
-    sessionDate?: string
+  const body = (await req.json()) as { body?: string }
+  if (!body.body?.trim()) {
+    return NextResponse.json({ error: 'Note body is required' }, { status: 400 })
   }
 
-  const updated = await updateSessionNote(id, {
-    title: body.title?.trim(),
-    content: body.content?.trim(),
-    sessionDate: body.sessionDate,
-  })
-  return NextResponse.json(updated)
+  const result = await updateNote(id, body.body.trim())
+  if ('error' in result) {
+    return NextResponse.json({ error: result.error }, { status: 500 })
+  }
+  return NextResponse.json({ success: true })
 }

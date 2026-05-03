@@ -2,40 +2,37 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { Pencil } from 'lucide-react'
 import { dashboardUpdateTaskStatusAction } from './actions'
 import EditTaskDialog from './EditTaskDialog'
-
-type Status = 'pending' | 'in progress' | 'completed'
+import type { TaskStatus } from '@/lib/types'
 
 export interface DashboardTask {
   id: string
   name: string
-  status: Status
+  status: TaskStatus
   dueDate: string | null
-  notes: string | null
-  clientId: string | null
-  clientName: string | null
-  assignedToId?: string | null
-  assignedToName?: string | null
-  assignmentType?: 'personal' | 'shared_with_client' | 'delegated_to_coach' | null
+  description: string | null
+  assignedToPersonId: string | null
+  assignedToName: string | null   // resolved from users map
+  createdByPersonId: string | null
+  taskType: 'personal_reminder' | 'assignment' | null
 }
 
 export default function DashboardTaskItem({ task }: { task: DashboardTask }) {
   const router = useRouter()
-  const [optimisticStatus, setOptimisticStatus] = useState<Status>(task.status)
+  const [optimisticStatus, setOptimisticStatus] = useState<TaskStatus>(task.status)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [editOpen, setEditOpen] = useState(false)
 
-  const isDone = optimisticStatus === 'completed'
+  const isDone = optimisticStatus === 'Complete'
   const isOverdue =
     task.dueDate && !isDone && new Date(task.dueDate + 'T23:59:59') < new Date()
 
   async function toggle() {
     const prev = optimisticStatus
-    const next: Status = isDone ? 'pending' : 'completed'
+    const next: TaskStatus = isDone ? 'Not Started' : 'Complete'
     setOptimisticStatus(next)
     setError('')
     setLoading(true)
@@ -80,24 +77,10 @@ export default function DashboardTaskItem({ task }: { task: DashboardTask }) {
             {task.name}
           </p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            {task.assignmentType === 'shared_with_client' && task.assignedToName && (
+            {task.taskType === 'assignment' && task.assignedToName && (
               <span className="text-xs font-medium text-blue-700">
                 → {task.assignedToName}
               </span>
-            )}
-            {task.assignmentType === 'delegated_to_coach' && task.assignedToName && (
-              <span className="text-xs font-medium text-purple-700">
-                → {task.assignedToName}
-              </span>
-            )}
-            {!task.assignmentType && task.clientId && task.clientName && (
-              <Link
-                href={`/users/${task.clientId}`}
-                className="text-xs text-[hsl(213,70%,30%)] hover:underline"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {task.clientName}
-              </Link>
             )}
             {task.dueDate && (
               <span

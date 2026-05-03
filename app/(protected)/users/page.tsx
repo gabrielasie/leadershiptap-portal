@@ -73,15 +73,15 @@ export default async function UsersPage() {
   // ── Notes count per user ─────────────────────────────────────────────────
   const noteCountByUser = new Map<string, number>()
   for (const note of allRecentNotes) {
-    if (!note.userId) continue
-    noteCountByUser.set(note.userId, (noteCountByUser.get(note.userId) ?? 0) + 1)
+    if (!note.subjectPersonId) continue
+    noteCountByUser.set(note.subjectPersonId, (noteCountByUser.get(note.subjectPersonId) ?? 0) + 1)
   }
 
   // ── Open tasks count per user ────────────────────────────────────────────
   const openTaskCountByUser = new Map<string, number>()
   for (const task of openTasks) {
-    if (!task.userId) continue
-    openTaskCountByUser.set(task.userId, (openTaskCountByUser.get(task.userId) ?? 0) + 1)
+    if (!task.assignedToPersonId) continue
+    openTaskCountByUser.set(task.assignedToPersonId, (openTaskCountByUser.get(task.assignedToPersonId) ?? 0) + 1)
   }
 
   // ── Last & next session per client name ──────────────────────────────────

@@ -12,8 +12,8 @@ import {
 
 export interface ClientNote {
   id: string
-  content: string
-  date: string
+  body: string
+  createdAt: string
 }
 
 export interface ClientRowProps {
@@ -31,14 +31,10 @@ export interface ClientRowProps {
 
 function formatNoteDate(dateStr: string): string {
   if (!dateStr) return ''
-  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
+  return new Date(dateStr).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
   })
-}
-
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10)
 }
 
 export default function ClientRowWithNotes({
@@ -59,7 +55,6 @@ export default function ClientRowWithNotes({
   // ── Edit state ───────────────────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
-  const [editDate, setEditDate] = useState('')
   const [editError, setEditError] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
@@ -71,21 +66,19 @@ export default function ClientRowWithNotes({
   // ── Add note state ───────────────────────────────────────────────────────────
   const [addOpen, setAddOpen] = useState(false)
   const [addContent, setAddContent] = useState('')
-  const [addDate, setAddDate] = useState(todayISO)
   const [addError, setAddError] = useState('')
   const [savingAdd, setSavingAdd] = useState(false)
 
   const mostRecentNote = notes[0] ?? null
   const previewText = mostRecentNote
-    ? mostRecentNote.content.slice(0, 80) + (mostRecentNote.content.length > 80 ? '…' : '')
+    ? mostRecentNote.body.slice(0, 80) + (mostRecentNote.body.length > 80 ? '…' : '')
     : null
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
   function startEdit(note: ClientNote) {
     setEditingId(note.id)
-    setEditContent(note.content)
-    setEditDate(note.date ?? todayISO())
+    setEditContent(note.body)
     setEditError('')
   }
 
@@ -98,7 +91,7 @@ export default function ClientRowWithNotes({
     if (!editContent.trim()) { setEditError('Note cannot be empty.'); return }
     setEditError('')
     setSavingEdit(true)
-    const result = await dashboardUpdateNoteAction(noteId, editContent.trim(), editDate)
+    const result = await dashboardUpdateNoteAction(noteId, editContent.trim())
     setSavingEdit(false)
     if (!result.success) { setEditError('Failed to save — try again.'); return }
     setEditingId(null)
@@ -118,7 +111,6 @@ export default function ClientRowWithNotes({
   function openAddNote() {
     setAddOpen(true)
     setAddContent('')
-    setAddDate(todayISO())
     setAddError('')
   }
 
@@ -126,7 +118,7 @@ export default function ClientRowWithNotes({
     if (!addContent.trim()) { setAddError('Note cannot be empty.'); return }
     setAddError('')
     setSavingAdd(true)
-    const result = await dashboardSaveNoteAction(clientId, addContent.trim(), addDate)
+    const result = await dashboardSaveNoteAction(clientId, addContent.trim())
     setSavingAdd(false)
     if (!result.success) { setAddError('Failed to save — try again.'); return }
     setAddOpen(false)
@@ -173,8 +165,8 @@ export default function ClientRowWithNotes({
               {previewText ? (
                 <p className="text-xs text-slate-400 truncate">
                   {previewText}
-                  {mostRecentNote?.date && (
-                    <span className="text-slate-300"> · {formatNoteDate(mostRecentNote.date)}</span>
+                  {mostRecentNote?.createdAt && (
+                    <span className="text-slate-300"> · {formatNoteDate(mostRecentNote.createdAt)}</span>
                   )}
                 </p>
               ) : (
@@ -219,13 +211,6 @@ export default function ClientRowWithNotes({
           {/* Add note inline form */}
           {addOpen && (
             <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50/30 p-3 space-y-2">
-              <input
-                type="date"
-                value={addDate}
-                onChange={(e) => setAddDate(e.target.value)}
-                max={todayISO()}
-                className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-              />
               {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
               <textarea
                 autoFocus
@@ -267,7 +252,7 @@ export default function ClientRowWithNotes({
                 return (
                   <div key={note.id} className="rounded-md border border-rose-200 bg-rose-50/40 p-3">
                     <p className="text-xs font-medium text-slate-700 mb-1">Delete this note?</p>
-                    <p className="text-xs text-slate-500 line-clamp-2 mb-3">{note.content}</p>
+                    <p className="text-xs text-slate-500 line-clamp-2 mb-3">{note.body}</p>
                     {deleteError && <p className="text-xs text-rose-500 mb-2">{deleteError}</p>}
                     <div className="flex gap-2">
                       <button
@@ -292,12 +277,6 @@ export default function ClientRowWithNotes({
               if (note.id === editingId) {
                 return (
                   <div key={note.id} className="rounded-md border border-blue-200 bg-blue-50/30 p-3 space-y-2">
-                    <input
-                      type="date"
-                      value={editDate}
-                      onChange={(e) => setEditDate(e.target.value)}
-                      className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-                    />
                     {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
                     <textarea
                       autoFocus
@@ -330,13 +309,13 @@ export default function ClientRowWithNotes({
               return (
                 <div key={note.id} className="group flex items-start gap-2 py-1.5 -mx-1 px-1 rounded-md">
                   <div className="flex-1 min-w-0">
-                    {note.date && (
+                    {note.createdAt && (
                       <span className="text-xs font-medium text-slate-400 mr-1.5">
-                        {formatNoteDate(note.date)} ·
+                        {formatNoteDate(note.createdAt)} ·
                       </span>
                     )}
                     <span className="text-xs text-slate-600 leading-relaxed line-clamp-1">
-                      {note.content}
+                      {note.body}
                     </span>
                   </div>
                   <div className="flex-shrink-0 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">

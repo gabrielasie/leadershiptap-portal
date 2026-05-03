@@ -7,8 +7,7 @@ import { getAllMeetings, getAllUpcomingMeetings } from '@/lib/airtable/meetings'
 import { buildEmailToUserMap, findClientForMeeting, groupMeetingsByUser } from '@/lib/services/meetingsService'
 import { fetchAllMessages } from '@/lib/airtable/messages'
 import { getTasks } from '@/lib/airtable/tasks'
-import { getAllRecentNotes } from '@/lib/airtable/notes'
-import { getSessionNotes } from '@/lib/airtable/sessionNotes'
+import { getAllRecentNotes, getNotesByAuthor } from '@/lib/airtable/notes'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import DashboardQuickActions from './DashboardQuickActions'
 import UpcomingSessionsCard, { type UpcomingItem } from './UpcomingSessionsCard'
@@ -122,7 +121,7 @@ export default async function DashboardPage() {
   // calendar — prevents Coach A from ever seeing Coach B's events.
   const ownerEmail = userRecord.email || undefined
 
-  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, allRecentNotes, portalEvents, coachContexts, coachSessionNotes, coachUsers] = await Promise.all([
+  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, allRecentNotes, portalEvents, coachContexts, coachNotes, coachUsers] = await Promise.all([
     // Admins see all users; coaches see only clients with an active Relationship Context.
     isAdmin || !userRecord.airtableId
       ? getUsers(sessionUser)
@@ -137,9 +136,9 @@ export default async function DashboardPage() {
     !isAdmin && userRecord.airtableId
       ? getRelationshipContexts(userRecord.airtableId)
       : Promise.resolve([]),
-    // Session notes for "has note" indicator on meeting cards
+    // Notes authored by this coach — used for "has note" indicator on meeting cards
     userRecord.airtableId
-      ? getSessionNotes(userRecord.airtableId)
+      ? getNotesByAuthor(userRecord.airtableId)
       : Promise.resolve([]),
     // Co-coaches for the task assignment dropdown (exclude current user)
     getPortalCoaches(userRecord.airtableId ?? undefined),
@@ -149,9 +148,9 @@ export default async function DashboardPage() {
   const emailToUser = buildEmailToUserMap(users)
   const now = new Date()
 
-  // Provider Event IDs that already have a session note — used for card badge
-  const notedProviderIds = new Set(
-    coachSessionNotes.map((n) => n.eventProviderId).filter(Boolean),
+  // Meeting record IDs that already have a note — used for card badge
+  const notedMeetingIds = new Set(
+    coachNotes.map((n) => n.meetingId).filter(Boolean) as string[],
   )
 
   // For coaches: only show calendar events whose Relationship Context ID is
@@ -228,9 +227,7 @@ export default async function DashboardPage() {
         return domains.slice(0, 2).join(', ') || null
       })(),
       participantEmails: externalEmails,
-      hasNote: meeting.providerEventId
-        ? notedProviderIds.has(meeting.providerEventId)
-        : false,
+      hasNote: notedMeetingIds.has(meeting.id),
     }
   })
 
@@ -268,28 +265,27 @@ export default async function DashboardPage() {
 
   const idToUser = new Map(users.map((u) => [u.id, u]))
   const openTasks: DashboardTask[] = rawOpenTasks.map((task) => {
-    const client = task.userId ? (idToUser.get(task.userId) ?? null) : null
+    const assignedUser = task.assignedToPersonId ? (idToUser.get(task.assignedToPersonId) ?? null) : null
     return {
       id: task.id,
       name: task.name,
-      status: (task.status ?? 'pending') as DashboardTask['status'],
+      status: task.status,
       dueDate: task.dueDate ?? null,
-      notes: task.notes ?? null,
-      clientId: client?.id ?? null,
-      clientName: client ? getDisplayName(client) : null,
-      assignedToId: task.assignedToId ?? null,
-      assignedToName: task.assignedToName ?? null,
-      assignmentType: task.assignmentType ?? null,
+      description: task.description ?? null,
+      assignedToPersonId: task.assignedToPersonId ?? null,
+      assignedToName: assignedUser ? getDisplayName(assignedUser) : null,
+      createdByPersonId: task.createdByPersonId ?? null,
+      taskType: task.taskType ?? null,
     }
   })
 
   // ── Notes grouped by client ────────────────────────────────────────────────
 
-  const notesByClient = new Map<string, Array<{ id: string; content: string; date: string }>>()
+  const notesByClient = new Map<string, Array<{ id: string; body: string; createdAt: string }>>()
   for (const note of allRecentNotes) {
-    if (!note.userId) continue
-    if (!notesByClient.has(note.userId)) notesByClient.set(note.userId, [])
-    notesByClient.get(note.userId)!.push({ id: note.id, content: note.content, date: note.date })
+    if (!note.subjectPersonId) continue
+    if (!notesByClient.has(note.subjectPersonId)) notesByClient.set(note.subjectPersonId, [])
+    notesByClient.get(note.subjectPersonId)!.push({ id: note.id, body: note.body, createdAt: note.createdAt })
   }
 
   // ── Client activity ────────────────────────────────────────────────────────
@@ -607,7 +603,7 @@ export default async function DashboardPage() {
           <h2 className="text-sm font-semibold text-slate-900 mb-3">All Recent Activity</h2>
           <div className="space-y-2">
             {allRecentNotes.slice(0, 20).map((note) => {
-              const client = note.userId ? (idToUser.get(note.userId) ?? null) : null
+              const client = note.subjectPersonId ? (idToUser.get(note.subjectPersonId) ?? null) : null
               return (
                 <div
                   key={note.id}
@@ -624,10 +620,10 @@ export default async function DashboardPage() {
                     ) : (
                       <span>Unknown client</span>
                     )}
-                    {note.date && (
+                    {note.createdAt && (
                       <>
                         {' · '}
-                        {new Date(note.date + 'T12:00:00').toLocaleDateString('en-US', {
+                        {new Date(note.createdAt).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
                         })}
@@ -635,7 +631,7 @@ export default async function DashboardPage() {
                     )}
                   </p>
                   <p className="text-sm text-slate-700 line-clamp-2 leading-relaxed">
-                    {note.content}
+                    {note.body}
                   </p>
                 </div>
               )

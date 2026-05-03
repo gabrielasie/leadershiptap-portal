@@ -7,7 +7,7 @@ import type { Note } from '@/lib/types'
 
 function formatNoteDate(dateStr: string): string {
   if (!dateStr) return ''
-  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
+  return new Date(dateStr).toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
@@ -17,8 +17,7 @@ function formatNoteDate(dateStr: string): string {
 export default function NoteItem({ note }: { note: Note }) {
   const router = useRouter()
   const [mode, setMode] = useState<'view' | 'edit' | 'confirmDelete'>('view')
-  const [content, setContent] = useState(note.content)
-  const [date, setDate] = useState(note.date ?? '')
+  const [content, setContent] = useState(note.body)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
@@ -27,7 +26,7 @@ export default function NoteItem({ note }: { note: Note }) {
     if (!content.trim()) { setError('Note cannot be empty.'); return }
     setSaving(true)
     setError('')
-    const result = await updateNoteAction(note.id, content.trim(), date)
+    const result = await updateNoteAction(note.id, content.trim())
     setSaving(false)
     if (result.success) {
       setMode('view')
@@ -38,8 +37,7 @@ export default function NoteItem({ note }: { note: Note }) {
   }
 
   function handleCancel() {
-    setContent(note.content)
-    setDate(note.date ?? '')
+    setContent(note.body)
     setError('')
     setMode('view')
   }
@@ -79,9 +77,9 @@ export default function NoteItem({ note }: { note: Note }) {
         <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed pr-20">
           {content}
         </p>
-        {date && (
+        {note.createdAt && (
           <p className="text-xs font-medium text-slate-400 mt-2">
-            {formatNoteDate(date)}
+            {formatNoteDate(note.createdAt)}
           </p>
         )}
       </div>
@@ -92,15 +90,6 @@ export default function NoteItem({ note }: { note: Note }) {
   if (mode === 'edit') {
     return (
       <div className="rounded-lg border border-blue-200 bg-blue-50/30 p-4">
-        <div className="mb-3">
-          <label className="text-xs font-semibold text-slate-500 block mb-1">Date</label>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 w-auto"
-          />
-        </div>
         <div className="mb-3">
           <label className="text-xs font-semibold text-slate-500 block mb-1">Note</label>
           <textarea

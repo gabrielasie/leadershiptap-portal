@@ -1,27 +1,20 @@
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
-import { getClientsByRelationship } from '@/lib/services/usersService'
+import { getRelationshipContexts } from '@/lib/airtable/relationships'
 import NoteForm from '../NoteForm'
-import type { User } from '@/lib/types'
-
-function getDisplayName(user: User): string {
-  if (user.fullName) return user.fullName
-  if (user.firstName || user.lastName)
-    return [user.firstName, user.lastName].filter(Boolean).join(' ')
-  return user.preferredName ?? user.email
-}
 
 export default async function NewSessionNotePage() {
   const userRecord = await getCurrentUserRecord()
 
-  const clients = userRecord.airtableId
-    ? await getClientsByRelationship(userRecord.airtableId)
+  const contexts = userRecord.airtableId
+    ? await getRelationshipContexts(userRecord.airtableId)
     : []
 
-  const clientOptions = clients.map((u) => ({
-    id: u.id,
-    name: getDisplayName(u),
+  const clientOptions = contexts.map((ctx) => ({
+    id: ctx.personId,
+    name: ctx.personName,
+    relationshipContextId: ctx.id,
   }))
 
   return (

@@ -1,5 +1,7 @@
+import { TABLES, FIELDS } from '@/lib/airtable/constants'
+
 const API_BASE = 'https://api.airtable.com/v0'
-const TABLE = 'Portal Calendar Events'
+const TABLE = TABLES.MEETINGS
 
 function getCredentials() {
   const apiKey = process.env.AIRTABLE_API_KEY
@@ -15,16 +17,16 @@ export interface CalendarEventUpsertFields {
   end: string
 }
 
-// Find an existing Portal Calendar Events record by Provider Event ID.
+// Find an existing Meetings record by Provider Event ID.
 async function findByProviderEventId(
   apiKey: string,
   baseId: string,
   providerEventId: string,
 ): Promise<string | null> {
   const safe = providerEventId.replace(/"/g, '\\"')
-  const formula = encodeURIComponent(`({Provider Event ID}="${safe}")`)
+  const formula = encodeURIComponent(`({${FIELDS.MEETINGS.PROVIDER_EVENT_ID}}="${safe}")`)
   const res = await fetch(
-    `${API_BASE}/${baseId}/${encodeURIComponent(TABLE)}?filterByFormula=${formula}&maxRecords=1&fields[]=Provider%20Event%20ID`,
+    `${API_BASE}/${baseId}/${encodeURIComponent(TABLE)}?filterByFormula=${formula}&maxRecords=1&fields[]=${encodeURIComponent(FIELDS.MEETINGS.PROVIDER_EVENT_ID)}`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
   )
   if (!res.ok) return null
@@ -37,12 +39,12 @@ export async function upsertCalendarEvent(
 ): Promise<void> {
   const { apiKey, baseId } = getCredentials()
 
-  // Exactly the 4 fields that exist in Portal Calendar Events.
+  // Exactly the 4 fields that exist in the Meetings table.
   const writeFields = {
-    'Subject': fields.subject,
-    'Start': fields.start,
-    'End': fields.end,
-    'Provider Event ID': fields.providerEventId,
+    [FIELDS.MEETINGS.TITLE]: fields.subject,
+    [FIELDS.MEETINGS.START]: fields.start,
+    [FIELDS.MEETINGS.END]: fields.end,
+    [FIELDS.MEETINGS.PROVIDER_EVENT_ID]: fields.providerEventId,
   }
 
   const existingId = await findByProviderEventId(apiKey, baseId, fields.providerEventId)

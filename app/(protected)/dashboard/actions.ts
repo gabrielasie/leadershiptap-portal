@@ -1,15 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createTask, updateTask, updateTaskStatus, deleteTask, type CreateTaskData } from '@/lib/airtable/tasks'
+import { createTask, updateTask, updateTaskStatus, deleteTask, type UpdateTaskData } from '@/lib/airtable/tasks'
+import type { TaskStatus } from '@/lib/types'
 import { createNote, updateNote, deleteNote } from '@/lib/airtable/notes'
 import { getMeetingsByUserEmail, updatePortalEventNotes } from '@/lib/airtable/meetings'
 import { upsertCoachSession } from '@/lib/airtable/coachSessions'
 import { getUserById } from '@/lib/services/usersService'
-import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
-
-type TaskStatus = 'pending' | 'in progress' | 'completed'
 
 export async function dashboardUpdateTaskStatusAction(
   taskId: string,
@@ -26,14 +24,9 @@ export async function dashboardUpdateTaskStatusAction(
 
 export async function dashboardUpdateTaskAction(
   taskId: string,
-  fields: {
-    Title?: string
-    Status?: TaskStatus
-    'Due Date'?: string | null
-    Notes?: string
-  },
+  data: UpdateTaskData,
 ): Promise<{ success: boolean; error?: string }> {
-  const result = await updateTask(taskId, fields)
+  const result = await updateTask(taskId, data)
   if ('error' in result) {
     console.error('[dashboardUpdateTaskAction]', result.error)
     return { success: false, error: result.error }
@@ -54,15 +47,24 @@ export async function dashboardDeleteTaskAction(
   return { success: true }
 }
 
-export async function dashboardCreateTaskAction(
-  data: Omit<CreateTaskData, 'coachAirtableId'>,
-): Promise<{ success: boolean; error?: string }> {
+export async function dashboardCreateTaskAction(data: {
+  title: string
+  description?: string
+  dueDate?: string
+  assignedToPersonId?: string   // undefined → self-assign (personal_reminder)
+}): Promise<{ success: boolean; error?: string }> {
   try {
     const userRecord = await getCurrentUserRecord()
     if (!userRecord.airtableId) {
       return { success: false, error: 'Could not resolve your coach record.' }
     }
-    await createTask({ ...data, coachAirtableId: userRecord.airtableId })
+    await createTask({
+      title: data.title,
+      description: data.description,
+      dueDate: data.dueDate,
+      createdByPersonId: userRecord.airtableId,
+      assignedToPersonId: data.assignedToPersonId ?? userRecord.airtableId,
+    })
     revalidatePath('/dashboard')
     return { success: true }
   } catch (err) {
@@ -104,13 +106,12 @@ export async function dashboardLogNoteAction(params: {
   content: string
   meetingId?: string
 }): Promise<{ success: boolean; error?: string }> {
-  const today = new Date().toISOString().slice(0, 10)
   try {
+    const userRecord = await getCurrentUserRecord()
+    if (!userRecord.airtableId) {
+      return { success: false, error: 'Could not resolve your coach record.' }
+    }
     if (params.meetingId) {
-      const userRecord = await getCurrentUserRecord()
-      if (!userRecord.airtableId) {
-        return { success: false, error: 'Could not resolve your coach record.' }
-      }
       await upsertCoachSession(
         userRecord.airtableId,
         params.meetingId,
@@ -119,8 +120,11 @@ export async function dashboardLogNoteAction(params: {
       )
       revalidatePath(`/users/${params.clientId}`)
     } else {
-      const sessionUser = await getSessionUser()
-      await createNote(params.clientId, params.content, today, sessionUser)
+      await createNote({
+        body: params.content,
+        authorPersonId: userRecord.airtableId,
+        subjectPersonId: params.clientId,
+      })
     }
     revalidatePath('/dashboard')
     return { success: true }
@@ -133,11 +137,17 @@ export async function dashboardLogNoteAction(params: {
 export async function dashboardSaveNoteAction(
   clientId: string,
   content: string,
-  date: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const sessionUser = await getSessionUser()
-    await createNote(clientId, content, date, sessionUser)
+    const userRecord = await getCurrentUserRecord()
+    if (!userRecord.airtableId) {
+      return { success: false, error: 'Could not resolve your coach record.' }
+    }
+    await createNote({
+      body: content,
+      authorPersonId: userRecord.airtableId,
+      subjectPersonId: clientId,
+    })
     revalidatePath('/dashboard')
     return { success: true }
   } catch (err) {
@@ -148,10 +158,9 @@ export async function dashboardSaveNoteAction(
 
 export async function dashboardUpdateNoteAction(
   noteId: string,
-  content: string,
-  date: string,
+  body: string,
 ): Promise<{ success: boolean }> {
-  const result = await updateNote(noteId, content, date)
+  const result = await updateNote(noteId, body)
   if ('error' in result) {
     console.error('[dashboardUpdateNoteAction]', result.error)
     return { success: false }

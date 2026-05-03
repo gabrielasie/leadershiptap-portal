@@ -1,10 +1,12 @@
 import { auth } from '@clerk/nextjs/server'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
+import { TABLES, FIELDS } from '@/lib/airtable/constants'
 
-export const maxDuration = 30
+export const maxDuration = 60
 
 const AIRTABLE_API = 'https://api.airtable.com/v0'
 const GRAPH_API = 'https://graph.microsoft.com/v1.0'
+const MEETINGS_TABLE = encodeURIComponent(TABLES.MEETINGS)
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -24,8 +26,6 @@ async function resolveAuth(request: Request): Promise<AuthResult> {
   }
   const { userId } = await auth()
   if (!userId) return { authorized: false }
-
-  // Clerk session: scope to just this coach's Work Email (same value matched in Airtable)
   const userRecord = await getCurrentUserRecord()
   return { authorized: true, scopeToEmail: userRecord.email || null }
 }
@@ -38,17 +38,14 @@ async function getCoachEmails(): Promise<string[]> {
   if (!apiKey || !baseId) throw new Error('Missing AIRTABLE_API_KEY or AIRTABLE_BASE_ID')
 
   const formula = encodeURIComponent('SEARCH("@leadershiptap.com",{Work Email})')
-  const url = `${AIRTABLE_API}/${baseId}/Users?filterByFormula=${formula}&fields[]=Work%20Email&maxRecords=200`
-
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-    cache: 'no-store',
-  })
+  const res = await fetch(
+    `${AIRTABLE_API}/${baseId}/${TABLES.PEOPLE}?filterByFormula=${formula}&fields[]=Work%20Email&maxRecords=200`,
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+  )
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Airtable Users fetch failed (${res.status}): ${text}`)
   }
-
   const data = await res.json()
   const emails: string[] = []
   for (const record of data.records ?? []) {
@@ -58,87 +55,119 @@ async function getCoachEmails(): Promise<string[]> {
   return emails
 }
 
-// ── Sync index: people + relationship contexts ────────────────────────────────
-// Built once per sync run; passed into each upsertEvent call so we never
-// make per-event Airtable lookups.
+// ── Global sync index ─────────────────────────────────────────────────────────
+// Fetched once per sync run; used to build per-coach context maps in memory.
 
-interface PersonEntry {
+interface UserEntry {
   id: string
   name: string
+  firstName: string
+}
+
+interface ContextEntry {
+  id: string       // Relationship Context record ID
+  leadId: string   // coach's Airtable ID
+  personId: string // coachee's Airtable ID
+  personName: string
 }
 
 interface SyncIndex {
-  // Lowercase email → PersonEntry (both Work Email and Email fields indexed)
-  emailToPerson: Map<string, PersonEntry>
-  // "coachAirtableId|clientAirtableId" → relationship context record ID
-  contextByKey: Map<string, string>
-  // Lowercase coach email → Set of lowercase client emails with an active context
-  coachClientEmails: Map<string, Set<string>>
+  emailToUser: Map<string, UserEntry>  // lowercase email → user
+  idToEmails: Map<string, string[]>    // airtable ID → [lowercase emails]
+  contexts: ContextEntry[]             // all active relationship contexts
 }
 
 async function buildSyncIndex(apiKey: string, baseId: string): Promise<SyncIndex> {
-  // Fetch all Users: need record IDs, names, and emails for matching
-  const usersRes = await fetch(
-    `${AIRTABLE_API}/${baseId}/Users?fields[]=Full%20Name&fields[]=First%20Name&fields[]=Last%20Name&fields[]=Work%20Email&fields[]=Email&maxRecords=5000`,
-    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
-  )
-  const usersData = usersRes.ok ? await usersRes.json() : { records: [] }
+  const [usersRes, ctxRes] = await Promise.all([
+    fetch(
+      `${AIRTABLE_API}/${baseId}/${TABLES.PEOPLE}` +
+        `?fields[]=Full%20Name&fields[]=First%20Name&fields[]=Last%20Name` +
+        `&fields[]=Work%20Email&fields[]=Email&maxRecords=5000`,
+      { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+    ),
+    fetch(
+      `${AIRTABLE_API}/${baseId}/${encodeURIComponent(TABLES.RELATIONSHIP_CONTEXTS)}` +
+        `?filterByFormula=${encodeURIComponent(`{${FIELDS.RELATIONSHIP_CONTEXTS.STATUS}}="Active"`)}&maxRecords=5000`,
+      { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+    ),
+  ])
 
-  const emailToPerson = new Map<string, PersonEntry>()
+  const usersData = usersRes.ok ? await usersRes.json() : { records: [] }
+  const ctxData = ctxRes.ok ? await ctxRes.json() : { records: [] }
+
+  const emailToUser = new Map<string, UserEntry>()
+  const idToUser = new Map<string, UserEntry>()
+  const idToEmails = new Map<string, string[]>()
+
   for (const r of usersData.records ?? []) {
     const f = r.fields as Record<string, unknown>
     const fullName = (f['Full Name'] as string | undefined)?.trim()
-    const firstName = (f['First Name'] as string | undefined)?.trim()
+    const firstName = (f['First Name'] as string | undefined)?.trim() ?? ''
     const lastName = (f['Last Name'] as string | undefined)?.trim()
     const name = fullName || [firstName, lastName].filter(Boolean).join(' ') || '(Unknown)'
-    const entry: PersonEntry = { id: r.id as string, name }
+    const entry: UserEntry = { id: r.id as string, name, firstName }
+    idToUser.set(r.id as string, entry)
+
     const workEmail = (f['Work Email'] as string | undefined)?.toLowerCase().trim()
     const email = (f['Email'] as string | undefined)?.toLowerCase().trim()
-    if (workEmail) emailToPerson.set(workEmail, entry)
-    if (email && email !== workEmail) emailToPerson.set(email, entry)
+    const emails: string[] = []
+    if (workEmail) {
+      emailToUser.set(workEmail, entry)
+      emails.push(workEmail)
+    }
+    if (email && email !== workEmail) {
+      emailToUser.set(email, entry)
+      emails.push(email)
+    }
+    if (emails.length > 0) idToEmails.set(r.id as string, emails)
   }
 
-  // Fetch all active Relationship Contexts: Coach + Client linked IDs
-  const ctxRes = await fetch(
-    `${AIRTABLE_API}/${baseId}/${encodeURIComponent('Relationship Contexts')}?filterByFormula=${encodeURIComponent('{Status}="active"')}&fields[]=Coach&fields[]=Client&maxRecords=5000`,
-    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
-  )
-  const ctxData = ctxRes.ok ? await ctxRes.json() : { records: [] }
-
-  const contextByKey = new Map<string, string>()
+  const contexts: ContextEntry[] = []
   for (const r of ctxData.records ?? []) {
     const f = r.fields as Record<string, unknown>
-    const coachIds = Array.isArray(f['Coach']) ? (f['Coach'] as string[]) : []
-    const clientIds = Array.isArray(f['Client']) ? (f['Client'] as string[]) : []
-    for (const coachId of coachIds) {
-      for (const clientId of clientIds) {
-        contextByKey.set(`${coachId}|${clientId}`, r.id as string)
-      }
+    const leadIds = Array.isArray(f[FIELDS.RELATIONSHIP_CONTEXTS.LEAD])
+      ? (f[FIELDS.RELATIONSHIP_CONTEXTS.LEAD] as string[])
+      : []
+    const personIds = Array.isArray(f[FIELDS.RELATIONSHIP_CONTEXTS.PERSON])
+      ? (f[FIELDS.RELATIONSHIP_CONTEXTS.PERSON] as string[])
+      : []
+    if (leadIds.length === 0 || personIds.length === 0) continue
+    const leadId = leadIds[0]
+    const personId = personIds[0]
+    contexts.push({
+      id: r.id as string,
+      leadId,
+      personId,
+      personName: idToUser.get(personId)?.name ?? personId,
+    })
+  }
+
+  return { emailToUser, idToEmails, contexts }
+}
+
+// Per-coach context map: lowercase person email → match info
+type CoachContextMap = Map<string, { contextId: string; personId: string; personName: string }>
+
+function buildCoachContextMap(
+  coachEmail: string,
+  index: SyncIndex,
+): { contextMap: CoachContextMap; coachFirstName: string } {
+  const coachEntry = index.emailToUser.get(coachEmail.toLowerCase())
+  const contextMap: CoachContextMap = new Map()
+  if (!coachEntry) return { contextMap, coachFirstName: '' }
+
+  for (const ctx of index.contexts) {
+    if (ctx.leadId !== coachEntry.id) continue
+    for (const email of index.idToEmails.get(ctx.personId) ?? []) {
+      contextMap.set(email, {
+        contextId: ctx.id,
+        personId: ctx.personId,
+        personName: ctx.personName,
+      })
     }
   }
 
-  // Build inverse: airtable record ID → all known emails for that person
-  const idToEmails = new Map<string, string[]>()
-  for (const [email, entry] of emailToPerson) {
-    const list = idToEmails.get(entry.id) ?? []
-    list.push(email)
-    idToEmails.set(entry.id, list)
-  }
-
-  // Build coachEmail → Set<clientEmail> from the coach|client ID pairs in contextByKey
-  const coachClientEmails = new Map<string, Set<string>>()
-  for (const key of contextByKey.keys()) {
-    const [coachId, clientId] = key.split('|')
-    const coachEmails = idToEmails.get(coachId) ?? []
-    const clientEmails = idToEmails.get(clientId) ?? []
-    for (const coachEmail of coachEmails) {
-      if (!coachClientEmails.has(coachEmail)) coachClientEmails.set(coachEmail, new Set())
-      const clientSet = coachClientEmails.get(coachEmail)!
-      for (const ce of clientEmails) clientSet.add(ce)
-    }
-  }
-
-  return { emailToPerson, contextByKey, coachClientEmails }
+  return { contextMap, coachFirstName: coachEntry.firstName }
 }
 
 // ── Microsoft Graph: get access token ────────────────────────────────────────
@@ -153,7 +182,6 @@ async function getGraphToken(): Promise<string> {
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 10_000)
-
   let res: Response
   try {
     res = await fetch(
@@ -204,6 +232,7 @@ interface GraphEvent {
   id: string
   subject: string
   isCancelled?: boolean
+  iCalUId?: string
   start: GraphEventDateTime
   end: GraphEventDateTime
   attendees?: GraphAttendee[]
@@ -216,13 +245,12 @@ async function fetchEvents(token: string, email: string): Promise<GraphEvent[]> 
   const params = new URLSearchParams({
     startDateTime: now.toISOString(),
     endDateTime: end.toISOString(),
-    $select: 'id,subject,isCancelled,start,end,attendees',
+    $select: 'id,subject,isCancelled,iCalUId,start,end,attendees',
     $top: '500',
   })
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 15_000)
-
   let res: Response
   try {
     res = await fetch(
@@ -249,155 +277,141 @@ async function fetchEvents(token: string, email: string): Promise<GraphEvent[]> 
   return (data.value ?? []) as GraphEvent[]
 }
 
-// ── Airtable: upsert one Portal Calendar Events record ───────────────────────
+// ── Event pre-filter ──────────────────────────────────────────────────────────
 
-async function upsertEvent(
+const NOISE_PATTERN =
+  /buffer|focus day|recovery day|ooo|out of office|hold|block|haircut|lunch w\//i
+
+/**
+ * Returns true if the event should be discarded before attendee matching.
+ * Cancelled events are NOT passed here — they are handled separately.
+ */
+function shouldDiscard(event: GraphEvent, coachEmail: string): boolean {
+  const attendees = event.attendees ?? []
+  if (attendees.length === 0) return true
+
+  const coachLower = coachEmail.toLowerCase()
+  const others = attendees
+    .map((a) => a.emailAddress.address.toLowerCase())
+    .filter((e) => e !== coachLower)
+
+  if (others.length === 0) return true
+
+  const hasExternal = others.some((e) => !e.endsWith('@leadershiptap.com'))
+  if (!hasExternal) return true
+
+  if (NOISE_PATTERN.test(event.subject ?? '')) return true
+
+  return false
+}
+
+// ── Airtable: upsert one Meeting record (fan-out) ─────────────────────────────
+
+async function upsertMeeting(
   apiKey: string,
   baseId: string,
   event: GraphEvent,
   coachEmail: string,
-  syncIndex: SyncIndex,
+  coachFirstName: string,
+  contextId: string,
+  personName: string,
 ): Promise<void> {
   const start = event.start.dateTime ?? event.start.date
   const end = event.end.dateTime ?? event.end.date
   if (!start || !end) throw new Error(`Event ${event.id} has no start/end`)
 
-  const coachLower = coachEmail.toLowerCase()
-
-  // Build participant list: all attendees excluding coach and other @leadershiptap.com addresses
-  const attendees = (event.attendees ?? []).filter(
-    (a) =>
-      a.emailAddress.address.toLowerCase() !== coachLower &&
-      !a.emailAddress.address.toLowerCase().includes('@leadershiptap.com'),
-  )
-
-  const participantEmails = attendees
-    .map((a) => a.emailAddress.address.trim())
-    .filter(Boolean)
-    .join(', ')
-
-  // Note Name: "YYYY-MM-DD // First Attendee Name-or-Email"
-  const dateStr = start.slice(0, 10) // YYYY-MM-DD from ISO
-  const firstAttendee = attendees[0]
-  const attendeeDisplay =
-    firstAttendee?.emailAddress.name?.trim() ||
-    firstAttendee?.emailAddress.address?.trim() ||
-    event.subject ||
-    '(No Attendee)'
-  const noteName = `${dateStr} // ${attendeeDisplay}`
-
-  // Match attendees against known Airtable people for canonical names and context IDs.
-  // Falls back to the Graph API attendee display name when no Airtable record exists
-  // (covers external clients who don't have portal accounts).
-  const coachEntry = syncIndex.emailToPerson.get(coachEmail.toLowerCase())
-  const clientNames: string[] = []
-  let matchedContextId = ''
-  let airtableMatchCount = 0
-  for (const a of attendees) {
-    const clientEntry = syncIndex.emailToPerson.get(a.emailAddress.address.toLowerCase())
-    if (clientEntry) {
-      clientNames.push(clientEntry.name)
-      airtableMatchCount++
-      if (!matchedContextId && coachEntry) {
-        const contextId = syncIndex.contextByKey.get(`${coachEntry.id}|${clientEntry.id}`)
-        if (contextId) matchedContextId = contextId
-      }
-    } else {
-      // Not in Airtable — use the display name from the calendar event
-      const graphName = a.emailAddress.name?.trim()
-      if (graphName) clientNames.push(graphName)
-    }
-  }
-  const matchedClientName = clientNames.join(', ')
-
-  // These fields are always written on both POST and PATCH.
-  // Notes is intentionally omitted — coaches fill it in manually.
   const fields = {
-    'Subject': event.subject ?? '(No Subject)',
-    'Start': start,
-    'End': end,
-    'Provider Event ID': event.id,
-    'Participant Emails': participantEmails,
-    'Note Name': noteName,
-    'Calendar Owner': coachEmail,
-    'Client Name': matchedClientName,
-    'Relationship Context ID': matchedContextId,
-    'Timezone': 'America/New_York',
+    [FIELDS.MEETINGS.TITLE]: `${coachFirstName} / ${personName} — ${event.subject ?? '(No Subject)'}`,
+    [FIELDS.MEETINGS.REL_CONTEXT]: [contextId],  // linked field — always an array
+    [FIELDS.MEETINGS.START]: start,
+    [FIELDS.MEETINGS.END]: end,
+    [FIELDS.MEETINGS.STATUS]: 'Scheduled',
+    [FIELDS.MEETINGS.PROVIDER]: 'Outlook',
+    [FIELDS.MEETINGS.PROVIDER_EVENT_ID]: event.id,
+    [FIELDS.MEETINGS.ICAL_UID]: event.iCalUId ?? '',
+    [FIELDS.MEETINGS.OWNER_EMAIL]: coachEmail,
+    [FIELDS.MEETINGS.TIMEZONE]: event.start.timeZone ?? 'America/New_York',
   }
 
-  const table = encodeURIComponent('Portal Calendar Events')
+  // Find existing records matching this Provider Event ID.
+  // Airtable formula filters on linked record fields return primary field values, not IDs,
+  // so we fetch all matches and filter by contextId in JavaScript.
   const safeId = event.id.replace(/"/g, '\\"')
-  const formula = encodeURIComponent(`({Provider Event ID}="${safeId}")`)
-
+  const formula = encodeURIComponent(`{${FIELDS.MEETINGS.PROVIDER_EVENT_ID}}="${safeId}"`)
   const findRes = await fetch(
-    `${AIRTABLE_API}/${baseId}/${table}?filterByFormula=${formula}&maxRecords=1&fields[]=Provider%20Event%20ID`,
+    `${AIRTABLE_API}/${baseId}/${MEETINGS_TABLE}?filterByFormula=${formula}&maxRecords=50` +
+      `&fields[]=${encodeURIComponent(FIELDS.MEETINGS.PROVIDER_EVENT_ID)}` +
+      `&fields[]=${encodeURIComponent(FIELDS.MEETINGS.REL_CONTEXT)}`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
   )
   const findData = findRes.ok ? await findRes.json() : { records: [] }
-  const existingId = (findData.records?.[0]?.id as string) ?? null
 
-  if (existingId) {
-    const res = await fetch(`${AIRTABLE_API}/${baseId}/${table}/${existingId}`, {
+  const existingRecord = (findData.records ?? []).find(
+    (r: { id: string; fields: Record<string, unknown> }) => {
+      const ctxIds = Array.isArray(r.fields[FIELDS.MEETINGS.REL_CONTEXT])
+        ? (r.fields[FIELDS.MEETINGS.REL_CONTEXT] as string[])
+        : []
+      return ctxIds.includes(contextId)
+    },
+  )
+
+  if (existingRecord) {
+    const res = await fetch(`${AIRTABLE_API}/${baseId}/${MEETINGS_TABLE}/${existingRecord.id}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields }),
     })
     if (!res.ok) {
       const text = await res.text()
-      throw new Error(`PATCH failed for ${event.id}: ${text}`)
+      throw new Error(`PATCH failed for ${event.id}|${contextId}: ${text}`)
     }
   } else {
-    const res = await fetch(`${AIRTABLE_API}/${baseId}/${table}`, {
+    const res = await fetch(`${AIRTABLE_API}/${baseId}/${MEETINGS_TABLE}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields }),
     })
     if (!res.ok) {
       const text = await res.text()
-      throw new Error(`POST failed for ${event.id}: ${text}`)
+      throw new Error(`POST failed for ${event.id}|${contextId}: ${text}`)
     }
   }
 }
 
-// ── Event pre-filter ──────────────────────────────────────────────────────────
+// ── Airtable: mark all Meeting records for an event as Cancelled ──────────────
 
-const NOISE_PATTERN = /buffer|focus day|recovery day|ooo|out of office|hold|block|haircut|lunch w\//i
-
-function shouldSyncEvent(event: GraphEvent, coachEmail: string): boolean {
-  // Skip cancelled events
-  if (event.isCancelled === true) return false
-  if (/^cancelled:/i.test(event.subject ?? '')) return false
-
-  const attendees = event.attendees ?? []
-
-  // No attendees at all — personal appointment, skip
-  if (attendees.length === 0) return false
-
-  const coachLower = coachEmail.toLowerCase()
-  const otherAttendees = attendees
-    .map((a) => a.emailAddress.address.toLowerCase())
-    .filter((email) => email !== coachLower)
-
-  // No one else invited — solo block, skip
-  if (otherAttendees.length === 0) return false
-
-  // All other attendees are @leadershiptap.com — internal meeting, skip
-  const hasExternalAttendee = otherAttendees.some(
-    (email) => !email.endsWith('@leadershiptap.com'),
+async function cancelMeetings(
+  apiKey: string,
+  baseId: string,
+  providerEventId: string,
+): Promise<number> {
+  const safeId = providerEventId.replace(/"/g, '\\"')
+  const formula = encodeURIComponent(`{${FIELDS.MEETINGS.PROVIDER_EVENT_ID}}="${safeId}"`)
+  const findRes = await fetch(
+    `${AIRTABLE_API}/${baseId}/${MEETINGS_TABLE}?filterByFormula=${formula}&maxRecords=50` +
+      `&fields[]=${encodeURIComponent(FIELDS.MEETINGS.PROVIDER_EVENT_ID)}`,
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
   )
-  if (!hasExternalAttendee) return false
+  if (!findRes.ok) return 0
+  const findData = await findRes.json()
 
-  // Subject-based noise filter
-  if (NOISE_PATTERN.test(event.subject ?? '')) return false
-
-  return true
+  let cancelled = 0
+  for (const r of findData.records ?? []) {
+    const patchRes = await fetch(`${AIRTABLE_API}/${baseId}/${MEETINGS_TABLE}/${r.id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { [FIELDS.MEETINGS.STATUS]: 'Cancelled' } }),
+    })
+    if (patchRes.ok) cancelled++
+  }
+  return cancelled
 }
 
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
   try {
-    console.log('[calendar/sync] Starting sync')
+    console.log('[sync] Starting sync')
 
     const authResult = await resolveAuth(request)
     if (!authResult.authorized) {
@@ -406,23 +420,26 @@ export async function POST(request: Request) {
 
     const { scopeToEmail } = authResult
     const isCron = scopeToEmail === null
-    console.log(isCron ? '[calendar/sync] Cron: syncing all coaches' : `[calendar/sync] Manual: scoped to ${scopeToEmail}`)
+    console.log(
+      isCron
+        ? '[sync] Cron: syncing all coaches'
+        : `[sync] Manual: scoped to ${scopeToEmail}`,
+    )
 
     // 1. Discover coach emails (all for cron; just the current user for manual)
     let coachEmails: string[]
     if (isCron) {
-      console.log('[calendar/sync] Fetching coach emails from Airtable...')
       try {
         coachEmails = await getCoachEmails()
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to fetch coach emails'
-        console.error('[calendar/sync]', msg)
+        console.error('[sync]', msg)
         return Response.json({ error: msg }, { status: 500 })
       }
     } else {
       coachEmails = [scopeToEmail!]
     }
-    console.log(`[calendar/sync] Found ${coachEmails.length} coaches:`, coachEmails)
+    console.log(`[sync] Found ${coachEmails.length} coaches:`, coachEmails)
 
     if (coachEmails.length === 0) {
       return Response.json({
@@ -433,87 +450,128 @@ export async function POST(request: Request) {
     }
 
     // 2. Get Graph token
-    console.log('[calendar/sync] Getting Graph token...')
     let token: string
     try {
       token = await getGraphToken()
-      console.log('[calendar/sync] Token received')
+      console.log('[sync] Graph token received')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to get Graph token'
-      console.error('[calendar/sync] Token failed:', msg)
+      console.error('[sync] Token failed:', msg)
       return Response.json({ error: msg }, { status: 500 })
     }
 
     const apiKey = process.env.AIRTABLE_API_KEY!
     const baseId = process.env.AIRTABLE_BASE_ID!
 
-    // 3. Build the people + relationship-context index (one fetch, used per-event)
-    console.log('[calendar/sync] Building sync index...')
+    // 3. Build the global people + relationship-context index (one fetch, used per-coach)
+    console.log('[sync] Building sync index...')
     const syncIndex = await buildSyncIndex(apiKey, baseId)
-    console.log(`[calendar/sync] Index: ${syncIndex.emailToPerson.size} people, ${syncIndex.contextByKey.size} context keys`)
+    console.log(
+      `[sync] Index: ${syncIndex.emailToUser.size} users, ${syncIndex.contexts.length} active contexts`,
+    )
 
-    // 4. Sync each mailbox
-    let synced = 0
+    // 4. Process each coach mailbox
+    let totalMeetings = 0
     const errors: string[] = []
     const syncedCoaches: string[] = []
 
-    for (const email of coachEmails) {
-      console.log(`[calendar/sync] Syncing ${email}...`)
+    for (const coachEmail of coachEmails) {
+      // Step 1: build this coach's personEmail → context map
+      const { contextMap, coachFirstName } = buildCoachContextMap(coachEmail, syncIndex)
 
+      if (contextMap.size === 0) {
+        console.warn(`[sync] ${coachEmail}: no active relationship contexts — skipping`)
+        syncedCoaches.push(coachEmail)
+        continue
+      }
+      console.log(`[sync] ${coachEmail}: ${contextMap.size} context entries`)
+
+      // Fetch events from Microsoft Graph
       let events: GraphEvent[]
       try {
-        events = await fetchEvents(token, email)
-        console.log(`[calendar/sync] ${email}: ${events.length} events before filtering`)
+        events = await fetchEvents(token, coachEmail)
+        console.log(`[sync] ${coachEmail}: ${events.length} events from Graph`)
       } catch (err) {
-        const msg = err instanceof Error ? err.message : `Failed to fetch events for ${email}`
-        console.error(`[calendar/sync] ${msg}`)
+        const msg = err instanceof Error ? err.message : `Failed to fetch events for ${coachEmail}`
+        console.error(`[sync] ${msg}`)
         errors.push(msg)
         continue
       }
 
-      events = events.filter((e) => shouldSyncEvent(e, email))
-      console.log(`[calendar/sync] ${email}: ${events.length} events after noise filtering`)
+      let fanOutCount = 0
+      let eventsProcessed = 0
+      let discarded = 0
+      const coachLower = coachEmail.toLowerCase()
 
-      // Filter to only events that include at least one known portal client.
-      // Fall back to all noise-filtered events if no relationship contexts are set up.
-      const clientSet = syncIndex.coachClientEmails.get(email.toLowerCase())
-      let filteredEvents: typeof events
-      if (!clientSet || clientSet.size === 0) {
-        console.warn(`[calendar/sync] No relationship contexts found for ${email} — syncing all events as fallback`)
-        filteredEvents = events
-      } else {
-        filteredEvents = events.filter((event) =>
-          (event.attendees ?? []).some(
-            (a) => clientSet.has(a.emailAddress.address.toLowerCase()),
-          ),
-        )
-        console.log(`[calendar/sync] ${email}: ${filteredEvents.length} client events (filtered from ${events.length} total)`)
-      }
+      for (const event of events) {
+        // Step 5: handle cancellations — mark existing records, skip fan-out
+        if (event.isCancelled === true || /^cancelled:/i.test(event.subject ?? '')) {
+          const n = await cancelMeetings(apiKey, baseId, event.id)
+          if (n > 0) {
+            console.log(`[sync] ${coachEmail}: cancelled ${n} meeting(s) for event ${event.id}`)
+          }
+          continue
+        }
 
-      let coachSynced = 0
-      let coachErrors = 0
-      for (const event of filteredEvents) {
-        try {
-          await upsertEvent(apiKey, baseId, event, email, syncIndex)
-          coachSynced++
-          synced++
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : `Failed to upsert ${event.id}`
-          console.error(`[calendar/sync] ${msg}`)
-          errors.push(msg)
-          coachErrors++
+        eventsProcessed++
+
+        // Step 2b–c: noise + attendee pre-filter
+        if (shouldDiscard(event, coachEmail)) {
+          discarded++
+          continue
+        }
+
+        // Step 2d: match each attendee against this coach's context map
+        const confirmedMatches: Array<{ contextId: string; personId: string; personName: string }> = []
+        for (const attendee of event.attendees ?? []) {
+          const email = attendee.emailAddress.address.toLowerCase()
+          if (email === coachLower) continue
+          const match = contextMap.get(email)
+          if (match) confirmedMatches.push(match)
+        }
+
+        // Step 2e: discard if no attendee matched a relationship context
+        if (confirmedMatches.length === 0) {
+          discarded++
+          continue
+        }
+
+        // Steps 3–4: upsert one Meeting record per confirmed match (fan-out)
+        for (const match of confirmedMatches) {
+          try {
+            await upsertMeeting(
+              apiKey,
+              baseId,
+              event,
+              coachEmail,
+              coachFirstName,
+              match.contextId,
+              match.personName,
+            )
+            fanOutCount++
+          } catch (err) {
+            const msg =
+              err instanceof Error ? err.message : `Failed to upsert ${event.id}|${match.contextId}`
+            console.error(`[sync] ${msg}`)
+            errors.push(msg)
+          }
         }
       }
-      console.log(`[calendar/sync] ${email}: ${coachSynced} upserted, ${coachErrors} errors`)
 
-      syncedCoaches.push(email)
+      console.log(
+        `[sync] ${coachEmail}: ${fanOutCount} meetings written from ${eventsProcessed} events (${discarded} discarded)`,
+      )
+      totalMeetings += fanOutCount
+      syncedCoaches.push(coachEmail)
     }
 
-    console.log(`[calendar/sync] Done: ${synced} events synced across ${syncedCoaches.length} mailboxes`)
-    return Response.json({ synced, coaches: syncedCoaches, errors })
+    console.log(
+      `[sync] Done: ${totalMeetings} meetings written across ${syncedCoaches.length} coaches`,
+    )
+    return Response.json({ synced: totalMeetings, coaches: syncedCoaches, errors })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unexpected error'
-    console.error('[calendar/sync] Unhandled error:', err)
+    console.error('[sync] Unhandled error:', err)
     return Response.json({ error: msg }, { status: 500 })
   }
 }

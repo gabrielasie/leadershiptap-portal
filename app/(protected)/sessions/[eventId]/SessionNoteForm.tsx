@@ -4,27 +4,25 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Input } from '@/components/ui/input'
-import type { SessionNote } from '@/lib/airtable/sessionNotes'
+import type { Note } from '@/lib/airtable/notes'
 
 interface Props {
-  eventProviderId: string
-  clientAirtableId?: string
-  sessionDate: string        // YYYY-MM-DD, pre-filled from the meeting's start time
-  existingNote?: SessionNote // present when editing
+  meetingId: string            // Airtable record ID of the Meeting
+  subjectPersonId?: string
+  relationshipContextId?: string
+  existingNote?: Note          // present when editing
 }
 
 export default function SessionNoteForm({
-  eventProviderId,
-  clientAirtableId,
-  sessionDate,
+  meetingId,
+  subjectPersonId,
+  relationshipContextId,
   existingNote,
 }: Props) {
   const router = useRouter()
   const isEdit = !!existingNote
 
-  const [title, setTitle] = useState(existingNote?.title ?? '')
-  const [content, setContent] = useState(existingNote?.content ?? '')
+  const [body, setBody] = useState(existingNote?.body ?? '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
@@ -33,28 +31,27 @@ export default function SessionNoteForm({
     e.preventDefault()
     setError('')
 
-    if (!title.trim()) { setError('Title is required.'); return }
-    if (!content.trim()) { setError('Content is required.'); return }
+    if (!body.trim()) { setError('Note cannot be empty.'); return }
 
     setSaving(true)
     try {
       let res: Response
       if (isEdit) {
-        res = await fetch(`/api/session-notes/${existingNote.id}`, {
+        res = await fetch(`/api/notes/${existingNote.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: title.trim(), content: content.trim() }),
+          body: JSON.stringify({ body: body.trim() }),
         })
       } else {
-        res = await fetch('/api/session-notes', {
+        res = await fetch('/api/notes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            title: title.trim(),
-            content: content.trim(),
-            eventProviderId,
-            clientAirtableId,
-            sessionDate,
+            body: body.trim(),
+            meetingId,
+            subjectPersonId,
+            relationshipContextId,
+            noteType: 'meeting_note',
           }),
         })
       }
@@ -75,28 +72,14 @@ export default function SessionNoteForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
 
-      {/* Title */}
-      <div className="space-y-1.5">
-        <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Title
-        </label>
-        <Input
-          placeholder="e.g. Q2 Leadership Review"
-          value={title}
-          onChange={(e) => { setTitle(e.target.value); setSaved(false) }}
-          disabled={saving}
-        />
-      </div>
-
-      {/* Content */}
       <div className="space-y-1.5">
         <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
           Notes
         </label>
         <Textarea
           placeholder="Session observations, themes, action items…"
-          value={content}
-          onChange={(e) => { setContent(e.target.value); setSaved(false) }}
+          value={body}
+          onChange={(e) => { setBody(e.target.value); setSaved(false) }}
           rows={8}
           disabled={saving}
           className="resize-y"

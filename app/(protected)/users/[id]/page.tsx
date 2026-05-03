@@ -269,7 +269,7 @@ export default async function UserDetailPage({ params }: Props) {
   ] = await Promise.all([
     getMeetingsForUser(contactEmail, sessionUser, id, currentUserRecord.email || undefined),
     getUserMessages(id),
-    getNotesByUser(id, sessionUser).catch(() => [] as Note[]),
+    getNotesByUser(id).catch(() => [] as Note[]),
     getTasksByUser(id).catch(() => [] as Task[]),
     managerId ? getUserById(managerId) : Promise.resolve(null),
     Promise.all(reportIds.map((rid) => getUserById(rid))),
@@ -379,17 +379,9 @@ export default async function UserDetailPage({ params }: Props) {
       {currentUserRecord.role !== 'admin' && (
         relationshipContext ? (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-700">
-            <span className="font-semibold">
-              {relationshipContext.relationshipType || 'Relationship'}
+            <span className="font-semibold capitalize">
+              {relationshipContext.relationshipType?.replace(/_/g, ' ') || 'Relationship'}
             </span>
-            {relationshipContext.permissionLevel && (
-              <>
-                <span className="text-emerald-300">·</span>
-                <span className="capitalize">
-                  {relationshipContext.permissionLevel.replace(/_/g, ' ')}
-                </span>
-              </>
-            )}
             {relationshipContext.startDate && (
               <>
                 <span className="text-emerald-300">·</span>

@@ -22,8 +22,7 @@ import {
 import { Trash2 } from 'lucide-react'
 import { dashboardUpdateTaskAction, dashboardDeleteTaskAction } from './actions'
 import type { DashboardTask } from './DashboardTaskItem'
-
-type Status = 'pending' | 'in progress' | 'completed'
+import type { TaskStatus } from '@/lib/types'
 
 interface Props {
   task: DashboardTask
@@ -35,9 +34,9 @@ interface Props {
 export default function EditTaskDialog({ task, open, onOpenChange, onSuccess }: Props) {
   const [isPending, startTransition] = useTransition()
   const [title, setTitle] = useState(task.name)
-  const [status, setStatus] = useState<Status>(task.status)
+  const [status, setStatus] = useState<TaskStatus>(task.status)
   const [dueDate, setDueDate] = useState(task.dueDate ?? '')
-  const [notes, setNotes] = useState(task.notes ?? '')
+  const [description, setDescription] = useState(task.description ?? '')
   const [errorMsg, setErrorMsg] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -47,7 +46,7 @@ export default function EditTaskDialog({ task, open, onOpenChange, onSuccess }: 
       setTitle(task.name)
       setStatus(task.status)
       setDueDate(task.dueDate ?? '')
-      setNotes(task.notes ?? '')
+      setDescription(task.description ?? '')
       setErrorMsg('')
       setConfirmDelete(false)
     }
@@ -57,22 +56,20 @@ export default function EditTaskDialog({ task, open, onOpenChange, onSuccess }: 
     if (!title.trim()) return
     setErrorMsg('')
     startTransition(async () => {
-      const fields: Parameters<typeof dashboardUpdateTaskAction>[1] = {}
-      if (title.trim() !== task.name) fields['Title'] = title.trim()
-      if (status !== task.status) fields['Status'] = status
+      const data: Parameters<typeof dashboardUpdateTaskAction>[1] = {}
+      if (title.trim() !== task.name) data.title = title.trim()
+      if (status !== task.status) data.status = status
       const origDue = task.dueDate ?? ''
-      if (dueDate !== origDue) {
-        fields['Due Date'] = dueDate || null  // null clears the field in Airtable
-      }
-      const origNotes = task.notes ?? ''
-      if (notes !== origNotes) fields['Notes'] = notes
+      if (dueDate !== origDue) data.dueDate = dueDate || null
+      const origDesc = task.description ?? ''
+      if (description !== origDesc) data.description = description
 
-      if (Object.keys(fields).length === 0) {
+      if (Object.keys(data).length === 0) {
         onOpenChange(false)
         return
       }
 
-      const result = await dashboardUpdateTaskAction(task.id, fields)
+      const result = await dashboardUpdateTaskAction(task.id, data)
       if (!result.success) {
         setErrorMsg('Failed to update task — please try again')
         return
@@ -117,11 +114,11 @@ export default function EditTaskDialog({ task, open, onOpenChange, onSuccess }: 
           </>
         ) : (
           <>
-            {task.clientName && (
+            {task.taskType === 'assignment' && task.assignedToName && (
               <div className="space-y-1">
-                <p className="text-xs font-medium text-slate-500">Client</p>
+                <p className="text-xs font-medium text-slate-500">Assigned To</p>
                 <p className="text-sm text-slate-700 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
-                  {task.clientName}
+                  {task.assignedToName}
                 </p>
               </div>
             )}
@@ -142,14 +139,15 @@ export default function EditTaskDialog({ task, open, onOpenChange, onSuccess }: 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="edit-status">Status</Label>
-                  <Select value={status} onValueChange={(v) => setStatus(v as Status)} disabled={isPending}>
+                  <Select value={status} onValueChange={(v) => setStatus(v as TaskStatus)} disabled={isPending}>
                     <SelectTrigger id="edit-status">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="in progress">In Progress</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="Not Started">Not Started</SelectItem>
+                      <SelectItem value="In Progress">In Progress</SelectItem>
+                      <SelectItem value="Complete">Complete</SelectItem>
+                      <SelectItem value="Cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -167,11 +165,11 @@ export default function EditTaskDialog({ task, open, onOpenChange, onSuccess }: 
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="edit-notes">Notes</Label>
+                <Label htmlFor="edit-description">Description</Label>
                 <Textarea
-                  id="edit-notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
+                  id="edit-description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                   rows={2}
                   disabled={isPending}
                 />

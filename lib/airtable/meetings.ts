@@ -1,7 +1,8 @@
 import type { Meeting } from "@/lib/types";
+import { TABLES, FIELDS } from "@/lib/airtable/constants";
 
 const API_BASE = "https://api.airtable.com/v0";
-const TABLE = "Portal%20Calendar%20Events";
+const TABLE = encodeURIComponent(TABLES.MEETINGS);
 
 function getCredentials() {
   const apiKey = process.env.AIRTABLE_API_KEY;
@@ -20,23 +21,22 @@ function parseEmails(raw: unknown): string[] {
   return items.map((e) => e.trim()).filter(Boolean);
 }
 
-// Maps a record from Portal Calendar Events
-// Fields: Subject, Start, End, Provider Event ID, Participant Emails, Notes, Note Name, Timezone
+// Maps a record from the Meetings table
 function mapRecord(record: { id: string; fields: Record<string, unknown> }): Meeting {
   return {
     id: record.id,
-    providerEventId: record.fields["Provider Event ID"] as string | undefined,
-    title: (record.fields["Subject"] as string) ?? "",
-    startTime: (record.fields["Start"] as string) ?? "",
-    endTime: record.fields["End"] as string | undefined,
-    timezone: (record.fields["Timezone"] as string) || undefined,
+    providerEventId: record.fields[FIELDS.MEETINGS.PROVIDER_EVENT_ID] as string | undefined,
+    title: (record.fields[FIELDS.MEETINGS.TITLE] as string) ?? "",
+    startTime: (record.fields[FIELDS.MEETINGS.START] as string) ?? "",
+    endTime: record.fields[FIELDS.MEETINGS.END] as string | undefined,
+    timezone: (record.fields[FIELDS.MEETINGS.TIMEZONE] as string) || undefined,
     senderEmail: undefined,
     participantEmails: parseEmails(record.fields["Participant Emails"]),
     notes: (record.fields["Notes"] as string) || undefined,
     sessionStatus: null,
     actionItems: null,
-    clientName: (record.fields["Client Name"] as string) || undefined,
-    relationshipContextId: (record.fields["Relationship Context ID"] as string) || undefined,
+    clientName: (record.fields[FIELDS.MEETINGS.CLIENT_NAME] as string) || undefined,
+    relationshipContextId: (record.fields[FIELDS.MEETINGS.REL_CONTEXT] as string) || undefined,
   };
 }
 
@@ -46,13 +46,13 @@ export async function getAllUpcomingMeetings(daysAhead = 7, ownerEmail?: string)
   const { apiKey, baseId } = getCredentials();
   const now = new Date().toISOString();
   const cutoff = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
-  const timeFilter = `AND(IS_AFTER({Start}, "${now}"), IS_BEFORE({Start}, "${cutoff}"))`;
+  const timeFilter = `AND(IS_AFTER({${FIELDS.MEETINGS.START}}, "${now}"), IS_BEFORE({${FIELDS.MEETINGS.START}}, "${cutoff}"))`;
   const safeOwner = ownerEmail ? ownerEmail.toLowerCase().replace(/"/g, '\\"') : null;
   const formula = safeOwner
-    ? `AND(${timeFilter}, LOWER({Calendar Owner}) = "${safeOwner}")`
+    ? `AND(${timeFilter}, LOWER({${FIELDS.MEETINGS.OWNER_EMAIL}}) = "${safeOwner}")`
     : timeFilter;
   const res = await fetch(
-    `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${encodeURIComponent(formula)}&sort%5B0%5D%5Bfield%5D=Start&sort%5B0%5D%5Bdirection%5D=asc&maxRecords=50`,
+    `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${encodeURIComponent(formula)}&sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.MEETINGS.START)}&sort%5B0%5D%5Bdirection%5D=asc&maxRecords=50`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: "no-store" },
   );
   if (!res.ok) {
@@ -69,10 +69,10 @@ export async function getAllMeetings(ownerEmail?: string): Promise<Meeting[]> {
   const { apiKey, baseId } = getCredentials();
   const safeOwner = ownerEmail ? ownerEmail.toLowerCase().replace(/"/g, '\\"') : null;
   const filterParam = safeOwner
-    ? `filterByFormula=${encodeURIComponent(`LOWER({Calendar Owner}) = "${safeOwner}"`)}&`
+    ? `filterByFormula=${encodeURIComponent(`LOWER({${FIELDS.MEETINGS.OWNER_EMAIL}}) = "${safeOwner}"`)}&`
     : '';
   const res = await fetch(
-    `${API_BASE}/${baseId}/${TABLE}?${filterParam}sort%5B0%5D%5Bfield%5D=Start&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=500`,
+    `${API_BASE}/${baseId}/${TABLE}?${filterParam}sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.MEETINGS.START)}&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=500`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: "no-store" },
   );
   if (!res.ok) {
@@ -92,10 +92,10 @@ export async function getMeetingsByUserEmail(email: string, ownerEmail?: string)
   const participantFilter = `SEARCH("${safeEmail}", LOWER({Participant Emails}))`;
   const safeOwner = ownerEmail ? ownerEmail.toLowerCase().replace(/"/g, '\\"') : null;
   const formula = safeOwner
-    ? `AND(${participantFilter}, LOWER({Calendar Owner}) = "${safeOwner}")`
+    ? `AND(${participantFilter}, LOWER({${FIELDS.MEETINGS.OWNER_EMAIL}}) = "${safeOwner}")`
     : participantFilter;
   const res = await fetch(
-    `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${encodeURIComponent(formula)}&sort%5B0%5D%5Bfield%5D=Start&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=100`,
+    `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${encodeURIComponent(formula)}&sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.MEETINGS.START)}&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=100`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: "no-store" },
   );
   if (!res.ok) {
@@ -106,7 +106,7 @@ export async function getMeetingsByUserEmail(email: string, ownerEmail?: string)
   return (data.records ?? []).map(mapRecord);
 }
 
-// Fetch a single Portal Calendar Events record by Airtable record ID
+// Fetch a single Meetings record by Airtable record ID
 export async function getMeetingById(meetingId: string): Promise<Meeting | null> {
   const { apiKey, baseId } = getCredentials();
   const res = await fetch(
@@ -118,7 +118,7 @@ export async function getMeetingById(meetingId: string): Promise<Meeting | null>
   return mapRecord(data);
 }
 
-// Patch the Notes field on a Portal Calendar Events record
+// Patch the Notes field on a Meetings record
 export async function updatePortalEventNotes(
   recordId: string,
   notes: string,

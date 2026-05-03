@@ -1,279 +1,252 @@
-import type { Task } from '@/lib/types';
+import type { Task, TaskStatus } from '@/lib/types'
+import { TABLES, FIELDS } from '@/lib/airtable/constants'
+import { getRelationshipContext } from '@/lib/airtable/relationships'
 
-const API_BASE = 'https://api.airtable.com/v0';
+const API_BASE = 'https://api.airtable.com/v0'
+const TABLE = encodeURIComponent(TABLES.TASKS)
 
 function getCredentials() {
-  const apiKey = process.env.AIRTABLE_API_KEY;
-  const baseId = process.env.AIRTABLE_BASE_ID;
-  if (!apiKey || !baseId) throw new Error('Missing Airtable credentials');
-  return { apiKey, baseId };
+  const apiKey = process.env.AIRTABLE_API_KEY
+  const baseId = process.env.AIRTABLE_BASE_ID
+  if (!apiKey || !baseId) throw new Error('Missing Airtable credentials')
+  return { apiKey, baseId }
 }
 
-function mapTaskRecord(record: { id: string; fields: Record<string, unknown> }): Task {
+type AirtableRecord = { id: string; fields: Record<string, unknown> }
+
+const OPEN_STATUSES: TaskStatus[] = ['Not Started', 'In Progress']
+
+function mapTaskRecord(r: AirtableRecord): Task {
+  const assignedIds = r.fields[FIELDS.TASKS.ASSIGNED_TO]
+  const createdIds = r.fields[FIELDS.TASKS.CREATED_BY]
+  const ctxIds = r.fields[FIELDS.TASKS.REL_CONTEXT]
+  const meetingIds = r.fields[FIELDS.TASKS.MEETING]
   return {
-    id: record.id,
-    name: (record.fields['Title'] as string) || 'Untitled',
-    status: (record.fields['Status'] as Task['status']) || 'pending',
-    dueDate: (record.fields['Due Date'] as string) || undefined,
-    notes: (record.fields['Notes'] as string) || undefined,
-    coachName: (record.fields['Coach Name'] as string) || undefined,
-    userId: Array.isArray(record.fields['Client'])
-      ? (record.fields['Client'] as string[])[0]
-      : undefined,
-    coachAirtableId: (record.fields['Coach Airtable ID'] as string) || undefined,
-    assignedToId: (record.fields['Assigned To'] as string) || undefined,
-    assignedToName: (record.fields['Assigned To Name'] as string) || undefined,
-    assignmentType: (record.fields['Assignment Type'] as Task['assignmentType']) || undefined,
-  };
+    id: r.id,
+    name: (r.fields[FIELDS.TASKS.TITLE] as string) || 'Untitled',
+    status: ((r.fields[FIELDS.TASKS.STATUS] as string) || 'Not Started') as TaskStatus,
+    dueDate: (r.fields[FIELDS.TASKS.DUE_DATE] as string) || undefined,
+    description: (r.fields[FIELDS.TASKS.DESCRIPTION] as string) || undefined,
+    taskType: (r.fields[FIELDS.TASKS.TYPE] as Task['taskType']) || undefined,
+    visibility: (r.fields[FIELDS.TASKS.VISIBILITY] as Task['visibility']) || undefined,
+    assignedToPersonId: Array.isArray(assignedIds) ? (assignedIds[0] as string) : undefined,
+    createdByPersonId: Array.isArray(createdIds) ? (createdIds[0] as string) : undefined,
+    relationshipContextId: Array.isArray(ctxIds) ? (ctxIds[0] as string) : undefined,
+    meetingId: Array.isArray(meetingIds) ? (meetingIds[0] as string) : undefined,
+  }
 }
 
-// ── Portal tasks (Tasks table) ────────────────────────────────────────────────
+function sortByDueDate(tasks: Task[]): Task[] {
+  return tasks.sort((a, b) => {
+    if (!a.dueDate && !b.dueDate) return 0
+    if (!a.dueDate) return 1
+    if (!b.dueDate) return -1
+    return a.dueDate.localeCompare(b.dueDate)
+  })
+}
 
 /**
- * Fetch all non-completed tasks created by a coach (filtered by Coach Airtable ID).
- * Requires the "Coach Airtable ID" plain-text field to exist on the Tasks table.
+ * Fetch open tasks authored by or assigned to a person.
+ * JS-filtered because Assigned To Person and Created By Person are linked fields.
  */
-export async function getTasks(coachAirtableId: string): Promise<Task[]> {
+export async function getTasks(personAirtableId: string): Promise<Task[]> {
   try {
     const { apiKey, baseId } = getCredentials()
-    const safe = coachAirtableId.replace(/"/g, '\\"')
-    const formula = encodeURIComponent(`AND({Coach Airtable ID}="${safe}",{Status}!="completed")`)
     const res = await fetch(
-      `${API_BASE}/${baseId}/Tasks?filterByFormula=${formula}&maxRecords=500`,
+      `${API_BASE}/${baseId}/${TABLE}?maxRecords=500`,
       { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
     )
     if (!res.ok) {
-      const text = await res.text()
-      console.warn('[getTasks] query failed:', text)
+      console.warn('[getTasks] query failed:', await res.text())
       return []
     }
     const data = await res.json()
-    const tasks = (data.records ?? []).map(mapTaskRecord)
-    tasks.sort((a: Task, b: Task) => {
-      if (!a.dueDate && !b.dueDate) return 0
-      if (!a.dueDate) return 1
-      if (!b.dueDate) return -1
-      return a.dueDate.localeCompare(b.dueDate)
-    })
-    return tasks
+    const tasks = (data.records ?? [])
+      .filter((r: AirtableRecord) => {
+        const assigned = r.fields[FIELDS.TASKS.ASSIGNED_TO]
+        const created = r.fields[FIELDS.TASKS.CREATED_BY]
+        const isInvolved =
+          (Array.isArray(assigned) && (assigned as string[]).includes(personAirtableId)) ||
+          (Array.isArray(created) && (created as string[]).includes(personAirtableId))
+        const status = r.fields[FIELDS.TASKS.STATUS] as string
+        const isOpen = OPEN_STATUSES.includes(status as TaskStatus)
+        return isInvolved && isOpen
+      })
+      .map(mapTaskRecord)
+    return sortByDueDate(tasks)
   } catch (err) {
     console.warn('[getTasks] unexpected error:', err)
     return []
   }
 }
 
+/**
+ * Fetch tasks assigned to a specific person — for the user profile page.
+ * Returns open tasks only.
+ */
 export async function getTasksByUser(userId: string): Promise<Task[]> {
   try {
-    const { apiKey, baseId } = getCredentials();
-    const res = await fetch(`${API_BASE}/${baseId}/Tasks`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      cache: 'no-store',
-    });
+    const { apiKey, baseId } = getCredentials()
+    const res = await fetch(
+      `${API_BASE}/${baseId}/${TABLE}?maxRecords=500`,
+      { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+    )
     if (!res.ok) {
-      const text = await res.text();
-      console.warn('[getTasksByUser] Tasks query failed:', text);
-      return [];
+      console.warn('[getTasksByUser] query failed:', await res.text())
+      return []
     }
-    const data = await res.json();
-    console.log('[getTasksByUser] total records fetched:', data.records?.length);
-
-    const tasks: Task[] = [];
-    for (const rec of (data.records ?? [])) {
-      const client = rec.fields['Client'];
-      if (!Array.isArray(client) || !client.includes(userId)) continue;
-      tasks.push(mapTaskRecord(rec));
-    }
-
-    console.log('[getTasksByUser] matched tasks for userId', userId, ':', tasks.length);
-
-    // Sort by due date asc, nulls last
-    tasks.sort((a, b) => {
-      if (!a.dueDate && !b.dueDate) return 0;
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return a.dueDate.localeCompare(b.dueDate);
-    });
-
-    return tasks;
+    const data = await res.json()
+    const tasks = (data.records ?? [])
+      .filter((r: AirtableRecord) => {
+        const assigned = r.fields[FIELDS.TASKS.ASSIGNED_TO]
+        return Array.isArray(assigned) && (assigned as string[]).includes(userId)
+      })
+      .map(mapTaskRecord)
+    return sortByDueDate(tasks)
   } catch (err) {
-    console.warn('[getTasksByUser] unexpected error:', err);
-    return [];
+    console.warn('[getTasksByUser] unexpected error:', err)
+    return []
   }
 }
 
-/** Create a task linked to a client (used from the client profile page). */
-export async function createClientTask(
-  userId: string,
-  title: string,
-  dueDate?: string,
-  notes?: string,
-): Promise<string> {
-  const { apiKey, baseId } = getCredentials();
-
-  const fields: Record<string, unknown> = {
-    Title: title,
-    Client: [userId],
-    Status: 'pending',
-  };
-  if (dueDate) fields['Due Date'] = dueDate;
-  if (notes) fields['Notes'] = notes;
-
-  const res = await fetch(`${API_BASE}/${baseId}/Tasks`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ fields }),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(`Airtable POST failed (${res.status}): ${JSON.stringify(data)}`);
+/**
+ * Fetch all non-completed/non-cancelled tasks — for admin dashboard and user list.
+ */
+export async function getAllOpenTasks(): Promise<Task[]> {
+  try {
+    const { apiKey, baseId } = getCredentials()
+    const res = await fetch(
+      `${API_BASE}/${baseId}/${TABLE}?maxRecords=500`,
+      { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+    )
+    if (!res.ok) return []
+    const data = await res.json()
+    return (data.records ?? [])
+      .map(mapTaskRecord)
+      .filter((t: Task) => OPEN_STATUSES.includes(t.status))
+  } catch (err) {
+    console.warn('[getAllOpenTasks] error:', err)
+    return []
   }
-  return data.id as string;
 }
 
 export interface CreateTaskData {
   title: string
   description?: string
   dueDate?: string
-  coachAirtableId: string
-  assignedToId?: string
-  assignedToName?: string
-  assignmentType: 'personal' | 'shared_with_client' | 'delegated_to_coach'
+  createdByPersonId: string
+  assignedToPersonId: string
+  relationshipContextId?: string  // auto-resolved if omitted
+  meetingId?: string
 }
 
-/** Create a task scoped to a coach with optional assignment. */
+/**
+ * Create a task. Auto-determines Task Type and Visibility from the assignee:
+ * - self-assign → personal_reminder + private_to_author
+ * - other person → assignment + shared_with_target
+ * Resolves Relationship Context automatically if not provided.
+ */
 export async function createTask(data: CreateTaskData): Promise<string> {
   const { apiKey, baseId } = getCredentials()
 
-  const fields: Record<string, unknown> = {
-    Title: data.title,
-    Status: 'pending',
-    'Coach Airtable ID': data.coachAirtableId,
-    'Assignment Type': data.assignmentType,
-  }
-  if (data.description) fields['Notes'] = data.description
-  if (data.dueDate) fields['Due Date'] = data.dueDate
-  if (data.assignedToId) fields['Assigned To'] = data.assignedToId
-  if (data.assignedToName) fields['Assigned To Name'] = data.assignedToName
-  // For shared_with_client, also link the Client field for client profile display
-  if (data.assignmentType === 'shared_with_client' && data.assignedToId) {
-    fields['Client'] = [data.assignedToId]
+  const isSelf = data.assignedToPersonId === data.createdByPersonId
+  const taskType: Task['taskType'] = isSelf ? 'personal_reminder' : 'assignment'
+  const visibility: Task['visibility'] = isSelf ? 'private_to_author' : 'shared_with_target'
+
+  // Resolve relationship context
+  let relationshipContextId = data.relationshipContextId
+  if (!relationshipContextId && !isSelf) {
+    // Try coaching relationship (lead=creator, person=assignee)
+    const ctx = await getRelationshipContext(data.createdByPersonId, data.assignedToPersonId)
+      ?? await getRelationshipContext(data.assignedToPersonId, data.createdByPersonId)
+    if (ctx) {
+      relationshipContextId = ctx.id
+    } else {
+      console.warn(
+        '[createTask] No relationship context found for pair — task created without context',
+        { createdBy: data.createdByPersonId, assignedTo: data.assignedToPersonId },
+      )
+    }
   }
 
-  const res = await fetch(`${API_BASE}/${baseId}/Tasks`, {
+  const fields: Record<string, unknown> = {
+    [FIELDS.TASKS.TITLE]: data.title,
+    [FIELDS.TASKS.STATUS]: 'Not Started',
+    [FIELDS.TASKS.TYPE]: taskType,
+    [FIELDS.TASKS.VISIBILITY]: visibility,
+    [FIELDS.TASKS.ASSIGNED_TO]: [data.assignedToPersonId],
+    [FIELDS.TASKS.CREATED_BY]: [data.createdByPersonId],
+  }
+  if (data.description) fields[FIELDS.TASKS.DESCRIPTION] = data.description
+  if (data.dueDate) fields[FIELDS.TASKS.DUE_DATE] = data.dueDate
+  if (relationshipContextId) fields[FIELDS.TASKS.REL_CONTEXT] = [relationshipContextId]
+  if (data.meetingId) fields[FIELDS.TASKS.MEETING] = [data.meetingId]
+
+  const res = await fetch(`${API_BASE}/${baseId}/${TABLE}`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields }),
   })
   const result = await res.json()
   if (!res.ok) {
-    throw new Error(`Airtable POST failed (${res.status}): ${JSON.stringify(result)}`)
+    throw new Error(`Tasks POST failed (${res.status}): ${JSON.stringify(result)}`)
   }
   return result.id as string
 }
 
-export async function updateTaskStatus(
-  taskId: string,
-  status: 'pending' | 'in progress' | 'completed',
-): Promise<{ success: true } | { error: string }> {
-  try {
-    const { apiKey, baseId } = getCredentials();
-    const res = await fetch(`${API_BASE}/${baseId}/Tasks/${taskId}`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ fields: { Status: status } }),
-    });
-    const data = await res.json();
-    console.log('[updateTaskStatus] status:', res.status, '| response:', JSON.stringify(data));
-    if (!res.ok) {
-      return { error: JSON.stringify(data) };
-    }
-    return { success: true };
-  } catch (err) {
-    console.error('[updateTaskStatus] error:', err);
-    return { error: String(err) };
-  }
+export interface UpdateTaskData {
+  title?: string
+  status?: TaskStatus
+  dueDate?: string | null
+  description?: string
 }
 
 export async function updateTask(
   taskId: string,
-  fields: {
-    Title?: string
-    Status?: 'pending' | 'in progress' | 'completed'
-    'Due Date'?: string | null
-    Notes?: string
-  },
+  data: UpdateTaskData,
 ): Promise<{ success: true } | { error: string }> {
   try {
     const { apiKey, baseId } = getCredentials()
-    // Strip undefined; keep null (used to clear date fields)
-    const clean = Object.fromEntries(
-      Object.entries(fields).filter(([, v]) => v !== undefined && v !== '')
-    )
-    const res = await fetch(`${API_BASE}/${baseId}/Tasks/${taskId}`, {
+    const writeFields: Record<string, unknown> = {}
+    if (data.title !== undefined) writeFields[FIELDS.TASKS.TITLE] = data.title
+    if (data.status !== undefined) writeFields[FIELDS.TASKS.STATUS] = data.status
+    if (data.dueDate !== undefined) writeFields[FIELDS.TASKS.DUE_DATE] = data.dueDate
+    if (data.description !== undefined) writeFields[FIELDS.TASKS.DESCRIPTION] = data.description
+    if (Object.keys(writeFields).length === 0) return { success: true }
+
+    const res = await fetch(`${API_BASE}/${baseId}/${TABLE}/${taskId}`, {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ fields: clean }),
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: writeFields }),
     })
-    const data = await res.json()
-    console.log('[updateTask] status:', res.status, '| response:', JSON.stringify(data))
-    if (!res.ok) return { error: JSON.stringify(data) }
+    if (!res.ok) return { error: JSON.stringify(await res.json()) }
     return { success: true }
   } catch (err) {
-    console.error('[updateTask] error:', err)
     return { error: String(err) }
   }
+}
+
+export async function updateTaskStatus(
+  taskId: string,
+  status: TaskStatus,
+): Promise<{ success: true } | { error: string }> {
+  return updateTask(taskId, { status })
 }
 
 export async function deleteTask(
   taskId: string,
 ): Promise<{ success: true } | { error: string }> {
   try {
-    const { apiKey, baseId } = getCredentials();
-    const res = await fetch(`${API_BASE}/${baseId}/Tasks/${taskId}`, {
+    const { apiKey, baseId } = getCredentials()
+    const res = await fetch(`${API_BASE}/${baseId}/${TABLE}/${taskId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${apiKey}` },
-    });
+    })
     if (!res.ok) {
-      const data = await res.json();
-      console.error('[deleteTask] Airtable error:', data);
-      return { error: JSON.stringify(data) };
+      return { error: JSON.stringify(await res.json()) }
     }
-    return { success: true };
+    return { success: true }
   } catch (err) {
-    console.error('[deleteTask] error:', err);
-    return { error: String(err) };
-  }
-}
-
-// ── Dashboard summary (Tasks table, open only) ────────────────────────────────
-
-export async function getAllOpenTasks(): Promise<Task[]> {
-  try {
-    const { apiKey, baseId } = getCredentials();
-    const res = await fetch(`${API_BASE}/${baseId}/Tasks`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      cache: 'no-store',
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-
-    return (data.records ?? [])
-      .map(mapTaskRecord)
-      .filter((t: Task) => t.status !== 'completed');
-  } catch (err) {
-    console.warn('[getAllOpenTasks] error:', err);
-    return [];
+    return { error: String(err) }
   }
 }

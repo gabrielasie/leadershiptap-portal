@@ -3,20 +3,20 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateTaskStatusAction } from './actions'
-import type { Task } from '@/lib/types'
+import type { Task, TaskStatus } from '@/lib/types'
 
-type Status = 'pending' | 'in progress' | 'completed'
-
-const STATUS_STYLES: Record<Status, string> = {
-  'pending':     'bg-slate-100 text-slate-500',
-  'in progress': 'bg-blue-50 text-blue-700',
-  'completed':   'bg-emerald-50 text-emerald-700',
+const STATUS_STYLES: Record<TaskStatus, string> = {
+  'Not Started': 'bg-slate-100 text-slate-500',
+  'In Progress': 'bg-blue-50 text-blue-700',
+  'Complete':    'bg-emerald-50 text-emerald-700',
+  'Cancelled':   'bg-rose-50 text-rose-500',
 }
 
-const STATUS_LABELS: Record<Status, string> = {
-  'pending':     'Pending',
-  'in progress': 'In Progress',
-  'completed':   'Done',
+const STATUS_LABELS: Record<TaskStatus, string> = {
+  'Not Started': 'Not Started',
+  'In Progress': 'In Progress',
+  'Complete':    'Done',
+  'Cancelled':   'Cancelled',
 }
 
 function formatDue(dateStr: string): string {
@@ -29,13 +29,11 @@ function formatDue(dateStr: string): string {
 
 export default function TaskItem({ task }: { task: Task }) {
   const router = useRouter()
-  const [optimisticStatus, setOptimisticStatus] = useState<Status>(
-    (task.status as Status) ?? 'pending'
-  )
+  const [optimisticStatus, setOptimisticStatus] = useState<TaskStatus>(task.status)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const isDone = optimisticStatus === 'completed'
+  const isDone = optimisticStatus === 'Complete'
   const isOverdue =
     task.dueDate &&
     !isDone &&
@@ -43,7 +41,7 @@ export default function TaskItem({ task }: { task: Task }) {
 
   async function toggle() {
     const prev = optimisticStatus
-    const next: Status = isDone ? 'pending' : 'completed'
+    const next: TaskStatus = isDone ? 'Not Started' : 'Complete'
     setOptimisticStatus(next)
     setError('')
     setLoading(true)
@@ -87,8 +85,8 @@ export default function TaskItem({ task }: { task: Task }) {
             {isOverdue ? 'Overdue · ' : 'Due '}{formatDue(task.dueDate)}
           </p>
         )}
-        {task.notes && (
-          <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{task.notes}</p>
+        {task.description && (
+          <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{task.description}</p>
         )}
         {error && (
           <p className="text-xs text-rose-500 mt-0.5">{error}</p>

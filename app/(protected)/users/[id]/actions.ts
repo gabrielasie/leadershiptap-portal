@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createNote } from '@/lib/airtable/notes'
-import { createClientTask, updateTaskStatus } from '@/lib/airtable/tasks'
+import { createTask, updateTaskStatus } from '@/lib/airtable/tasks'
 import {
   updateUserProfile,
   type UserProfileFields,
@@ -16,7 +16,6 @@ import {
 import { upsertCoachPersonContext } from '@/lib/airtable/coachPersonContext'
 import { upsertCoachSession } from '@/lib/airtable/coachSessions'
 import { updatePortalEventNotes } from '@/lib/airtable/meetings'
-import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 
 // ── Edit Profile ──────────────────────────────────────────────────────────────
@@ -108,48 +107,41 @@ export async function createAndLinkTeamMember(
 }
 
 // ── Log a Note ────────────────────────────────────────────────────────────────
-// Resolves the Clerk session server-side and passes it to createNote so the
-// write is authorisation-checked before it reaches Airtable.
-
 export async function saveNoteAction(
-  userId: string,
+  subjectPersonId: string,
   content: string,
-  date: string,         // YYYY-MM-DD from the date input
 ): Promise<void> {
-  const sessionUser = await getSessionUser()
+  const userRecord = await getCurrentUserRecord()
+  if (!userRecord.airtableId) throw new Error('SAVE_FAILED')
   try {
-    await createNote(userId, content.trim(), date, sessionUser)
+    await createNote({
+      body: content.trim(),
+      authorPersonId: userRecord.airtableId,
+      subjectPersonId,
+    })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    if (msg === 'NOT_AUTHORIZED') throw new Error('NOT_AUTHORIZED')
     if (msg.includes('TABLE_NOT_FOUND') || msg.includes('Could not find table')) {
       throw new Error('NOTES_TABLE_MISSING')
     }
     console.error('[saveNoteAction] Airtable error:', msg)
     throw new Error('SAVE_FAILED')
   }
-  revalidatePath(`/users/${userId}`)
+  revalidatePath(`/users/${subjectPersonId}`)
 }
 
 // ── Edit / Delete Note ────────────────────────────────────────────────────────
 
 export async function updateNoteAction(
   noteId: string,
-  content: string,
-  date: string,
+  body: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const baseId = process.env.AIRTABLE_BASE_ID!
-    const token = process.env.AIRTABLE_API_KEY!
-    const res = await fetch(`https://api.airtable.com/v0/${baseId}/Notes/${noteId}`, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: { Content: content, Date: date } }),
-    })
-    if (!res.ok) {
-      const data = await res.json()
-      console.error('[updateNoteAction] Airtable error:', data)
-      return { success: false, error: JSON.stringify(data) }
+    const { updateNote } = await import('@/lib/airtable/notes')
+    const result = await updateNote(noteId, body)
+    if ('error' in result) {
+      console.error('[updateNoteAction] Airtable error:', result.error)
+      return { success: false, error: result.error }
     }
     return { success: true }
   } catch (err) {
@@ -162,16 +154,11 @@ export async function deleteNoteAction(
   noteId: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const baseId = process.env.AIRTABLE_BASE_ID!
-    const token = process.env.AIRTABLE_API_KEY!
-    const res = await fetch(`https://api.airtable.com/v0/${baseId}/Notes/${noteId}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!res.ok) {
-      const data = await res.json()
-      console.error('[deleteNoteAction] Airtable error:', data)
-      return { success: false, error: JSON.stringify(data) }
+    const { deleteNote } = await import('@/lib/airtable/notes')
+    const result = await deleteNote(noteId)
+    if ('error' in result) {
+      console.error('[deleteNoteAction] Airtable error:', result.error)
+      return { success: false, error: result.error }
     }
     return { success: true }
   } catch (err) {
@@ -184,7 +171,7 @@ export async function deleteNoteAction(
 
 export async function updateTaskStatusAction(
   taskId: string,
-  status: 'pending' | 'in progress' | 'completed',
+  status: import('@/lib/types').TaskStatus,
 ): Promise<{ success: boolean }> {
   const result = await updateTaskStatus(taskId, status)
   if ('error' in result) {
@@ -244,17 +231,19 @@ export async function upsertCoachContextAction(
 // ── Add Task ──────────────────────────────────────────────────────────────────
 
 export async function saveTaskAction(
-  userId: string,
+  subjectPersonId: string,
   taskName: string,
   dueDate: string | null,
-  notes: string | null,
+  description: string | null,
 ): Promise<void> {
-  console.log('[saveTaskAction] userId:', userId, '| title:', taskName, '| dueDate:', dueDate)
-  await createClientTask(
-    userId,
-    taskName,
-    dueDate ?? undefined,
-    notes ?? undefined,
-  )
-  revalidatePath(`/users/${userId}`)
+  const userRecord = await getCurrentUserRecord()
+  if (!userRecord.airtableId) throw new Error('Could not resolve your user record.')
+  await createTask({
+    title: taskName,
+    description: description ?? undefined,
+    dueDate: dueDate ?? undefined,
+    createdByPersonId: userRecord.airtableId,
+    assignedToPersonId: subjectPersonId,
+  })
+  revalidatePath(`/users/${subjectPersonId}`)
 }

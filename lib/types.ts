@@ -90,23 +90,30 @@ export interface Meeting {
 
 export interface Note {
   id: string;
-  content: string;
-  date: string;         // YYYY-MM-DD
-  userId: string;       // first linked Users record ID
+  body: string;
+  createdAt: string;
+  subjectPersonId: string;
+  authorPersonId?: string;
+  relationshipContextId?: string;
+  meetingId?: string;
+  noteType?: string;
+  visibility?: string;
 }
+
+export type TaskStatus = 'Not Started' | 'In Progress' | 'Complete' | 'Cancelled'
 
 export interface Task {
   id: string;
-  name: string;        // maps to 'Title' in Tasks table
-  dueDate?: string;    // YYYY-MM-DD
-  status?: 'pending' | 'in progress' | 'completed';
-  notes?: string;
-  coachName?: string;
-  userId?: string;     // first linked Client record ID
-  coachAirtableId?: string;   // 'Coach Airtable ID' plain text field — for getTasks filter
-  assignedToId?: string;      // Airtable record ID of the assignee
-  assignedToName?: string;    // denormalized display name
-  assignmentType?: 'personal' | 'shared_with_client' | 'delegated_to_coach';
+  name: string;
+  status: TaskStatus;
+  dueDate?: string;
+  description?: string;
+  taskType?: 'personal_reminder' | 'assignment';
+  visibility?: 'private_to_author' | 'shared_with_target';
+  assignedToPersonId?: string;   // first linked Assigned To Person
+  createdByPersonId?: string;    // first linked Created By Person
+  relationshipContextId?: string;
+  meetingId?: string;
 }
 
 export interface Message {

@@ -38,7 +38,7 @@ interface Props {
   trigger?: React.ReactNode
 }
 
-// Sentinel value for "Just me" — no real airtable ID
+// Sentinel value for "Just me" — self-assign → personal_reminder
 const PERSONAL_VALUE = '__personal__'
 
 export default function AddTaskDashboardDialog({ clients, coaches, trigger }: Props) {
@@ -47,12 +47,18 @@ export default function AddTaskDashboardDialog({ clients, coaches, trigger }: Pr
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
-  // assignTo is PERSONAL_VALUE | a client/coach airtable record ID
+  // assignTo is PERSONAL_VALUE | a real airtable record ID
   const [assignTo, setAssignTo] = useState(PERSONAL_VALUE)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const canSubmit = title.trim().length > 0 && !saving
+
+  // Resolve name for the visibility preview
+  const assignee =
+    assignTo === PERSONAL_VALUE
+      ? null
+      : clients.find((c) => c.id === assignTo) ?? coaches.find((c) => c.id === assignTo) ?? null
 
   function handleOpen() {
     setTitle('')
@@ -74,25 +80,11 @@ export default function AddTaskDashboardDialog({ clients, coaches, trigger }: Pr
     setSaving(true)
     setError('')
 
-    const isClient = clients.some((c) => c.id === assignTo)
-    const isCoach = coaches.some((c) => c.id === assignTo)
-    const assignee = isClient
-      ? clients.find((c) => c.id === assignTo)
-      : isCoach
-        ? coaches.find((c) => c.id === assignTo)
-        : null
-
     const result = await dashboardCreateTaskAction({
       title: title.trim(),
       description: description.trim() || undefined,
       dueDate: dueDate || undefined,
-      assignedToId: assignee?.id,
-      assignedToName: assignee?.name,
-      assignmentType: isClient
-        ? 'shared_with_client'
-        : isCoach
-          ? 'delegated_to_coach'
-          : 'personal',
+      assignedToPersonId: assignTo === PERSONAL_VALUE ? undefined : assignTo,
     })
 
     setSaving(false)
@@ -190,6 +182,16 @@ export default function AddTaskDashboardDialog({ clients, coaches, trigger }: Pr
                   )}
                 </SelectContent>
               </Select>
+              {/* Visibility preview */}
+              {assignee ? (
+                <p className="text-xs text-blue-600">
+                  This task will be visible to {assignee.name}.
+                </p>
+              ) : (
+                <p className="text-xs text-slate-400">
+                  Only visible to you.
+                </p>
+              )}
             </div>
           </div>
 

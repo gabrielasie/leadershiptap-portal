@@ -109,7 +109,7 @@ export async function getClientsByRelationship(coachAirtableId: string): Promise
     return scoped
   }
 
-  const clientIds = new Set(contexts.map((c) => c.clientAirtableId))
+  const clientIds = new Set(contexts.map((c) => c.personId))
   return deduped.filter((u) => clientIds.has(u.id))
 }
 

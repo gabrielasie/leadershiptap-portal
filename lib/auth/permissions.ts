@@ -21,8 +21,8 @@ export async function getPermissionLevel(
   const contexts = await getRelationshipContexts(coachAirtableId)
   const match = contexts.find(
     (c) =>
-      c.clientAirtableId === targetClientAirtableId &&
-      c.relationshipType === 'coach',
+      c.personId === targetClientAirtableId &&
+      c.relationshipType === 'coaching',
   )
   return match ? 'coach_owner' : 'read_only'
 }

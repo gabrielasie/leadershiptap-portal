@@ -1,8 +1,7 @@
-import type { Note } from '@/lib/types'
-import type { SessionUser } from '@/lib/auth/getSessionUser'
-import { canAccessUser } from '@/lib/auth/isAuthorized'
+import { TABLES, FIELDS } from '@/lib/airtable/constants'
 
 const API_BASE = 'https://api.airtable.com/v0'
+const TABLE = encodeURIComponent(TABLES.NOTES)
 
 function getCredentials() {
   const apiKey = process.env.AIRTABLE_API_KEY
@@ -11,215 +10,196 @@ function getCredentials() {
   return { apiKey, baseId }
 }
 
-function mapRecord(record: { id: string; fields: Record<string, unknown> }): Note {
-  const clientIds = record.fields['Client']
-  return {
-    id: record.id,
-    content: (record.fields['Content'] as string) ?? '',
-    date: (record.fields['Date'] as string) ?? '',
-    userId: Array.isArray(clientIds) ? (clientIds[0] as string) ?? '' : '',
-  }
-}
+type AirtableRecord = { id: string; fields: Record<string, unknown> }
 
-export interface RecentNote {
+export interface Note {
   id: string
-  content: string
-  date: string
-  userId: string | null
+  body: string
+  createdAt: string
+  subjectPersonId: string
+  authorPersonId?: string
+  relationshipContextId?: string
+  meetingId?: string
+  noteType?: string
+  visibility?: string
 }
 
+function mapRecord(r: AirtableRecord): Note {
+  const subjectIds = r.fields[FIELDS.NOTES.SUBJECT]
+  const authorIds = r.fields[FIELDS.NOTES.AUTHOR]
+  const ctxIds = r.fields[FIELDS.NOTES.REL_CONTEXT]
+  const meetingIds = r.fields[FIELDS.NOTES.MEETING]
+  return {
+    id: r.id,
+    body: (r.fields[FIELDS.NOTES.BODY] as string) ?? '',
+    createdAt: (r.fields['Created At'] as string) ?? '',
+    subjectPersonId: Array.isArray(subjectIds) ? (subjectIds[0] as string) ?? '' : '',
+    authorPersonId: Array.isArray(authorIds) ? (authorIds[0] as string) : undefined,
+    relationshipContextId: Array.isArray(ctxIds) ? (ctxIds[0] as string) : undefined,
+    meetingId: Array.isArray(meetingIds) ? (meetingIds[0] as string) : undefined,
+    noteType: (r.fields[FIELDS.NOTES.NOTE_TYPE] as string) ?? undefined,
+    visibility: (r.fields[FIELDS.NOTES.VISIBILITY] as string) ?? undefined,
+  }
+}
+
+const SORT_CREATED_DESC =
+  `sort%5B0%5D%5Bfield%5D=${encodeURIComponent('Created At')}&sort%5B0%5D%5Bdirection%5D=desc`
+
 /**
- * Fetch all notes across all clients (up to `limit`), sorted descending by date.
- * Used by the dashboard to build a per-client notes map.
+ * Fetch all notes sorted by Created At desc.
+ * Used by the dashboard (admin) and users list to build per-client note counts.
  */
-export async function getAllRecentNotes(limit = 100): Promise<RecentNote[]> {
+export async function getAllRecentNotes(limit = 100): Promise<Note[]> {
   const { apiKey, baseId } = getCredentials()
-  const url =
-    `${API_BASE}/${baseId}/Notes` +
-    `?sort%5B0%5D%5Bfield%5D=Date&sort%5B0%5D%5Bdirection%5D=desc` +
-    `&maxRecords=${limit}`
+  const url = `${API_BASE}/${baseId}/${TABLE}?${SORT_CREATED_DESC}&maxRecords=${limit}`
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },
     cache: 'no-store',
   })
   if (!res.ok) return []
   const data = await res.json()
-  return (data.records ?? []).map(
-    (r: { id: string; fields: Record<string, unknown> }): RecentNote => {
-      const clientIds = r.fields['Client']
-      return {
-        id: r.id,
-        content: (r.fields['Content'] as string) ?? '',
-        date: (r.fields['Date'] as string) ?? '',
-        userId: Array.isArray(clientIds) ? ((clientIds[0] as string) ?? null) : null,
-      }
-    },
-  )
+  return (data.records ?? []).map(mapRecord)
 }
 
 /**
- * Fetch the N most recently dated notes across all clients.
- * Sorted descending by Date on the Airtable side for efficiency.
+ * Fetch notes authored by a specific person.
+ * Used by the dashboard to build the "has note" badge set for meeting cards.
+ * JS-filtered because Author Person is a linked field.
  */
-export async function getRecentNotes(limit = 4): Promise<RecentNote[]> {
+export async function getNotesByAuthor(authorPersonId: string): Promise<Note[]> {
   const { apiKey, baseId } = getCredentials()
-  const url =
-    `${API_BASE}/${baseId}/Notes` +
-    `?sort%5B0%5D%5Bfield%5D=Date&sort%5B0%5D%5Bdirection%5D=desc` +
-    `&maxRecords=${limit}`
+  const url = `${API_BASE}/${baseId}/${TABLE}?${SORT_CREATED_DESC}&maxRecords=500`
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },
     cache: 'no-store',
   })
   if (!res.ok) return []
   const data = await res.json()
-  return (data.records ?? []).map(
-    (r: { id: string; fields: Record<string, unknown> }): RecentNote => {
-      const clientIds = r.fields['Client']
-      return {
-        id: r.id,
-        content: (r.fields['Content'] as string) ?? '',
-        date: (r.fields['Date'] as string) ?? '',
-        userId: Array.isArray(clientIds) ? ((clientIds[0] as string) ?? null) : null,
-      }
-    },
-  )
+  return (data.records ?? [])
+    .filter((r: AirtableRecord) => {
+      const ids = r.fields[FIELDS.NOTES.AUTHOR]
+      return Array.isArray(ids) && (ids as string[]).includes(authorPersonId)
+    })
+    .map(mapRecord)
 }
 
 /**
- * Write a note for a client.
- * Throws 'NOT_AUTHORIZED' if the sessionUser is not allowed to write for this userId.
- * If sessionUser is absent the write proceeds (open-access dev mode).
+ * Fetch notes for a subject person (client) — for the user profile page.
+ * JS-filtered because Subject Person is a linked field.
  */
-export async function createNote(
-  userId: string,
-  content: string,
-  date: string,           // YYYY-MM-DD
-  sessionUser?: SessionUser | null,
-): Promise<Note> {
-  if (sessionUser) {
-    const allowed = await canAccessUser(userId, sessionUser)
-    if (!allowed) throw new Error('NOT_AUTHORIZED')
-  }
-
+export async function getNotesByUser(personId: string): Promise<Note[]> {
   const { apiKey, baseId } = getCredentials()
-  const body = {
-    fields: {
-      Content: content,
-      Date: date,
-      Client: [userId],
-    },
+  const url = `${API_BASE}/${baseId}/${TABLE}?${SORT_CREATED_DESC}&maxRecords=500`
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: 'no-store',
+  })
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.records ?? [])
+    .filter((r: AirtableRecord) => {
+      const ids = r.fields[FIELDS.NOTES.SUBJECT]
+      return Array.isArray(ids) && (ids as string[]).includes(personId)
+    })
+    .map(mapRecord)
+}
+
+/**
+ * Fetch notes attached to a specific Meeting record.
+ * JS-filtered because Meeting is a linked field.
+ */
+export async function getNotesByMeetingId(meetingId: string): Promise<Note[]> {
+  const { apiKey, baseId } = getCredentials()
+  const url = `${API_BASE}/${baseId}/${TABLE}?${SORT_CREATED_DESC}&maxRecords=500`
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: 'no-store',
+  })
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.records ?? [])
+    .filter((r: AirtableRecord) => {
+      const ids = r.fields[FIELDS.NOTES.MEETING]
+      return Array.isArray(ids) && (ids as string[]).includes(meetingId)
+    })
+    .map(mapRecord)
+}
+
+/**
+ * Fetch notes by author + relationship context, sorted by Created At DESC.
+ * JS-filtered because both fields are linked fields.
+ */
+export async function getNotes(
+  authorPersonId: string,
+  relationshipContextId: string,
+): Promise<Note[]> {
+  const { apiKey, baseId } = getCredentials()
+  const url = `${API_BASE}/${baseId}/${TABLE}?${SORT_CREATED_DESC}&maxRecords=500`
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: 'no-store',
+  })
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.records ?? [])
+    .filter((r: AirtableRecord) => {
+      const authorIds = r.fields[FIELDS.NOTES.AUTHOR]
+      const ctxIds = r.fields[FIELDS.NOTES.REL_CONTEXT]
+      return (
+        Array.isArray(authorIds) &&
+        (authorIds as string[]).includes(authorPersonId) &&
+        Array.isArray(ctxIds) &&
+        (ctxIds as string[]).includes(relationshipContextId)
+      )
+    })
+    .map(mapRecord)
+}
+
+export interface CreateNoteData {
+  body: string
+  authorPersonId: string
+  subjectPersonId?: string
+  relationshipContextId?: string
+  meetingId?: string
+  noteType?: string   // defaults to 'general_context'
+}
+
+export async function createNote(data: CreateNoteData): Promise<Note> {
+  const { apiKey, baseId } = getCredentials()
+  const fields: Record<string, unknown> = {
+    [FIELDS.NOTES.BODY]: data.body,
+    [FIELDS.NOTES.VISIBILITY]: 'private_to_author',
+    [FIELDS.NOTES.AUTHOR]: [data.authorPersonId],
+    [FIELDS.NOTES.NOTE_TYPE]: data.noteType ?? 'general_context',
   }
-  const res = await fetch(`${API_BASE}/${baseId}/Notes`, {
+  if (data.subjectPersonId) fields[FIELDS.NOTES.SUBJECT] = [data.subjectPersonId]
+  if (data.relationshipContextId) fields[FIELDS.NOTES.REL_CONTEXT] = [data.relationshipContextId]
+  if (data.meetingId) fields[FIELDS.NOTES.MEETING] = [data.meetingId]
+
+  const res = await fetch(`${API_BASE}/${baseId}/${TABLE}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body),
-  })
-  const data = await res.json()
-  if (!res.ok) {
-    throw new Error(`Airtable POST failed: ${JSON.stringify(data)}`)
-  }
-  return mapRecord(data)
-}
-
-/**
- * Fetch notes for a client.
- * Returns [] (silent empty) if the sessionUser is not allowed to read for this userId.
- * If sessionUser is absent the fetch proceeds (open-access dev mode).
- */
-export async function getNotesByUser(
-  userId: string,
-  sessionUser?: SessionUser | null,
-): Promise<Note[]> {
-  if (sessionUser) {
-    const allowed = await canAccessUser(userId, sessionUser)
-    if (!allowed) return []
-  }
-
-  const { apiKey, baseId } = getCredentials()
-
-  // Fetch all notes then filter client-side — avoids ARRAYJOIN formula issues
-  // with linked-record fields that store Airtable record IDs.
-  const res = await fetch(`${API_BASE}/${baseId}/Notes`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-    cache: 'no-store',
+    body: JSON.stringify({ fields }),
   })
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Airtable GET failed: ${text}`)
+    const detail = await res.json()
+    throw new Error(`Notes POST failed: ${JSON.stringify(detail)}`)
   }
-  const data = await res.json()
-
-  const matching = (data.records ?? []).filter((r: { id: string; fields: Record<string, unknown> }) => {
-    const clients = (r.fields['Client'] ?? r.fields['Clients'] ?? []) as string[]
-    return Array.isArray(clients) && clients.includes(userId)
-  })
-
-  // Sort descending by date
-  matching.sort((a: { fields: Record<string, unknown> }, b: { fields: Record<string, unknown> }) => {
-    const da = (a.fields['Date'] as string) ?? ''
-    const db = (b.fields['Date'] as string) ?? ''
-    return db.localeCompare(da)
-  })
-
-  return matching.map(mapRecord)
-}
-
-// ── Session notes (new schema: Body, Visibility, Created Date, Coach, Meeting) ─
-
-export interface SessionNote {
-  id: string
-  body: string
-  visibility: string   // 'private_to_author' | 'shared_with_client' | 'internal_only'
-  createdDate: string  // YYYY-MM-DD
-  coachIds: string[]
-  clientIds: string[]
-}
-
-/**
- * Fetch notes attached to a specific Portal Calendar Events record.
- * Linked-record fields can't be filtered by ID in Airtable formulas, so we
- * fetch all notes and filter in JavaScript — same pattern as coachSessions.ts.
- */
-export async function getNotesByMeetingId(eventId: string): Promise<SessionNote[]> {
-  const { apiKey, baseId } = getCredentials()
-  const res = await fetch(
-    `${API_BASE}/${baseId}/Notes` +
-      `?sort%5B0%5D%5Bfield%5D=Created%20Date&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=500`,
-    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
-  )
-  if (!res.ok) return []
-  const data = await res.json()
-  return (data.records ?? [])
-    .filter((r: { id: string; fields: Record<string, unknown> }) => {
-      const ids = r.fields['Meeting']
-      return Array.isArray(ids) && ids.includes(eventId)
-    })
-    .map(
-      (r: { id: string; fields: Record<string, unknown> }): SessionNote => ({
-        id: r.id,
-        body: (r.fields['Body'] as string) ?? '',
-        visibility: (r.fields['Visibility'] as string) ?? 'private_to_author',
-        createdDate: (r.fields['Created Date'] as string) ?? '',
-        coachIds: Array.isArray(r.fields['Coach']) ? (r.fields['Coach'] as string[]) : [],
-        clientIds: Array.isArray(r.fields['Client']) ? (r.fields['Client'] as string[]) : [],
-      }),
-    )
+  return mapRecord(await res.json())
 }
 
 export async function updateNote(
   noteId: string,
-  content: string,
-  date: string,
+  body: string,
 ): Promise<{ success: true } | { error: string }> {
   const { apiKey, baseId } = getCredentials()
-  const res = await fetch(`${API_BASE}/${baseId}/Notes/${noteId}`, {
+  const res = await fetch(`${API_BASE}/${baseId}/${TABLE}/${noteId}`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields: { Content: content, Date: date } }),
+    body: JSON.stringify({ fields: { [FIELDS.NOTES.BODY]: body } }),
   })
   if (!res.ok) {
     const data = await res.json()
@@ -232,7 +212,7 @@ export async function deleteNote(
   noteId: string,
 ): Promise<{ success: true } | { error: string }> {
   const { apiKey, baseId } = getCredentials()
-  const res = await fetch(`${API_BASE}/${baseId}/Notes/${noteId}`, {
+  const res = await fetch(`${API_BASE}/${baseId}/${TABLE}/${noteId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${apiKey}` },
   })
