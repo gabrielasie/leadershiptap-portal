@@ -31,8 +31,8 @@ function mapRecord(r: AirtableRecord): Note {
     body: (r.fields[FIELDS.NOTES.BODY] as string) ?? '',
     createdAt: (r.fields[FIELDS.NOTES.DATE] as string) ?? '',
     subjectPersonId: Array.isArray(clientIds) ? (clientIds[0] as string) ?? '' : '',
-    authorPersonId: (r.fields[FIELDS.NOTES.COACH_NAME] as string) ?? undefined,
-    relationshipContextId: (r.fields[FIELDS.NOTES.REL_CONTEXT_ID] as string) ?? undefined,
+    authorPersonId: undefined,
+    relationshipContextId: undefined,
     meetingId: undefined,
     noteType: undefined,
     visibility: undefined,
@@ -129,12 +129,9 @@ export async function getNotes(
   })
   if (!res.ok) return []
   const data = await res.json()
-  return (data.records ?? [])
-    .filter((r: AirtableRecord) => {
-      const ctxId = r.fields[FIELDS.NOTES.REL_CONTEXT_ID] as string | undefined
-      return ctxId === relationshipContextId
-    })
-    .map(mapRecord)
+  // REL_CONTEXT_ID field does not exist in this table — return all notes
+  void relationshipContextId
+  return (data.records ?? []).map(mapRecord)
 }
 
 export interface CreateNoteData {
@@ -152,7 +149,6 @@ export async function createNote(data: CreateNoteData): Promise<Note> {
     [FIELDS.NOTES.BODY]: data.body,
   }
   if (data.subjectPersonId) fields[FIELDS.NOTES.CLIENT] = [data.subjectPersonId]
-  if (data.relationshipContextId) fields[FIELDS.NOTES.REL_CONTEXT_ID] = data.relationshipContextId
 
   const res = await fetch(`${API_BASE}/${baseId}/${TABLE}`, {
     method: 'POST',

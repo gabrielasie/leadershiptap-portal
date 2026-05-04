@@ -23,7 +23,7 @@ function mapTaskRecord(r: AirtableRecord): Task {
     status: ((r.fields[FIELDS.TASKS.STATUS] as string) || 'Not Started') as TaskStatus,
     dueDate: (r.fields[FIELDS.TASKS.DUE_DATE] as string) || undefined,
     description: (r.fields[FIELDS.TASKS.NOTES] as string) || undefined,
-    taskType: (r.fields[FIELDS.TASKS.ASSIGNMENT_TYPE] as Task['taskType']) || undefined,
+    taskType: undefined,
     visibility: undefined,
     assignedToPersonId: Array.isArray(clientIds) ? (clientIds[0] as string) : undefined,
     createdByPersonId: undefined,
@@ -139,13 +139,9 @@ export interface CreateTaskData {
 export async function createTask(data: CreateTaskData): Promise<string> {
   const { apiKey, baseId } = getCredentials()
 
-  const isSelf = data.assignedToPersonId === data.createdByPersonId
-  const assignmentType = isSelf ? 'personal_reminder' : 'assignment'
-
   const fields: Record<string, unknown> = {
     [FIELDS.TASKS.TITLE]: data.title,
     [FIELDS.TASKS.STATUS]: 'Not Started',
-    [FIELDS.TASKS.ASSIGNMENT_TYPE]: assignmentType,
     [FIELDS.TASKS.CLIENT]: [data.assignedToPersonId],
   }
   if (data.description) fields[FIELDS.TASKS.NOTES] = data.description

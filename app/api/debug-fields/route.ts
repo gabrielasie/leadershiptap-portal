@@ -34,11 +34,21 @@ export async function GET() {
     return NextResponse.json({ error: 'Missing Airtable credentials' }, { status: 500 })
   }
 
-  const [users, notes, tasks] = await Promise.all([
+  const [users, meetings, meetingsLegacy, notes, tasks, relationshipContexts] = await Promise.all([
     fetchTableFields(apiKey, baseId, 'Users'),
+    fetchTableFields(apiKey, baseId, 'Meetings'),
+    fetchTableFields(apiKey, baseId, 'Portal Calendar Events'),
     fetchTableFields(apiKey, baseId, 'Notes'),
     fetchTableFields(apiKey, baseId, 'Tasks'),
+    fetchTableFields(apiKey, baseId, 'Relationship Contexts'),
   ])
 
-  return NextResponse.json({ users, notes, tasks })
+  return NextResponse.json({
+    users,
+    meetings_table_named_Meetings: meetings,
+    meetings_table_named_Portal_Calendar_Events: meetingsLegacy,
+    notes,
+    tasks,
+    relationshipContexts,
+  })
 }
