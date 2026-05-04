@@ -94,11 +94,15 @@ async function getUpcomingPortalEvents(ownerEmail: string): Promise<PortalCalend
     `AND(IS_AFTER({${FIELDS.MEETINGS.START}}, "${now.toISOString()}"), IS_BEFORE({${FIELDS.MEETINGS.START}}, "${cutoff.toISOString()}"), LOWER({${FIELDS.MEETINGS.OWNER_EMAIL}}) = "${safeOwner}")`,
   )
   try {
+    console.log('[debug] getUpcomingPortalEvents table:', TABLES.MEETINGS, 'filter:', decodeURIComponent(formula))
     const res = await fetch(
       `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(TABLES.MEETINGS)}?filterByFormula=${formula}&sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.MEETINGS.START)}&sort%5B0%5D%5Bdirection%5D=asc&maxRecords=10`,
       { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
     )
-    if (!res.ok) return []
+    if (!res.ok) {
+      console.error('[debug] getUpcomingPortalEvents failed status:', res.status, await res.text())
+      return []
+    }
     const data = await res.json()
     return (data.records ?? []).map((r: { id: string; fields: Record<string, unknown> }) => ({
       id: r.id,

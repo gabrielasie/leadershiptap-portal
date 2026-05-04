@@ -52,11 +52,15 @@ const SORT_CREATED_DESC =
 export async function getAllRecentNotes(limit = 100): Promise<Note[]> {
   const { apiKey, baseId } = getCredentials()
   const url = `${API_BASE}/${baseId}/${TABLE}?${SORT_CREATED_DESC}&maxRecords=${limit}`
+  console.log('[debug] getAllRecentNotes table:', TABLES.NOTES, 'url:', url)
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },
     cache: 'no-store',
   })
-  if (!res.ok) return []
+  if (!res.ok) {
+    console.error('[debug] getAllRecentNotes failed status:', res.status, await res.text())
+    return []
+  }
   const data = await res.json()
   return (data.records ?? []).map(mapRecord)
 }
@@ -69,6 +73,7 @@ export async function getAllRecentNotes(limit = 100): Promise<Note[]> {
 export async function getNotesByAuthor(authorPersonId: string): Promise<Note[]> {
   const { apiKey, baseId } = getCredentials()
   const url = `${API_BASE}/${baseId}/${TABLE}?${SORT_CREATED_DESC}&maxRecords=500`
+  console.log('[debug] getNotesByAuthor table:', TABLES.NOTES)
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },
     cache: 'no-store',

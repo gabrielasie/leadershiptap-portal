@@ -52,6 +52,7 @@ function sortByDueDate(tasks: Task[]): Task[] {
 export async function getTasks(personAirtableId: string): Promise<Task[]> {
   try {
     const { apiKey, baseId } = getCredentials()
+    console.log('[debug] getTasks table:', TABLES.TASKS)
     const res = await fetch(
       `${API_BASE}/${baseId}/${TABLE}?maxRecords=500`,
       { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },

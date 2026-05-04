@@ -51,12 +51,14 @@ export async function getAllUpcomingMeetings(daysAhead = 7, ownerEmail?: string)
   const formula = safeOwner
     ? `AND(${timeFilter}, LOWER({${FIELDS.MEETINGS.OWNER_EMAIL}}) = "${safeOwner}")`
     : timeFilter;
+  console.log('[debug] getAllUpcomingMeetings table:', TABLES.MEETINGS, 'filter:', formula);
   const res = await fetch(
     `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${encodeURIComponent(formula)}&sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.MEETINGS.START)}&sort%5B0%5D%5Bdirection%5D=asc&maxRecords=50`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: "no-store" },
   );
   if (!res.ok) {
     const text = await res.text();
+    console.error('[debug] getAllUpcomingMeetings failed status:', res.status, 'body:', text);
     throw new Error(`Airtable GET failed: ${text}`);
   }
   const data = await res.json();
@@ -71,12 +73,14 @@ export async function getAllMeetings(ownerEmail?: string): Promise<Meeting[]> {
   const filterParam = safeOwner
     ? `filterByFormula=${encodeURIComponent(`LOWER({${FIELDS.MEETINGS.OWNER_EMAIL}}) = "${safeOwner}"`)}&`
     : '';
+  console.log('[debug] getAllMeetings table:', TABLES.MEETINGS, 'ownerEmail:', ownerEmail ?? '(all)');
   const res = await fetch(
     `${API_BASE}/${baseId}/${TABLE}?${filterParam}sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.MEETINGS.START)}&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=500`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: "no-store" },
   );
   if (!res.ok) {
     const text = await res.text();
+    console.error('[debug] getAllMeetings failed status:', res.status, 'body:', text);
     throw new Error(`Airtable GET failed: ${text}`);
   }
   const data = await res.json();

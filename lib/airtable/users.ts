@@ -220,6 +220,7 @@ export async function getAllUsers(): Promise<User[]> {
   }
 
   try {
+    console.log('[debug] getAllUsers table: Users')
     const res = await fetch(`${API_BASE}/${baseId}/Users`, {
       headers: { Authorization: `Bearer ${apiKey}` },
       next: { revalidate: 60 },
@@ -227,7 +228,7 @@ export async function getAllUsers(): Promise<User[]> {
 
     if (!res.ok) {
       const text = await res.text();
-      console.error(`[getAllUsers] Airtable GET failed: ${text}`);
+      console.error(`[debug] getAllUsers failed status: ${res.status} body: ${text}`);
       return [];
     }
 

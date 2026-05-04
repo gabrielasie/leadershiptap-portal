@@ -106,6 +106,7 @@ export async function getRelationshipContexts(
     `{${FIELDS.RELATIONSHIP_CONTEXTS.STATUS}} = "Active"`,
   )
 
+  console.log('[debug] getRelationshipContexts table:', TABLES.RELATIONSHIP_CONTEXTS, 'filter:', decodeURIComponent(formula));
   const [res, nameMap] = await Promise.all([
     fetch(
       `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${formula}&maxRecords=1000`,

@@ -93,12 +93,14 @@ export async function fetchAllMessages(): Promise<Message[]> {
 }
 
 async function getAllMessages(apiKey: string, baseId: string): Promise<Message[]> {
+  console.log('[debug] getAllMessages table: Messages')
   const res = await fetch(
     `${API_BASE}/${baseId}/Messages?sort%5B0%5D%5Bfield%5D=Created&sort%5B0%5D%5Bdirection%5D=desc`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' }
   );
   if (!res.ok) {
     const text = await res.text();
+    console.error('[debug] getAllMessages failed status:', res.status, 'body:', text);
     throw new Error(`Airtable GET failed: ${text}`);
   }
   const data = await res.json();
