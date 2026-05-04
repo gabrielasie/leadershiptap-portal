@@ -1,5 +1,7 @@
+import { TABLES, FIELDS } from '@/lib/airtable/constants'
+
 const API_BASE = 'https://api.airtable.com/v0'
-const TABLE = 'Coach-Person Context'
+const TABLE = encodeURIComponent(TABLES.COACH_PERSON_CONTEXT)
 
 function getCredentials() {
   const apiKey = process.env.AIRTABLE_API_KEY
@@ -17,13 +19,13 @@ export interface CoachPersonContext {
 }
 
 function mapRecord(r: { id: string; fields: Record<string, unknown> }): CoachPersonContext {
-  const flags = r.fields['Relationship Flags']
+  const flags = r.fields[FIELDS.COACH_PERSON_CONTEXT.RELATIONSHIP_FLAGS]
   return {
     id: r.id,
-    quickNotes: (r.fields['Quick Notes'] as string | undefined) ?? null,
-    familyDetails: (r.fields['Family Details'] as string | undefined) ?? null,
+    quickNotes: (r.fields[FIELDS.COACH_PERSON_CONTEXT.QUICK_NOTES] as string | undefined) ?? null,
+    familyDetails: (r.fields[FIELDS.COACH_PERSON_CONTEXT.FAMILY_DETAILS] as string | undefined) ?? null,
     flags: Array.isArray(flags) ? (flags as string[]) : [],
-    lastUpdated: (r.fields['Last Updated'] as string | undefined) ?? null,
+    lastUpdated: (r.fields[FIELDS.COACH_PERSON_CONTEXT.LAST_UPDATED] as string | undefined) ?? null,
   }
 }
 
@@ -42,7 +44,7 @@ export async function getCoachPersonContext(
   try {
     const { apiKey, baseId } = getCredentials()
     const res = await fetch(
-      `${API_BASE}/${baseId}/${encodeURIComponent(TABLE)}?maxRecords=2000`,
+      `${API_BASE}/${baseId}/${TABLE}?maxRecords=2000`,
       { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
     )
     if (!res.ok) {
@@ -52,8 +54,8 @@ export async function getCoachPersonContext(
     const data = await res.json()
     const record = (data.records ?? []).find(
       (r: { id: string; fields: Record<string, unknown> }) => {
-        const coaches = Array.isArray(r.fields['Coach']) ? (r.fields['Coach'] as string[]) : []
-        const persons = Array.isArray(r.fields['Person']) ? (r.fields['Person'] as string[]) : []
+        const coaches = Array.isArray(r.fields[FIELDS.COACH_PERSON_CONTEXT.COACH]) ? (r.fields[FIELDS.COACH_PERSON_CONTEXT.COACH] as string[]) : []
+        const persons = Array.isArray(r.fields[FIELDS.COACH_PERSON_CONTEXT.PERSON]) ? (r.fields[FIELDS.COACH_PERSON_CONTEXT.PERSON] as string[]) : []
         return coaches.includes(coachAirtableId) && persons.includes(personAirtableId)
       },
     )
@@ -81,11 +83,11 @@ export async function upsertCoachPersonContext(
 
   // Build the fields object — omit empty strings, include only changed/provided values
   const writeFields: Record<string, unknown> = {
-    'Last Updated': new Date().toISOString().split('T')[0],
+    [FIELDS.COACH_PERSON_CONTEXT.LAST_UPDATED]: new Date().toISOString().split('T')[0],
   }
-  if (fields.quickNotes !== undefined) writeFields['Quick Notes'] = fields.quickNotes
-  if (fields.familyDetails !== undefined) writeFields['Family Details'] = fields.familyDetails
-  if (fields.flags !== undefined) writeFields['Relationship Flags'] = fields.flags
+  if (fields.quickNotes !== undefined) writeFields[FIELDS.COACH_PERSON_CONTEXT.QUICK_NOTES] = fields.quickNotes
+  if (fields.familyDetails !== undefined) writeFields[FIELDS.COACH_PERSON_CONTEXT.FAMILY_DETAILS] = fields.familyDetails
+  if (fields.flags !== undefined) writeFields[FIELDS.COACH_PERSON_CONTEXT.RELATIONSHIP_FLAGS] = fields.flags
 
   // Check if a record already exists for this pair
   const existing = await getCoachPersonContext(coachAirtableId, personAirtableId)
@@ -93,7 +95,7 @@ export async function upsertCoachPersonContext(
   if (existing) {
     // PATCH the existing record
     const res = await fetch(
-      `${API_BASE}/${baseId}/${encodeURIComponent(TABLE)}/${existing.id}`,
+      `${API_BASE}/${baseId}/${TABLE}/${existing.id}`,
       {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -108,15 +110,15 @@ export async function upsertCoachPersonContext(
   } else {
     // POST a new record — include the linked Coach and Person fields
     const res = await fetch(
-      `${API_BASE}/${baseId}/${encodeURIComponent(TABLE)}`,
+      `${API_BASE}/${baseId}/${TABLE}`,
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fields: {
             ...writeFields,
-            Coach: [coachAirtableId],
-            Person: [personAirtableId],
+            [FIELDS.COACH_PERSON_CONTEXT.COACH]: [coachAirtableId],
+            [FIELDS.COACH_PERSON_CONTEXT.PERSON]: [personAirtableId],
           },
         }),
       },

@@ -1,5 +1,7 @@
+import { TABLES, FIELDS } from '@/lib/airtable/constants'
+
 const API_BASE = 'https://api.airtable.com/v0'
-const TABLE = 'Coach Session'
+const TABLE = encodeURIComponent(TABLES.COACH_SESSION)
 
 function getCredentials() {
   const apiKey = process.env.AIRTABLE_API_KEY
@@ -21,23 +23,23 @@ export interface CoachSession {
 function mapRecord(r: { id: string; fields: Record<string, unknown> }): CoachSession {
   return {
     id: r.id,
-    coachIds: Array.isArray(r.fields['Coach']) ? (r.fields['Coach'] as string[]) : [],
-    calendarEventIds: Array.isArray(r.fields['Calendar Event'])
-      ? (r.fields['Calendar Event'] as string[])
+    coachIds: Array.isArray(r.fields[FIELDS.COACH_SESSION.COACH]) ? (r.fields[FIELDS.COACH_SESSION.COACH] as string[]) : [],
+    calendarEventIds: Array.isArray(r.fields[FIELDS.COACH_SESSION.CALENDAR_EVENT])
+      ? (r.fields[FIELDS.COACH_SESSION.CALENDAR_EVENT] as string[])
       : [],
-    focalPersonIds: Array.isArray(r.fields['Focal Person'])
-      ? (r.fields['Focal Person'] as string[])
+    focalPersonIds: Array.isArray(r.fields[FIELDS.COACH_SESSION.FOCAL_PERSON])
+      ? (r.fields[FIELDS.COACH_SESSION.FOCAL_PERSON] as string[])
       : [],
-    sessionNotes: (r.fields['Session Notes'] as string | undefined) ?? null,
-    actionItems: (r.fields['Action Items'] as string | undefined) ?? null,
-    lastUpdated: (r.fields['Last Updated'] as string | undefined) ?? null,
+    sessionNotes: (r.fields[FIELDS.COACH_SESSION.SESSION_NOTES] as string | undefined) ?? null,
+    actionItems: (r.fields[FIELDS.COACH_SESSION.ACTION_ITEMS] as string | undefined) ?? null,
+    lastUpdated: (r.fields[FIELDS.COACH_SESSION.LAST_UPDATED] as string | undefined) ?? null,
   }
 }
 
 async function fetchAll(): Promise<CoachSession[]> {
   const { apiKey, baseId } = getCredentials()
   const res = await fetch(
-    `${API_BASE}/${baseId}/${encodeURIComponent(TABLE)}?maxRecords=5000`,
+    `${API_BASE}/${baseId}/${TABLE}?maxRecords=5000`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
   )
   if (!res.ok) {
@@ -117,16 +119,16 @@ export async function upsertCoachSession(
   const { apiKey, baseId } = getCredentials()
 
   const writeFields: Record<string, unknown> = {
-    'Last Updated': new Date().toISOString().split('T')[0],
+    [FIELDS.COACH_SESSION.LAST_UPDATED]: new Date().toISOString().split('T')[0],
   }
-  if (fields.sessionNotes !== undefined) writeFields['Session Notes'] = fields.sessionNotes
-  if (fields.actionItems !== undefined) writeFields['Action Items'] = fields.actionItems
+  if (fields.sessionNotes !== undefined) writeFields[FIELDS.COACH_SESSION.SESSION_NOTES] = fields.sessionNotes
+  if (fields.actionItems !== undefined) writeFields[FIELDS.COACH_SESSION.ACTION_ITEMS] = fields.actionItems
 
   const existing = await getCoachSession(coachAirtableId, calendarEventId)
 
   if (existing) {
     const res = await fetch(
-      `${API_BASE}/${baseId}/${encodeURIComponent(TABLE)}/${existing.id}`,
+      `${API_BASE}/${baseId}/${TABLE}/${existing.id}`,
       {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -140,16 +142,16 @@ export async function upsertCoachSession(
     console.log('[upsertCoachSession] PATCHed record:', existing.id)
   } else {
     const res = await fetch(
-      `${API_BASE}/${baseId}/${encodeURIComponent(TABLE)}`,
+      `${API_BASE}/${baseId}/${TABLE}`,
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fields: {
             ...writeFields,
-            Coach: [coachAirtableId],
-            'Calendar Event': [calendarEventId],
-            'Focal Person': [focalPersonId],
+            [FIELDS.COACH_SESSION.COACH]: [coachAirtableId],
+            [FIELDS.COACH_SESSION.CALENDAR_EVENT]: [calendarEventId],
+            [FIELDS.COACH_SESSION.FOCAL_PERSON]: [focalPersonId],
           },
         }),
       },

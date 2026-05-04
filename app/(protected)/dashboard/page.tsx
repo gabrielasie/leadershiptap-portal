@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Calendar, Users, ChevronRight, Clock, CheckSquare, CalendarDays } from 'lucide-react'
+import { TABLES, FIELDS } from '@/lib/airtable/constants'
 import { getUsers, getClientsByRelationship, getPortalCoaches } from '@/lib/services/usersService'
 import { getRelationshipContexts } from '@/lib/airtable/relationships'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
@@ -72,7 +73,7 @@ function formatSessionLabel(iso: string): string {
   return `${weekday} ${month} ${day} · ${time} ET`
 }
 
-// ── Portal Calendar Events ────────────────────────────────────────────────────
+// ── Meetings (was: Portal Calendar Events) ────────────────────────────────────
 
 interface PortalCalendarEvent {
   id: string
@@ -90,20 +91,20 @@ async function getUpcomingPortalEvents(ownerEmail: string): Promise<PortalCalend
   const cutoff = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
   const safeOwner = ownerEmail.toLowerCase().replace(/"/g, '\\"')
   const formula = encodeURIComponent(
-    `AND(IS_AFTER({Start}, "${now.toISOString()}"), IS_BEFORE({Start}, "${cutoff.toISOString()}"), LOWER({Calendar Owner}) = "${safeOwner}")`,
+    `AND(IS_AFTER({${FIELDS.MEETINGS.START}}, "${now.toISOString()}"), IS_BEFORE({${FIELDS.MEETINGS.START}}, "${cutoff.toISOString()}"), LOWER({${FIELDS.MEETINGS.OWNER_EMAIL}}) = "${safeOwner}")`,
   )
   try {
     const res = await fetch(
-      `https://api.airtable.com/v0/${baseId}/${encodeURIComponent('Portal Calendar Events')}?filterByFormula=${formula}&sort[0][field]=Start&sort[0][direction]=asc&maxRecords=10`,
+      `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(TABLES.MEETINGS)}?filterByFormula=${formula}&sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.MEETINGS.START)}&sort%5B0%5D%5Bdirection%5D=asc&maxRecords=10`,
       { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
     )
     if (!res.ok) return []
     const data = await res.json()
     return (data.records ?? []).map((r: { id: string; fields: Record<string, unknown> }) => ({
       id: r.id,
-      subject: (r.fields['Subject'] as string) ?? '(No Subject)',
-      start: (r.fields['Start'] as string) ?? '',
-      timezone: (r.fields['Timezone'] as string) || 'America/New_York',
+      subject: (r.fields[FIELDS.MEETINGS.TITLE] as string) ?? '(No Subject)',
+      start: (r.fields[FIELDS.MEETINGS.START] as string) ?? '',
+      timezone: (r.fields[FIELDS.MEETINGS.TIMEZONE] as string) || 'America/New_York',
     })).filter((e: PortalCalendarEvent) => e.start)
   } catch {
     return []

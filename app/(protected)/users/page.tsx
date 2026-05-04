@@ -1,3 +1,4 @@
+import { TABLES, FIELDS } from '@/lib/airtable/constants'
 import { getUsers } from '@/lib/services/usersService'
 import { formatEastern } from '@/lib/utils/dateFormat'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
@@ -20,7 +21,7 @@ function formatSessionDate(iso: string): string {
   return formatEastern(iso, { month: 'short', day: 'numeric' })
 }
 
-// Fetch all Portal Calendar Events for one coach — only the fields needed
+// Fetch all Meetings for one coach — only the fields needed
 // for last/next session computation. One call, filtered server-side.
 interface CoachSession {
   clientName: string
@@ -33,21 +34,21 @@ async function getCoachCalendarSessions(ownerEmail: string): Promise<CoachSessio
   const baseId = process.env.AIRTABLE_BASE_ID
   if (!apiKey || !baseId) return []
   const safeEmail = ownerEmail.toLowerCase().replace(/"/g, '\\"')
-  const formula = encodeURIComponent(`AND(LOWER({Calendar Owner})="${safeEmail}",{Client Name}!="")`)
+  const formula = encodeURIComponent(`AND(LOWER({${FIELDS.MEETINGS.OWNER_EMAIL}})="${safeEmail}",{${FIELDS.MEETINGS.CLIENT_NAME}}!="")`)
   const res = await fetch(
-    `https://api.airtable.com/v0/${baseId}/${encodeURIComponent('Portal Calendar Events')}` +
+    `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(TABLES.MEETINGS)}` +
       `?filterByFormula=${formula}` +
-      `&fields[]=Client%20Name&fields[]=Start&fields[]=End` +
-      `&sort%5B0%5D%5Bfield%5D=Start&sort%5B0%5D%5Bdirection%5D=desc` +
+      `&fields[]=${encodeURIComponent(FIELDS.MEETINGS.CLIENT_NAME)}&fields[]=${encodeURIComponent(FIELDS.MEETINGS.START)}&fields[]=${encodeURIComponent(FIELDS.MEETINGS.END)}` +
+      `&sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.MEETINGS.START)}&sort%5B0%5D%5Bdirection%5D=desc` +
       `&maxRecords=2000`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
   )
   if (!res.ok) return []
   const data = await res.json()
   return (data.records ?? []).map((r: { fields: Record<string, unknown> }) => ({
-    clientName: (r.fields['Client Name'] as string) ?? '',
-    startTime: (r.fields['Start'] as string) ?? '',
-    endTime: (r.fields['End'] as string) ?? '',
+    clientName: (r.fields[FIELDS.MEETINGS.CLIENT_NAME] as string) ?? '',
+    startTime: (r.fields[FIELDS.MEETINGS.START] as string) ?? '',
+    endTime: (r.fields[FIELDS.MEETINGS.END] as string) ?? '',
   }))
 }
 

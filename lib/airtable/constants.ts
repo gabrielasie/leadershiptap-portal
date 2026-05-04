@@ -8,6 +8,8 @@ export const TABLES = {
   MEETINGS: 'Meetings',                // was: Portal Calendar Events
   NOTES: 'Notes',                      // was: Session Notes
   TASKS: 'Tasks',
+  COACH_SESSION: 'Coach Session',
+  COACH_PERSON_CONTEXT: 'Coach-Person Context',
 } as const
 
 export const FIELDS = {
@@ -56,5 +58,21 @@ export const FIELDS = {
     DESCRIPTION: 'Description',        // was: Notes
     STATUS: 'Status',
     DUE_DATE: 'Due Date',
+  },
+  COACH_SESSION: {
+    COACH: 'Coach',
+    CALENDAR_EVENT: 'Calendar Event',
+    FOCAL_PERSON: 'Focal Person',
+    SESSION_NOTES: 'Session Notes',
+    ACTION_ITEMS: 'Action Items',
+    LAST_UPDATED: 'Last Updated',
+  },
+  COACH_PERSON_CONTEXT: {
+    COACH: 'Coach',
+    PERSON: 'Person',
+    QUICK_NOTES: 'Quick Notes',
+    FAMILY_DETAILS: 'Family Details',
+    RELATIONSHIP_FLAGS: 'Relationship Flags',
+    LAST_UPDATED: 'Last Updated',
   },
 } as const
