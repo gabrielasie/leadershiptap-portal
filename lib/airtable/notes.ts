@@ -32,7 +32,7 @@ function mapRecord(r: AirtableRecord): Note {
   return {
     id: r.id,
     body: (r.fields[FIELDS.NOTES.BODY] as string) ?? '',
-    createdAt: (r.fields['Created At'] as string) ?? '',
+    createdAt: (r.fields[FIELDS.NOTES.CREATED_AT] as string) ?? '',
     subjectPersonId: Array.isArray(subjectIds) ? (subjectIds[0] as string) ?? '' : '',
     authorPersonId: Array.isArray(authorIds) ? (authorIds[0] as string) : undefined,
     relationshipContextId: Array.isArray(ctxIds) ? (ctxIds[0] as string) : undefined,
@@ -43,7 +43,7 @@ function mapRecord(r: AirtableRecord): Note {
 }
 
 const SORT_CREATED_DESC =
-  `sort%5B0%5D%5Bfield%5D=${encodeURIComponent('Created At')}&sort%5B0%5D%5Bdirection%5D=desc`
+  `sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.NOTES.CREATED_AT)}&sort%5B0%5D%5Bdirection%5D=desc`
 
 /**
  * Fetch all notes sorted by Created At desc.

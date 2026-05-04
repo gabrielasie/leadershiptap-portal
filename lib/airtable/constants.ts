@@ -25,27 +25,28 @@ export const FIELDS = {
     CREATED_BY: 'Created By',
   },
   MEETINGS: {
-    TITLE: 'Meeting Title',            // was: Subject
+    TITLE: 'Meeting Title',
     REL_CONTEXT: 'Associated Relationship Context',
-    START: 'Start Time',               // was: Start
-    END: 'End Time',                   // was: End
+    START: 'Start',
+    END: 'End',
     STATUS: 'Meeting Status',
     PROVIDER: 'Calendar Provider',
     PROVIDER_EVENT_ID: 'Provider Event ID',
     ICAL_UID: 'iCal UID',
-    OWNER_EMAIL: 'Calendar Owner Email', // was: Calendar Owner
+    OWNER_EMAIL: 'Calendar Owner',
     OWNER_PERSON: 'Calendar Owner Person',
     CLIENT_NAME: 'Client Name',
     TIMEZONE: 'Timezone',
   },
   NOTES: {
-    BODY: 'Body',                      // was: Content
+    BODY: 'Body',
     REL_CONTEXT: 'Relationship Context',
     MEETING: 'Meeting',
-    AUTHOR: 'Author Person',           // was: Coach
-    SUBJECT: 'Subject Person',         // was: Client
+    AUTHOR: 'Author Person',
+    SUBJECT: 'Subject Person',
     NOTE_TYPE: 'Note Type',
     VISIBILITY: 'Visibility',
+    CREATED_AT: 'Created time',
   },
   TASKS: {
     TITLE: 'Task Title',               // was: Title
