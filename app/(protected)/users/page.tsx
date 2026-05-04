@@ -34,7 +34,7 @@ async function getCoachCalendarSessions(ownerEmail: string): Promise<CoachSessio
   const baseId = process.env.AIRTABLE_BASE_ID
   if (!apiKey || !baseId) return []
   const safeEmail = ownerEmail.toLowerCase().replace(/"/g, '\\"')
-  const formula = encodeURIComponent(`AND(LOWER({${FIELDS.MEETINGS.OWNER_EMAIL}})="${safeEmail}",{${FIELDS.MEETINGS.CLIENT_NAME}}!="")`)
+  const formula = encodeURIComponent(`AND(LOWER({${FIELDS.MEETINGS.CALENDAR_OWNER}})="${safeEmail}",{${FIELDS.MEETINGS.CLIENT_NAME}}!="")`)
   const res = await fetch(
     `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(TABLES.MEETINGS)}` +
       `?filterByFormula=${formula}` +

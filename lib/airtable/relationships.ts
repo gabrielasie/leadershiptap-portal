@@ -70,10 +70,6 @@ function mapRecord(
 
   const personId = personIds[0]
   const leadId = leadIds[0]
-  const orgIds = Array.isArray(r.fields[FIELDS.RELATIONSHIP_CONTEXTS.ORG])
-    ? (r.fields[FIELDS.RELATIONSHIP_CONTEXTS.ORG] as string[])
-    : []
-
   return {
     id: r.id,
     personId,
@@ -83,9 +79,9 @@ function mapRecord(
     relationshipType:
       (r.fields[FIELDS.RELATIONSHIP_CONTEXTS.TYPE] as 'coaching' | 'reports_to') ?? 'coaching',
     status: (r.fields[FIELDS.RELATIONSHIP_CONTEXTS.STATUS] as string) ?? '',
-    organizationId: orgIds[0] ?? undefined,
+    organizationId: undefined,
     startDate: (r.fields[FIELDS.RELATIONSHIP_CONTEXTS.START_DATE] as string) ?? undefined,
-    endDate: (r.fields[FIELDS.RELATIONSHIP_CONTEXTS.END_DATE] as string) ?? undefined,
+    endDate: undefined,
   }
 }
 
@@ -383,7 +379,7 @@ export async function generateRelationshipRows(data: OnboardingData): Promise<vo
       [FIELDS.RELATIONSHIP_CONTEXTS.STATUS]: 'Active',
     }
     if (row.useStandardProfile && standardProfileId) {
-      fields[FIELDS.RELATIONSHIP_CONTEXTS.PERMISSION_PROFILE] = [standardProfileId]
+      fields[FIELDS.RELATIONSHIP_CONTEXTS.PERMISSION_LEVEL] = [standardProfileId]
     }
 
     const res = await fetch(`${API_BASE}/${baseId}/${TABLE}`, {

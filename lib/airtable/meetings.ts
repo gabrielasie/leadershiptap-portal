@@ -31,12 +31,12 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Mee
     endTime: record.fields[FIELDS.MEETINGS.END] as string | undefined,
     timezone: (record.fields[FIELDS.MEETINGS.TIMEZONE] as string) || undefined,
     senderEmail: undefined,
-    participantEmails: parseEmails(record.fields["Participant Emails"]),
-    notes: (record.fields["Notes"] as string) || undefined,
+    participantEmails: parseEmails(record.fields[FIELDS.MEETINGS.ATTENDEES]),
+    notes: undefined,
     sessionStatus: null,
     actionItems: null,
     clientName: (record.fields[FIELDS.MEETINGS.CLIENT_NAME] as string) || undefined,
-    relationshipContextId: (record.fields[FIELDS.MEETINGS.REL_CONTEXT] as string) || undefined,
+    relationshipContextId: (record.fields[FIELDS.MEETINGS.REL_CONTEXT_ID] as string) || undefined,
   };
 }
 
@@ -49,7 +49,7 @@ export async function getAllUpcomingMeetings(daysAhead = 7, ownerEmail?: string)
   const timeFilter = `AND(IS_AFTER({${FIELDS.MEETINGS.START}}, "${now}"), IS_BEFORE({${FIELDS.MEETINGS.START}}, "${cutoff}"))`;
   const safeOwner = ownerEmail ? ownerEmail.toLowerCase().replace(/"/g, '\\"') : null;
   const formula = safeOwner
-    ? `AND(${timeFilter}, LOWER({${FIELDS.MEETINGS.OWNER_EMAIL}}) = "${safeOwner}")`
+    ? `AND(${timeFilter}, LOWER({${FIELDS.MEETINGS.CALENDAR_OWNER}}) = "${safeOwner}")`
     : timeFilter;
   console.log('[debug] getAllUpcomingMeetings table:', TABLES.MEETINGS, 'filter:', formula);
   const res = await fetch(
@@ -71,7 +71,7 @@ export async function getAllMeetings(ownerEmail?: string): Promise<Meeting[]> {
   const { apiKey, baseId } = getCredentials();
   const safeOwner = ownerEmail ? ownerEmail.toLowerCase().replace(/"/g, '\\"') : null;
   const filterParam = safeOwner
-    ? `filterByFormula=${encodeURIComponent(`LOWER({${FIELDS.MEETINGS.OWNER_EMAIL}}) = "${safeOwner}"`)}&`
+    ? `filterByFormula=${encodeURIComponent(`LOWER({${FIELDS.MEETINGS.CALENDAR_OWNER}}) = "${safeOwner}"`)}&`
     : '';
   console.log('[debug] getAllMeetings table:', TABLES.MEETINGS, 'ownerEmail:', ownerEmail ?? '(all)');
   const res = await fetch(
@@ -93,10 +93,10 @@ export async function getAllMeetings(ownerEmail?: string): Promise<Meeting[]> {
 export async function getMeetingsByUserEmail(email: string, ownerEmail?: string): Promise<Meeting[]> {
   const { apiKey, baseId } = getCredentials();
   const safeEmail = email.toLowerCase().trim().replace(/"/g, '\\"');
-  const participantFilter = `SEARCH("${safeEmail}", LOWER({Participant Emails}))`;
+  const participantFilter = `SEARCH("${safeEmail}", LOWER({${FIELDS.MEETINGS.ATTENDEES}}))`;
   const safeOwner = ownerEmail ? ownerEmail.toLowerCase().replace(/"/g, '\\"') : null;
   const formula = safeOwner
-    ? `AND(${participantFilter}, LOWER({${FIELDS.MEETINGS.OWNER_EMAIL}}) = "${safeOwner}")`
+    ? `AND(${participantFilter}, LOWER({${FIELDS.MEETINGS.CALENDAR_OWNER}}) = "${safeOwner}")`
     : participantFilter;
   const res = await fetch(
     `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${encodeURIComponent(formula)}&sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.MEETINGS.START)}&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=100`,

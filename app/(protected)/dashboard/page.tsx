@@ -91,7 +91,7 @@ async function getUpcomingPortalEvents(ownerEmail: string): Promise<PortalCalend
   const cutoff = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
   const safeOwner = ownerEmail.toLowerCase().replace(/"/g, '\\"')
   const formula = encodeURIComponent(
-    `AND(IS_AFTER({${FIELDS.MEETINGS.START}}, "${now.toISOString()}"), IS_BEFORE({${FIELDS.MEETINGS.START}}, "${cutoff.toISOString()}"), LOWER({${FIELDS.MEETINGS.OWNER_EMAIL}}) = "${safeOwner}")`,
+    `AND(IS_AFTER({${FIELDS.MEETINGS.START}}, "${now.toISOString()}"), IS_BEFORE({${FIELDS.MEETINGS.START}}, "${cutoff.toISOString()}"), LOWER({${FIELDS.MEETINGS.CALENDAR_OWNER}}) = "${safeOwner}")`,
   )
   try {
     console.log('[debug] getUpcomingPortalEvents table:', TABLES.MEETINGS, 'filter:', decodeURIComponent(formula))

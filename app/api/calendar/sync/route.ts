@@ -322,14 +322,11 @@ async function upsertMeeting(
 
   const fields = {
     [FIELDS.MEETINGS.TITLE]: `${coachFirstName} / ${personName} — ${event.subject ?? '(No Subject)'}`,
-    [FIELDS.MEETINGS.REL_CONTEXT]: [contextId],  // linked field — always an array
+    [FIELDS.MEETINGS.REL_CONTEXT_ID]: contextId,
     [FIELDS.MEETINGS.START]: start,
     [FIELDS.MEETINGS.END]: end,
-    [FIELDS.MEETINGS.STATUS]: 'Scheduled',
-    [FIELDS.MEETINGS.PROVIDER]: 'Outlook',
     [FIELDS.MEETINGS.PROVIDER_EVENT_ID]: event.id,
-    [FIELDS.MEETINGS.ICAL_UID]: event.iCalUId ?? '',
-    [FIELDS.MEETINGS.OWNER_EMAIL]: coachEmail,
+    [FIELDS.MEETINGS.CALENDAR_OWNER]: coachEmail,
     [FIELDS.MEETINGS.TIMEZONE]: event.start.timeZone ?? 'America/New_York',
   }
 
@@ -341,17 +338,14 @@ async function upsertMeeting(
   const findRes = await fetch(
     `${AIRTABLE_API}/${baseId}/${MEETINGS_TABLE}?filterByFormula=${formula}&maxRecords=50` +
       `&fields[]=${encodeURIComponent(FIELDS.MEETINGS.PROVIDER_EVENT_ID)}` +
-      `&fields[]=${encodeURIComponent(FIELDS.MEETINGS.REL_CONTEXT)}`,
+      `&fields[]=${encodeURIComponent(FIELDS.MEETINGS.REL_CONTEXT_ID)}`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
   )
   const findData = findRes.ok ? await findRes.json() : { records: [] }
 
   const existingRecord = (findData.records ?? []).find(
     (r: { id: string; fields: Record<string, unknown> }) => {
-      const ctxIds = Array.isArray(r.fields[FIELDS.MEETINGS.REL_CONTEXT])
-        ? (r.fields[FIELDS.MEETINGS.REL_CONTEXT] as string[])
-        : []
-      return ctxIds.includes(contextId)
+      return (r.fields[FIELDS.MEETINGS.REL_CONTEXT_ID] as string | undefined) === contextId
     },
   )
 
@@ -400,7 +394,7 @@ async function cancelMeetings(
     const patchRes = await fetch(`${AIRTABLE_API}/${baseId}/${MEETINGS_TABLE}/${r.id}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: { [FIELDS.MEETINGS.STATUS]: 'Cancelled' } }),
+      body: JSON.stringify({ fields: { 'Meeting Status': 'Cancelled' } }),
     })
     if (patchRes.ok) cancelled++
   }

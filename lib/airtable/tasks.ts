@@ -1,6 +1,5 @@
 import type { Task, TaskStatus } from '@/lib/types'
 import { TABLES, FIELDS } from '@/lib/airtable/constants'
-import { getRelationshipContext } from '@/lib/airtable/relationships'
 
 const API_BASE = 'https://api.airtable.com/v0'
 const TABLE = encodeURIComponent(TABLES.TASKS)
@@ -17,22 +16,19 @@ type AirtableRecord = { id: string; fields: Record<string, unknown> }
 const OPEN_STATUSES: TaskStatus[] = ['Not Started', 'In Progress']
 
 function mapTaskRecord(r: AirtableRecord): Task {
-  const assignedIds = r.fields[FIELDS.TASKS.ASSIGNED_TO]
-  const createdIds = r.fields[FIELDS.TASKS.CREATED_BY]
-  const ctxIds = r.fields[FIELDS.TASKS.REL_CONTEXT]
-  const meetingIds = r.fields[FIELDS.TASKS.MEETING]
+  const clientIds = r.fields[FIELDS.TASKS.CLIENT]
   return {
     id: r.id,
     name: (r.fields[FIELDS.TASKS.TITLE] as string) || 'Untitled',
     status: ((r.fields[FIELDS.TASKS.STATUS] as string) || 'Not Started') as TaskStatus,
     dueDate: (r.fields[FIELDS.TASKS.DUE_DATE] as string) || undefined,
-    description: (r.fields[FIELDS.TASKS.DESCRIPTION] as string) || undefined,
-    taskType: (r.fields[FIELDS.TASKS.TYPE] as Task['taskType']) || undefined,
-    visibility: (r.fields[FIELDS.TASKS.VISIBILITY] as Task['visibility']) || undefined,
-    assignedToPersonId: Array.isArray(assignedIds) ? (assignedIds[0] as string) : undefined,
-    createdByPersonId: Array.isArray(createdIds) ? (createdIds[0] as string) : undefined,
-    relationshipContextId: Array.isArray(ctxIds) ? (ctxIds[0] as string) : undefined,
-    meetingId: Array.isArray(meetingIds) ? (meetingIds[0] as string) : undefined,
+    description: (r.fields[FIELDS.TASKS.NOTES] as string) || undefined,
+    taskType: (r.fields[FIELDS.TASKS.ASSIGNMENT_TYPE] as Task['taskType']) || undefined,
+    visibility: undefined,
+    assignedToPersonId: Array.isArray(clientIds) ? (clientIds[0] as string) : undefined,
+    createdByPersonId: undefined,
+    relationshipContextId: undefined,
+    meetingId: undefined,
   }
 }
 
@@ -46,8 +42,7 @@ function sortByDueDate(tasks: Task[]): Task[] {
 }
 
 /**
- * Fetch open tasks authored by or assigned to a person.
- * JS-filtered because Assigned To Person and Created By Person are linked fields.
+ * Fetch open tasks for a person — JS-filtered because Client is a linked field.
  */
 export async function getTasks(personAirtableId: string): Promise<Task[]> {
   try {
@@ -64,11 +59,8 @@ export async function getTasks(personAirtableId: string): Promise<Task[]> {
     const data = await res.json()
     const tasks = (data.records ?? [])
       .filter((r: AirtableRecord) => {
-        const assigned = r.fields[FIELDS.TASKS.ASSIGNED_TO]
-        const created = r.fields[FIELDS.TASKS.CREATED_BY]
-        const isInvolved =
-          (Array.isArray(assigned) && (assigned as string[]).includes(personAirtableId)) ||
-          (Array.isArray(created) && (created as string[]).includes(personAirtableId))
+        const clientIds = r.fields[FIELDS.TASKS.CLIENT]
+        const isInvolved = Array.isArray(clientIds) && (clientIds as string[]).includes(personAirtableId)
         const status = r.fields[FIELDS.TASKS.STATUS] as string
         const isOpen = OPEN_STATUSES.includes(status as TaskStatus)
         return isInvolved && isOpen
@@ -99,8 +91,8 @@ export async function getTasksByUser(userId: string): Promise<Task[]> {
     const data = await res.json()
     const tasks = (data.records ?? [])
       .filter((r: AirtableRecord) => {
-        const assigned = r.fields[FIELDS.TASKS.ASSIGNED_TO]
-        return Array.isArray(assigned) && (assigned as string[]).includes(userId)
+        const clientIds = r.fields[FIELDS.TASKS.CLIENT]
+        return Array.isArray(clientIds) && (clientIds as string[]).includes(userId)
       })
       .map(mapTaskRecord)
     return sortByDueDate(tasks)
@@ -142,46 +134,22 @@ export interface CreateTaskData {
 }
 
 /**
- * Create a task. Auto-determines Task Type and Visibility from the assignee:
- * - self-assign → personal_reminder + private_to_author
- * - other person → assignment + shared_with_target
- * Resolves Relationship Context automatically if not provided.
+ * Create a task linked to a client.
  */
 export async function createTask(data: CreateTaskData): Promise<string> {
   const { apiKey, baseId } = getCredentials()
 
   const isSelf = data.assignedToPersonId === data.createdByPersonId
-  const taskType: Task['taskType'] = isSelf ? 'personal_reminder' : 'assignment'
-  const visibility: Task['visibility'] = isSelf ? 'private_to_author' : 'shared_with_target'
-
-  // Resolve relationship context
-  let relationshipContextId = data.relationshipContextId
-  if (!relationshipContextId && !isSelf) {
-    // Try coaching relationship (lead=creator, person=assignee)
-    const ctx = await getRelationshipContext(data.createdByPersonId, data.assignedToPersonId)
-      ?? await getRelationshipContext(data.assignedToPersonId, data.createdByPersonId)
-    if (ctx) {
-      relationshipContextId = ctx.id
-    } else {
-      console.warn(
-        '[createTask] No relationship context found for pair — task created without context',
-        { createdBy: data.createdByPersonId, assignedTo: data.assignedToPersonId },
-      )
-    }
-  }
+  const assignmentType = isSelf ? 'personal_reminder' : 'assignment'
 
   const fields: Record<string, unknown> = {
     [FIELDS.TASKS.TITLE]: data.title,
     [FIELDS.TASKS.STATUS]: 'Not Started',
-    [FIELDS.TASKS.TYPE]: taskType,
-    [FIELDS.TASKS.VISIBILITY]: visibility,
-    [FIELDS.TASKS.ASSIGNED_TO]: [data.assignedToPersonId],
-    [FIELDS.TASKS.CREATED_BY]: [data.createdByPersonId],
+    [FIELDS.TASKS.ASSIGNMENT_TYPE]: assignmentType,
+    [FIELDS.TASKS.CLIENT]: [data.assignedToPersonId],
   }
-  if (data.description) fields[FIELDS.TASKS.DESCRIPTION] = data.description
+  if (data.description) fields[FIELDS.TASKS.NOTES] = data.description
   if (data.dueDate) fields[FIELDS.TASKS.DUE_DATE] = data.dueDate
-  if (relationshipContextId) fields[FIELDS.TASKS.REL_CONTEXT] = [relationshipContextId]
-  if (data.meetingId) fields[FIELDS.TASKS.MEETING] = [data.meetingId]
 
   const res = await fetch(`${API_BASE}/${baseId}/${TABLE}`, {
     method: 'POST',
@@ -212,7 +180,7 @@ export async function updateTask(
     if (data.title !== undefined) writeFields[FIELDS.TASKS.TITLE] = data.title
     if (data.status !== undefined) writeFields[FIELDS.TASKS.STATUS] = data.status
     if (data.dueDate !== undefined) writeFields[FIELDS.TASKS.DUE_DATE] = data.dueDate
-    if (data.description !== undefined) writeFields[FIELDS.TASKS.DESCRIPTION] = data.description
+    if (data.description !== undefined) writeFields[FIELDS.TASKS.NOTES] = data.description
     if (Object.keys(writeFields).length === 0) return { success: true }
 
     const res = await fetch(`${API_BASE}/${baseId}/${TABLE}/${taskId}`, {
