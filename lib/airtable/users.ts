@@ -113,6 +113,7 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Use
     hireDate: record.fields["Hire Date"] as string | undefined,
     engagementLevel: record.fields["Engagement Level"] as string | undefined,
     coachNotes: record.fields["Coach Notes"] as string | undefined,
+    internalNotes: record.fields["Internal Notes"] as string | undefined,
   };
 }
 

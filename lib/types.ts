@@ -69,6 +69,7 @@ export interface User {
   hireDate?: string;
   engagementLevel?: string;
   coachNotes?: string;
+  internalNotes?: string;  // Airtable "Internal Notes" — coaching context on Users table
 }
 
 export interface Meeting {

@@ -35,6 +35,7 @@ import UserActionsBar from './UserActionsBar'
 import RecentSessionCard from './RecentSessionCard'
 import MostRecentSessionNotes from './MostRecentSessionNotes'
 import EditProfileDialog from './EditProfileDialog'
+import EditInlineProfileDialog from './EditInlineProfileDialog'
 import AddTeamMemberDialog from './AddTeamMemberDialog'
 import TaskItem from './TaskItem'
 import NoteItem from './NoteItem'
@@ -460,7 +461,16 @@ export default async function UserDetailPage({ params, searchParams }: Props) {
         {userCanWrite && (
           <div className="flex items-start justify-between gap-2 mb-4 sm:mb-0">
             <span />
-            <EditProfileDialog user={user} coachContext={coachContext} />
+            <div className="flex items-center gap-3">
+              {relationshipContext && (
+                <EditInlineProfileDialog
+                  userId={id}
+                  currentTitle={user.title ?? user.jobTitle ?? ''}
+                  currentInternalNotes={user.internalNotes ?? ''}
+                />
+              )}
+              <EditProfileDialog user={user} coachContext={coachContext} />
+            </div>
           </div>
         )}
         <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-5">
@@ -621,41 +631,54 @@ export default async function UserDetailPage({ params, searchParams }: Props) {
       {/* ── Coaching Context ──────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
         <SectionHeading icon={Heart} title="Coaching Context" />
-        {coachContext === null ? (
-          <p className="text-sm text-slate-400 italic">No context added yet — use Edit Profile to add notes.</p>
-        ) : (
-          <div className="space-y-4">
-            {hasRealContent(coachContext.quickNotes ?? undefined) && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Quick Notes</p>
-                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{coachContext.quickNotes}</p>
-              </div>
-            )}
-            {hasRealContent(coachContext.familyDetails ?? undefined) && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Family Details</p>
-                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{coachContext.familyDetails}</p>
-              </div>
-            )}
-            {coachContext.flags.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Relationship Flags</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {coachContext.flags.map((flag) => (
-                    <span key={flag} className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                      {flag}
-                    </span>
-                  ))}
+        {(() => {
+          const hasInternalNotes = hasRealContent(user.internalNotes)
+          const hasQuickNotes = hasRealContent(coachContext?.quickNotes ?? undefined)
+          const hasFamilyDetails = hasRealContent(coachContext?.familyDetails ?? undefined)
+          const hasFlags = (coachContext?.flags.length ?? 0) > 0
+          const hasAnyContent = hasInternalNotes || hasQuickNotes || hasFamilyDetails || hasFlags
+
+          if (!hasAnyContent) {
+            return (
+              <p className="text-sm text-slate-400 italic">No context added yet — use Edit Profile to add notes.</p>
+            )
+          }
+
+          return (
+            <div className="space-y-4">
+              {hasInternalNotes && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Coaching Context</p>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{user.internalNotes}</p>
                 </div>
-              </div>
-            )}
-            {!hasRealContent(coachContext.quickNotes ?? undefined) &&
-              !hasRealContent(coachContext.familyDetails ?? undefined) &&
-              coachContext.flags.length === 0 && (
-                <p className="text-sm text-slate-400 italic">No context added yet — use Edit Profile to add notes.</p>
               )}
-          </div>
-        )}
+              {hasQuickNotes && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Quick Notes</p>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{coachContext!.quickNotes}</p>
+                </div>
+              )}
+              {hasFamilyDetails && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Family Details</p>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{coachContext!.familyDetails}</p>
+                </div>
+              )}
+              {hasFlags && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Relationship Flags</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {coachContext!.flags.map((flag) => (
+                      <span key={flag} className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                        {flag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </div>
 
       {/* ── Personality & Strengths ───────────────────────────────────────── */}

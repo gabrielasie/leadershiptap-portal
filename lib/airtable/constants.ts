@@ -65,6 +65,10 @@ export const FIELDS = {
     ACTION_ITEMS: 'Action Items',
     LAST_UPDATED: 'Last Updated',
   },
+  USERS: {
+    INTERNAL_NOTES: 'Internal Notes',
+    TITLE: 'Title',
+  },
   COACH_PERSON_CONTEXT: {
     COACH: 'Coach',
     PERSON: 'Person',
