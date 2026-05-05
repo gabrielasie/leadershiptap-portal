@@ -33,20 +33,20 @@ interface Props {
 
 export default function EditTaskDialog({ task, open, onOpenChange, onSuccess }: Props) {
   const [isPending, startTransition] = useTransition()
-  const [title, setTitle] = useState(task.name)
+  const [title, setTitle] = useState(task.title)
   const [status, setStatus] = useState<TaskStatus>(task.status)
   const [dueDate, setDueDate] = useState(task.dueDate ?? '')
-  const [description, setDescription] = useState(task.description ?? '')
+  const [notes, setNotes] = useState(task.notes ?? '')
   const [errorMsg, setErrorMsg] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   // Reset form whenever dialog opens
   useEffect(() => {
     if (open) {
-      setTitle(task.name)
+      setTitle(task.title)
       setStatus(task.status)
       setDueDate(task.dueDate ?? '')
-      setDescription(task.description ?? '')
+      setNotes(task.notes ?? '')
       setErrorMsg('')
       setConfirmDelete(false)
     }
@@ -57,12 +57,12 @@ export default function EditTaskDialog({ task, open, onOpenChange, onSuccess }: 
     setErrorMsg('')
     startTransition(async () => {
       const data: Parameters<typeof dashboardUpdateTaskAction>[1] = {}
-      if (title.trim() !== task.name) data.title = title.trim()
+      if (title.trim() !== task.title) data.title = title.trim()
       if (status !== task.status) data.status = status
       const origDue = task.dueDate ?? ''
       if (dueDate !== origDue) data.dueDate = dueDate || null
-      const origDesc = task.description ?? ''
-      if (description !== origDesc) data.description = description
+      const origNotes = task.notes ?? ''
+      if (notes !== origNotes) data.notes = notes
 
       if (Object.keys(data).length === 0) {
         onOpenChange(false)
@@ -100,7 +100,7 @@ export default function EditTaskDialog({ task, open, onOpenChange, onSuccess }: 
         {confirmDelete ? (
           <>
             <p className="text-sm text-slate-700 py-2">
-              Delete &ldquo;{task.name}&rdquo;? This cannot be undone.
+              Delete &ldquo;{task.title}&rdquo;? This cannot be undone.
             </p>
             {errorMsg && <p className="text-xs text-rose-600">{errorMsg}</p>}
             <DialogFooter>
@@ -144,10 +144,10 @@ export default function EditTaskDialog({ task, open, onOpenChange, onSuccess }: 
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Not Started">Not Started</SelectItem>
-                      <SelectItem value="In Progress">In Progress</SelectItem>
-                      <SelectItem value="Complete">Complete</SelectItem>
-                      <SelectItem value="Cancelled">Cancelled</SelectItem>
+                      <SelectItem value="not started">Not Started</SelectItem>
+                      <SelectItem value="in progress">In Progress</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -165,11 +165,11 @@ export default function EditTaskDialog({ task, open, onOpenChange, onSuccess }: 
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="edit-description">Description</Label>
+                <Label htmlFor="edit-notes">Notes</Label>
                 <Textarea
-                  id="edit-description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  id="edit-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
                   rows={2}
                   disabled={isPending}
                 />

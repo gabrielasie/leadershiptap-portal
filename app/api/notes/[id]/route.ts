@@ -25,12 +25,12 @@ export async function PATCH(req: Request, { params }: Props) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const body = (await req.json()) as { body?: string }
-  if (!body.body?.trim()) {
-    return NextResponse.json({ error: 'Note body is required' }, { status: 400 })
+  const body = (await req.json()) as { content?: string }
+  if (!body.content?.trim()) {
+    return NextResponse.json({ error: 'Note content is required' }, { status: 400 })
   }
 
-  const result = await updateNote(id, body.body.trim())
+  const result = await updateNote(id, body.content.trim())
   if ('error' in result) {
     return NextResponse.json({ error: result.error }, { status: 500 })
   }

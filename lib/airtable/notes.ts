@@ -12,50 +12,58 @@ function getCredentials() {
 
 type AirtableRecord = { id: string; fields: Record<string, unknown> }
 
+export type NoteType = 'general_context' | 'meeting_note' | 'follow_up' | 'private_observation'
+
 export interface Note {
   id: string
-  body: string
-  createdAt: string
-  subjectPersonId: string
+  content: string
+  date: string
+  clientId?: string
+  coachName?: string
   authorPersonId?: string
-  relationshipContextId?: string
+  subjectPersonId?: string
   meetingId?: string
-  noteType?: string
-  visibility?: string
+  noteType?: NoteType
+  visibility: 'private_to_author'
+}
+
+function firstLinkedId(val: unknown): string | undefined {
+  return Array.isArray(val) && val.length > 0 ? (val[0] as string) : undefined
 }
 
 function mapRecord(r: AirtableRecord): Note {
-  const clientIds = r.fields[FIELDS.NOTES.CLIENT]
   return {
     id: r.id,
-    body: (r.fields[FIELDS.NOTES.BODY] as string) ?? '',
-    createdAt: (r.fields[FIELDS.NOTES.DATE] as string) ?? '',
-    subjectPersonId: Array.isArray(clientIds) ? (clientIds[0] as string) ?? '' : '',
-    authorPersonId: undefined,
-    relationshipContextId: undefined,
-    meetingId: undefined,
-    noteType: undefined,
-    visibility: undefined,
+    content: (r.fields[FIELDS.NOTES.BODY] as string) ?? '',
+    date: (r.fields[FIELDS.NOTES.DATE] as string) ?? '',
+    clientId: firstLinkedId(r.fields[FIELDS.NOTES.CLIENT]),
+    coachName: (r.fields[FIELDS.NOTES.COACH_NAME] as string) || undefined,
+    authorPersonId: firstLinkedId(r.fields[FIELDS.NOTES.AUTHOR_PERSON]),
+    subjectPersonId: firstLinkedId(r.fields[FIELDS.NOTES.SUBJECT_PERSON]),
+    meetingId: firstLinkedId(r.fields[FIELDS.NOTES.MEETING]),
+    noteType: (r.fields[FIELDS.NOTES.NOTE_TYPE] as NoteType) || undefined,
+    visibility: 'private_to_author',
   }
 }
 
 const SORT_DATE_DESC =
   `sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.NOTES.DATE)}&sort%5B0%5D%5Bdirection%5D=desc`
 
+// ── Read functions ────────────────────────────────────────────────────────────
+
 /**
- * Fetch all notes sorted by Created At desc.
- * Used by the dashboard (admin) and users list to build per-client note counts.
+ * Fetch all notes sorted by Date desc.
+ * Used by the dashboard and users list to build per-client note counts.
  */
 export async function getAllRecentNotes(limit = 100): Promise<Note[]> {
   const { apiKey, baseId } = getCredentials()
   const url = `${API_BASE}/${baseId}/${TABLE}?${SORT_DATE_DESC}&maxRecords=${limit}`
-  console.log('[debug] getAllRecentNotes table:', TABLES.NOTES, 'url:', url)
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },
     cache: 'no-store',
   })
   if (!res.ok) {
-    console.error('[debug] getAllRecentNotes failed status:', res.status, await res.text())
+    console.error('[getAllRecentNotes] failed:', res.status, await res.text())
     return []
   }
   const data = await res.json()
@@ -63,32 +71,10 @@ export async function getAllRecentNotes(limit = 100): Promise<Note[]> {
 }
 
 /**
- * Fetch notes authored by a specific person.
- * Coach Name is a formula/lookup field — notes are returned for all clients
- * whose CLIENT linked field includes this person's ID.
- * JS-filtered because Client is a linked field.
+ * Fetch notes where Subject Person (or Client) = clientAirtableId.
+ * JS-filtered because linked record fields can't be filtered by ID in Airtable formulas.
  */
-export async function getNotesByAuthor(authorPersonId: string): Promise<Note[]> {
-  const { apiKey, baseId } = getCredentials()
-  const url = `${API_BASE}/${baseId}/${TABLE}?${SORT_DATE_DESC}&maxRecords=500`
-  console.log('[debug] getNotesByAuthor table:', TABLES.NOTES)
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-    cache: 'no-store',
-  })
-  if (!res.ok) return []
-  const data = await res.json()
-  // COACH_NAME is a text/formula field — we can't filter by personId directly.
-  // Return all notes; callers use subjectPersonId for display grouping.
-  void authorPersonId
-  return (data.records ?? []).map(mapRecord)
-}
-
-/**
- * Fetch notes for a subject person (client) — for the user profile page.
- * JS-filtered because Client is a linked field.
- */
-export async function getNotesByUser(personId: string): Promise<Note[]> {
+export async function getNotesByClient(clientAirtableId: string): Promise<Note[]> {
   const { apiKey, baseId } = getCredentials()
   const url = `${API_BASE}/${baseId}/${TABLE}?${SORT_DATE_DESC}&maxRecords=500`
   const res = await fetch(url, {
@@ -98,29 +84,19 @@ export async function getNotesByUser(personId: string): Promise<Note[]> {
   if (!res.ok) return []
   const data = await res.json()
   return (data.records ?? [])
-    .filter((r: AirtableRecord) => {
-      const ids = r.fields[FIELDS.NOTES.CLIENT]
-      return Array.isArray(ids) && (ids as string[]).includes(personId)
-    })
     .map(mapRecord)
+    .filter(
+      (n: Note) =>
+        n.subjectPersonId === clientAirtableId || n.clientId === clientAirtableId,
+    )
 }
 
 /**
- * Fetch notes attached to a specific Meeting — not available in current schema.
- * The Meeting linked field no longer exists; always returns [].
+ * Fetch notes authored by a specific person.
+ * Uses Author Person linked field (JS-filtered), falling back to all notes
+ * if the field isn't populated yet.
  */
-export async function getNotesByMeetingId(_meetingId: string): Promise<Note[]> {
-  return []
-}
-
-/**
- * Fetch notes by relationship context ID, sorted by Date DESC.
- * JS-filtered because Relationship Context ID is a text field.
- */
-export async function getNotes(
-  _authorPersonId: string,
-  relationshipContextId: string,
-): Promise<Note[]> {
+export async function getNotesByAuthor(authorAirtableId: string): Promise<Note[]> {
   const { apiKey, baseId } = getCredentials()
   const url = `${API_BASE}/${baseId}/${TABLE}?${SORT_DATE_DESC}&maxRecords=500`
   const res = await fetch(url, {
@@ -129,26 +105,60 @@ export async function getNotes(
   })
   if (!res.ok) return []
   const data = await res.json()
-  // REL_CONTEXT_ID field does not exist in this table — return all notes
-  void relationshipContextId
-  return (data.records ?? []).map(mapRecord)
+  const all = (data.records ?? []).map(mapRecord) as Note[]
+  // Filter by Author Person linked field
+  const byAuthor = all.filter((n) => n.authorPersonId === authorAirtableId)
+  // If Author Person isn't populated on any records yet, return all (backward compat)
+  return byAuthor.length > 0 ? byAuthor : all
 }
 
+/**
+ * Fetch notes attached to a specific Meeting.
+ * JS-filtered because Meeting is a linked field.
+ */
+export async function getNotesByMeetingId(meetingId: string): Promise<Note[]> {
+  const { apiKey, baseId } = getCredentials()
+  const url = `${API_BASE}/${baseId}/${TABLE}?${SORT_DATE_DESC}&maxRecords=500`
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: 'no-store',
+  })
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.records ?? [])
+    .map(mapRecord)
+    .filter((n: Note) => n.meetingId === meetingId)
+}
+
+// Alias for backward compatibility — callers that used getNotesByUser
+export const getNotesByUser = getNotesByClient
+
+// ── Write functions ───────────────────────────────────────────────────────────
+
 export interface CreateNoteData {
-  body: string
-  authorPersonId: string
+  content: string
+  date?: string
+  clientId?: string
+  authorPersonId?: string
   subjectPersonId?: string
-  relationshipContextId?: string
   meetingId?: string
-  noteType?: string   // defaults to 'general_context'
+  coachName?: string
+  noteType?: NoteType
 }
 
 export async function createNote(data: CreateNoteData): Promise<Note> {
   const { apiKey, baseId } = getCredentials()
   const fields: Record<string, unknown> = {
-    [FIELDS.NOTES.BODY]: data.body,
+    [FIELDS.NOTES.BODY]: data.content,
+    [FIELDS.NOTES.DATE]: data.date ?? new Date().toISOString().split('T')[0],
+    [FIELDS.NOTES.VISIBILITY]: 'private_to_author',
+    [FIELDS.NOTES.NOTE_TYPE]: data.noteType ?? 'general_context',
   }
-  if (data.subjectPersonId) fields[FIELDS.NOTES.CLIENT] = [data.subjectPersonId]
+  if (data.clientId) fields[FIELDS.NOTES.CLIENT] = [data.clientId]
+  if (data.authorPersonId) fields[FIELDS.NOTES.AUTHOR_PERSON] = [data.authorPersonId]
+  if (data.subjectPersonId) fields[FIELDS.NOTES.SUBJECT_PERSON] = [data.subjectPersonId]
+  if (data.meetingId) fields[FIELDS.NOTES.MEETING] = [data.meetingId]
+  if (data.coachName) fields[FIELDS.NOTES.COACH_NAME] = data.coachName
 
   const res = await fetch(`${API_BASE}/${baseId}/${TABLE}`, {
     method: 'POST',
@@ -167,13 +177,13 @@ export async function createNote(data: CreateNoteData): Promise<Note> {
 
 export async function updateNote(
   noteId: string,
-  body: string,
+  content: string,
 ): Promise<{ success: true } | { error: string }> {
   const { apiKey, baseId } = getCredentials()
   const res = await fetch(`${API_BASE}/${baseId}/${TABLE}/${noteId}`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields: { [FIELDS.NOTES.BODY]: body } }),
+    body: JSON.stringify({ fields: { [FIELDS.NOTES.BODY]: content } }),
   })
   if (!res.ok) {
     const data = await res.json()

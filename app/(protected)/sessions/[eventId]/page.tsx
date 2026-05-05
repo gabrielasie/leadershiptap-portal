@@ -101,8 +101,8 @@ export default async function SessionPage({ params }: Props) {
         {existingNote && (
           <p className="text-xs text-slate-400 mb-5">
             Last updated{' '}
-            {existingNote.createdAt
-              ? new Date(existingNote.createdAt).toLocaleDateString('en-US', {
+            {existingNote.date
+              ? new Date(existingNote.date).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
                   year: 'numeric',
@@ -122,7 +122,7 @@ export default async function SessionPage({ params }: Props) {
           // Read-only view for non-coaches
           <div className="space-y-3">
             <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-              {existingNote.body}
+              {existingNote.content}
             </p>
           </div>
         ) : (

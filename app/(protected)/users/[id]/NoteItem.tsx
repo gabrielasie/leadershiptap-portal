@@ -17,7 +17,7 @@ function formatNoteDate(dateStr: string): string {
 export default function NoteItem({ note }: { note: Note }) {
   const router = useRouter()
   const [mode, setMode] = useState<'view' | 'edit' | 'confirmDelete'>('view')
-  const [content, setContent] = useState(note.body)
+  const [content, setContent] = useState(note.content)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
@@ -37,7 +37,7 @@ export default function NoteItem({ note }: { note: Note }) {
   }
 
   function handleCancel() {
-    setContent(note.body)
+    setContent(note.content)
     setError('')
     setMode('view')
   }
@@ -77,9 +77,9 @@ export default function NoteItem({ note }: { note: Note }) {
         <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed pr-20">
           {content}
         </p>
-        {note.createdAt && (
+        {note.date && (
           <p className="text-xs font-medium text-slate-400 mt-2">
-            {formatNoteDate(note.createdAt)}
+            {formatNoteDate(note.date)}
           </p>
         )}
       </div>

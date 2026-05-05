@@ -99,10 +99,9 @@ export async function getRelationshipContexts(
 ): Promise<RelationshipContext[]> {
   const { apiKey, baseId } = getCredentials()
   const formula = encodeURIComponent(
-    `{${FIELDS.RELATIONSHIP_CONTEXTS.STATUS}} = "Active"`,
+    `LOWER({${FIELDS.RELATIONSHIP_CONTEXTS.STATUS}}) = "active"`,
   )
 
-  console.log('[debug] getRelationshipContexts table:', TABLES.RELATIONSHIP_CONTEXTS, 'filter:', decodeURIComponent(formula));
   const [res, nameMap] = await Promise.all([
     fetch(
       `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${formula}&maxRecords=1000`,
@@ -117,12 +116,14 @@ export async function getRelationshipContexts(
   }
 
   const data = await res.json()
-  return (data.records ?? [])
+  const results = (data.records ?? [])
     .map((r: { id: string; fields: Record<string, unknown> }) => mapRecord(r, nameMap))
     .filter(
       (r: RelationshipContext | null): r is RelationshipContext =>
         r !== null && r.leadId === leadAirtableId,
     )
+  console.log(`[RC] found ${results.length} active contexts for lead ${leadAirtableId}`)
+  return results
 }
 
 /**
@@ -145,7 +146,7 @@ export async function getUpstreamContexts(
 ): Promise<RelationshipContext[]> {
   const { apiKey, baseId } = getCredentials()
   const formula = encodeURIComponent(
-    `{${FIELDS.RELATIONSHIP_CONTEXTS.STATUS}} = "Active"`,
+    `LOWER({${FIELDS.RELATIONSHIP_CONTEXTS.STATUS}}) = "active"`,
   )
 
   const [res, nameMap] = await Promise.all([
@@ -222,6 +223,104 @@ async function getStandardPermissionProfileId(
 }
 
 // ── Downstream traversal ──────────────────────────────────────────────────────
+
+export interface DirectReport {
+  personId: string
+  name: string
+  title?: string
+  email?: string
+  photoUrl?: string
+}
+
+/**
+ * Returns people who report to `personAirtableId` via reports_to Relationship Contexts.
+ * Fetches the Person's Users record for display fields. Capped at 20.
+ */
+export async function getDirectReports(
+  personAirtableId: string,
+): Promise<DirectReport[]> {
+  const { apiKey, baseId } = getCredentials()
+  const formula = encodeURIComponent(
+    `LOWER({${FIELDS.RELATIONSHIP_CONTEXTS.STATUS}}) = "active"`,
+  )
+
+  const res = await fetch(
+    `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${formula}&maxRecords=1000`,
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+  )
+  if (!res.ok) {
+    console.warn('[getDirectReports] fetch failed:', res.status)
+    return []
+  }
+
+  const data = await res.json()
+
+  // Filter to reports_to contexts where Lead = personAirtableId
+  const personIds: string[] = []
+  for (const r of data.records ?? []) {
+    const f = r.fields as Record<string, unknown>
+    const type = (f[FIELDS.RELATIONSHIP_CONTEXTS.TYPE] as string) ?? ''
+    if (type !== 'reports_to') continue
+    const leadIds = Array.isArray(f[FIELDS.RELATIONSHIP_CONTEXTS.LEAD])
+      ? (f[FIELDS.RELATIONSHIP_CONTEXTS.LEAD] as string[])
+      : []
+    if (!leadIds.includes(personAirtableId)) continue
+    const pIds = Array.isArray(f[FIELDS.RELATIONSHIP_CONTEXTS.PERSON])
+      ? (f[FIELDS.RELATIONSHIP_CONTEXTS.PERSON] as string[])
+      : []
+    if (pIds[0]) personIds.push(pIds[0])
+  }
+
+  if (personIds.length === 0) return []
+
+  // Cap at 20
+  const capped = [...new Set(personIds)].slice(0, 20)
+
+  // Batch-fetch Users records for these person IDs
+  const orClauses = capped.map((id) => `RECORD_ID()="${id}"`).join(',')
+  const userFormula = encodeURIComponent(`OR(${orClauses})`)
+  const userRes = await fetch(
+    `${API_BASE}/${baseId}/${TABLES.PEOPLE}` +
+      `?filterByFormula=${userFormula}` +
+      `&fields[]=${encodeURIComponent('Full Name')}` +
+      `&fields[]=${encodeURIComponent('First Name')}` +
+      `&fields[]=${encodeURIComponent('Last Name')}` +
+      `&fields[]=${encodeURIComponent('Title')}` +
+      `&fields[]=${encodeURIComponent('Job Title')}` +
+      `&fields[]=${encodeURIComponent('Work Email')}` +
+      `&fields[]=${encodeURIComponent('Profile Photo')}` +
+      `&fields[]=${encodeURIComponent('Avatar URL')}`,
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+  )
+  if (!userRes.ok) {
+    console.warn('[getDirectReports] user fetch failed:', userRes.status)
+    return []
+  }
+
+  const userData = await userRes.json()
+  const results: DirectReport[] = []
+  for (const r of userData.records ?? []) {
+    const f = r.fields as Record<string, unknown>
+    const fullName = (f['Full Name'] as string | undefined)?.trim()
+    const first = (f['First Name'] as string | undefined)?.trim()
+    const last = (f['Last Name'] as string | undefined)?.trim()
+    const name = fullName || [first, last].filter(Boolean).join(' ') || r.id
+
+    const photoArr = f['Profile Photo'] as Array<{ url: string }> | undefined
+    const photoUrl = photoArr?.[0]?.url ?? (f['Avatar URL'] as string | undefined) ?? undefined
+
+    results.push({
+      personId: r.id as string,
+      name,
+      title: (f['Title'] as string | undefined)?.trim() ||
+        (f['Job Title'] as string | undefined)?.trim() || undefined,
+      email: (f['Work Email'] as string | undefined)?.trim() || undefined,
+      photoUrl,
+    })
+  }
+
+  return results
+}
 
 /**
  * Returns all people who report to (or are coached by) `personAirtableId`,

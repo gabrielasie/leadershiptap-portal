@@ -14,7 +14,6 @@ export default async function NewSessionNotePage() {
   const clientOptions = contexts.map((ctx) => ({
     id: ctx.personId,
     name: ctx.personName,
-    relationshipContextId: ctx.id,
   }))
 
   return (

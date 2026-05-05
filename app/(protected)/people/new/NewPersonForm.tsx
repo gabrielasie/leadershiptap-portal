@@ -17,6 +17,7 @@ import { X } from 'lucide-react'
 interface Person {
   id: string
   name: string
+  companyId?: string
 }
 
 interface Props {
@@ -184,7 +185,13 @@ export default function NewPersonForm({ coaches, allUsers, companies }: Props) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const canSubmit = firstName.trim().length > 0 && !saving
+  // Filter Reports To options by same company when a company is selected
+  const reportsToOptions =
+    companyId !== NO_COMPANY
+      ? allUsers.filter((u) => u.companyId === companyId)
+      : allUsers
+
+  const canSubmit = firstName.trim().length > 0 && lastName.trim().length > 0 && !saving
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -243,7 +250,9 @@ export default function NewPersonForm({ coaches, allUsers, companies }: Props) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="np-last">Last Name</Label>
+            <Label htmlFor="np-last">
+              Last Name <span className="text-rose-500">*</span>
+            </Label>
             <Input
               id="np-last"
               value={lastName}
@@ -304,7 +313,7 @@ export default function NewPersonForm({ coaches, allUsers, companies }: Props) {
         </h2>
         <PersonPicker
           label="Assign coaches"
-          hint="Coaching relationship contexts will be created automatically."
+          hint="Select the LeadershipTap coaches working with this person."
           options={coaches}
           selected={selectedCoaches}
           onChange={setSelectedCoaches}
@@ -319,8 +328,8 @@ export default function NewPersonForm({ coaches, allUsers, companies }: Props) {
         </h2>
         <PersonPicker
           label="Who does this person report to?"
-          hint="Creates a reports_to relationship context for each manager."
-          options={allUsers}
+          hint="Their direct manager(s)."
+          options={reportsToOptions}
           selected={reportsTo}
           onChange={setReportsTo}
           placeholder="Search people…"
@@ -334,7 +343,7 @@ export default function NewPersonForm({ coaches, allUsers, companies }: Props) {
         </h2>
         <PersonPicker
           label="Who reports to this person?"
-          hint="Creates a reports_to relationship context for each direct report."
+          hint="Usually populated for senior leaders."
           options={allUsers}
           selected={directReports}
           onChange={setDirectReports}

@@ -74,8 +74,9 @@ export default async function UsersPage() {
   // ── Notes count per user ─────────────────────────────────────────────────
   const noteCountByUser = new Map<string, number>()
   for (const note of allRecentNotes) {
-    if (!note.subjectPersonId) continue
-    noteCountByUser.set(note.subjectPersonId, (noteCountByUser.get(note.subjectPersonId) ?? 0) + 1)
+    const personId = note.subjectPersonId ?? note.clientId
+    if (!personId) continue
+    noteCountByUser.set(personId, (noteCountByUser.get(personId) ?? 0) + 1)
   }
 
   // ── Open tasks count per user ────────────────────────────────────────────
@@ -167,7 +168,6 @@ export default async function UsersPage() {
         users={enrichedUsers}
         coaches={coaches}
         companies={profileOptions.companies}
-        currentCoachId={userRecord.airtableId ?? undefined}
       />
     </>
   )

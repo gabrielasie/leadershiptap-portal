@@ -4,7 +4,16 @@ import NewPersonForm from './NewPersonForm'
 
 export default async function NewPersonPage() {
   const allUsers = await getAllUsers()
-  const { coaches, companies, allUsers: allUserOptions } = await fetchProfileOptions(allUsers)
+  const { coaches, companies } = await fetchProfileOptions(allUsers)
+
+  const nameOf = (u: { fullName?: string; firstName?: string; lastName?: string; email: string }) =>
+    (u.fullName ?? [u.firstName, u.lastName].filter(Boolean).join(' ')) || u.email
+
+  const allUserOptions = allUsers.map((u) => ({
+    id: u.id,
+    name: nameOf(u),
+    companyId: u.companyId,
+  }))
 
   return (
     <>

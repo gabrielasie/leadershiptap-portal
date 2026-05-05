@@ -2,9 +2,8 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
-import { ChevronRight, Search, Users, X, LayoutGrid, Building2 } from 'lucide-react'
+import { ChevronRight, Plus, Search, Users, X, LayoutGrid, Building2 } from 'lucide-react'
 import type { User } from '@/lib/types'
-import AddClientDialog from './AddClientDialog'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -21,7 +20,6 @@ interface Props {
   users: EnrichedUser[]
   coaches: Array<{ id: string; name: string }>
   companies: Array<{ id: string; name: string }>
-  currentCoachId?: string
 }
 
 type ViewMode = 'clients' | 'company'
@@ -220,7 +218,7 @@ function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode
 
 // ── Main grid ─────────────────────────────────────────────────────────────────
 
-export default function ClientsGrid({ users, coaches, companies, currentCoachId }: Props) {
+export default function ClientsGrid({ users, coaches, companies }: Props) {
   const [query, setQuery] = useState('')
   const [selectedRole, setSelectedRole] = useState('all')
   const [selectedCoach, setSelectedCoach] = useState('all')
@@ -354,9 +352,13 @@ export default function ClientsGrid({ users, coaches, companies, currentCoachId 
         <ViewToggle mode={viewMode} onChange={handleViewModeChange} />
 
         {/* Add Client button */}
-        <div className="ml-auto">
-          <AddClientDialog coaches={coaches} companies={companies} currentCoachId={currentCoachId} />
-        </div>
+        <Link
+          href="/people/new"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          Add Client
+        </Link>
       </div>
 
       {/* ── Grid or empty state ─────────────────────────────────────────────── */}

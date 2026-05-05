@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
-import { getNotes, createNote } from '@/lib/airtable/notes'
+import { getNotesByClient, createNote } from '@/lib/airtable/notes'
+import type { NoteType } from '@/lib/airtable/notes'
 
 export async function GET(req: Request) {
   const { userId } = await auth()
@@ -13,12 +14,12 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url)
-  const relationshipContextId = searchParams.get('relationshipContextId')
-  if (!relationshipContextId) {
-    return NextResponse.json({ error: 'relationshipContextId is required' }, { status: 400 })
+  const clientId = searchParams.get('clientId')
+  if (!clientId) {
+    return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
   }
 
-  const notes = await getNotes(userRecord.airtableId, relationshipContextId)
+  const notes = await getNotesByClient(clientId)
   return NextResponse.json(notes)
 }
 
@@ -32,22 +33,25 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json()) as {
-    body: string
+    content: string
+    date?: string
+    clientId?: string
     subjectPersonId?: string
-    relationshipContextId?: string
     meetingId?: string
-    noteType?: string
+    noteType?: NoteType
   }
 
-  if (!body.body?.trim()) {
-    return NextResponse.json({ error: 'Note body is required' }, { status: 400 })
+  if (!body.content?.trim()) {
+    return NextResponse.json({ error: 'Note content is required' }, { status: 400 })
   }
 
   const note = await createNote({
-    body: body.body.trim(),
+    content: body.content.trim(),
+    date: body.date,
     authorPersonId: userRecord.airtableId,
-    subjectPersonId: body.subjectPersonId,
-    relationshipContextId: body.relationshipContextId,
+    coachName: userRecord.name || undefined,
+    clientId: body.clientId,
+    subjectPersonId: body.subjectPersonId ?? body.clientId,
     meetingId: body.meetingId,
     noteType: body.noteType,
   })

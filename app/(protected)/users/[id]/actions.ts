@@ -115,9 +115,11 @@ export async function saveNoteAction(
   if (!userRecord.airtableId) throw new Error('SAVE_FAILED')
   try {
     await createNote({
-      body: content.trim(),
+      content: content.trim(),
       authorPersonId: userRecord.airtableId,
+      coachName: userRecord.name || undefined,
       subjectPersonId,
+      clientId: subjectPersonId,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -234,14 +236,15 @@ export async function saveTaskAction(
   subjectPersonId: string,
   taskName: string,
   dueDate: string | null,
-  description: string | null,
+  notes: string | null,
 ): Promise<void> {
   const userRecord = await getCurrentUserRecord()
   if (!userRecord.airtableId) throw new Error('Could not resolve your user record.')
   await createTask({
     title: taskName,
-    description: description ?? undefined,
+    notes: notes ?? undefined,
     dueDate: dueDate ?? undefined,
+    clientId: subjectPersonId,
     createdByPersonId: userRecord.airtableId,
     assignedToPersonId: subjectPersonId,
   })

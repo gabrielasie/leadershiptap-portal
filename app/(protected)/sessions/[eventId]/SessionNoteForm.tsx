@@ -22,7 +22,7 @@ export default function SessionNoteForm({
   const router = useRouter()
   const isEdit = !!existingNote
 
-  const [body, setBody] = useState(existingNote?.body ?? '')
+  const [body, setBody] = useState(existingNote?.content ?? '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
@@ -40,17 +40,17 @@ export default function SessionNoteForm({
         res = await fetch(`/api/notes/${existingNote.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ body: body.trim() }),
+          body: JSON.stringify({ content: body.trim() }),
         })
       } else {
         res = await fetch('/api/notes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            body: body.trim(),
+            content: body.trim(),
             meetingId,
             subjectPersonId,
-            relationshipContextId,
+            clientId: subjectPersonId,
             noteType: 'meeting_note',
           }),
         })

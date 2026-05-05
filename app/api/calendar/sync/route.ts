@@ -320,13 +320,16 @@ async function upsertMeeting(
   const end = event.end.dateTime ?? event.end.date
   if (!start || !end) throw new Error(`Event ${event.id} has no start/end`)
 
-  const fields = {
+  const fields: Record<string, unknown> = {
     [FIELDS.MEETINGS.TITLE]: `${coachFirstName} / ${personName} — ${event.subject ?? '(No Subject)'}`,
     [FIELDS.MEETINGS.REL_CONTEXT_ID]: contextId,
     [FIELDS.MEETINGS.START]: start,
     [FIELDS.MEETINGS.END]: end,
     [FIELDS.MEETINGS.PROVIDER_EVENT_ID]: event.id,
     [FIELDS.MEETINGS.CALENDAR_OWNER]: coachEmail,
+    [FIELDS.MEETINGS.CLIENT_NAME]: personName,
+    [FIELDS.MEETINGS.MEETING_STATUS]: 'Scheduled',
+    [FIELDS.MEETINGS.CALENDAR_PROVIDER]: 'Outlook',
     [FIELDS.MEETINGS.TIMEZONE]: event.start.timeZone ?? 'America/New_York',
   }
 
@@ -394,7 +397,7 @@ async function cancelMeetings(
     const patchRes = await fetch(`${AIRTABLE_API}/${baseId}/${MEETINGS_TABLE}/${r.id}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: { 'Meeting Status': 'Cancelled' } }),
+      body: JSON.stringify({ fields: { [FIELDS.MEETINGS.MEETING_STATUS]: 'Cancelled' } }),
     })
     if (patchRes.ok) cancelled++
   }
@@ -495,15 +498,14 @@ export async function POST(request: Request) {
       let fanOutCount = 0
       let eventsProcessed = 0
       let discarded = 0
+      let cancelledCount = 0
       const coachLower = coachEmail.toLowerCase()
 
       for (const event of events) {
-        // Step 5: handle cancellations — mark existing records, skip fan-out
+        // Handle cancellations — mark existing records, skip fan-out
         if (event.isCancelled === true || /^cancelled:/i.test(event.subject ?? '')) {
           const n = await cancelMeetings(apiKey, baseId, event.id)
-          if (n > 0) {
-            console.log(`[sync] ${coachEmail}: cancelled ${n} meeting(s) for event ${event.id}`)
-          }
+          cancelledCount += n
           continue
         }
 
@@ -553,7 +555,7 @@ export async function POST(request: Request) {
       }
 
       console.log(
-        `[sync] ${coachEmail}: ${fanOutCount} meetings written from ${eventsProcessed} events (${discarded} discarded)`,
+        `[sync] ${coachEmail}: ${fanOutCount} fan-out records from ${eventsProcessed} events (${discarded} discarded, ${cancelledCount} cancelled)`,
       )
       totalMeetings += fanOutCount
       syncedCoaches.push(coachEmail)

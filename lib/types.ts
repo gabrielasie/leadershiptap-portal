@@ -90,30 +90,31 @@ export interface Meeting {
 
 export interface Note {
   id: string;
-  body: string;
-  createdAt: string;
-  subjectPersonId: string;
+  content: string;
+  date: string;
+  clientId?: string;
+  coachName?: string;
   authorPersonId?: string;
-  relationshipContextId?: string;
+  subjectPersonId?: string;
   meetingId?: string;
-  noteType?: string;
-  visibility?: string;
+  noteType?: 'general_context' | 'meeting_note' | 'follow_up' | 'private_observation';
+  visibility: 'private_to_author';
 }
 
-export type TaskStatus = 'Not Started' | 'In Progress' | 'Complete' | 'Cancelled'
+export type TaskStatus = 'not started' | 'in progress' | 'completed' | 'cancelled'
 
 export interface Task {
   id: string;
-  name: string;
+  title: string;
   status: TaskStatus;
   dueDate?: string;
-  description?: string;
-  taskType?: 'personal_reminder' | 'assignment';
-  visibility?: 'private_to_author' | 'shared_with_target';
-  assignedToPersonId?: string;   // first linked Assigned To Person
-  createdByPersonId?: string;    // first linked Created By Person
+  clientId?: string;
+  notes?: string;
   relationshipContextId?: string;
-  meetingId?: string;
+  createdByPersonId?: string;
+  assignedToPersonId?: string;
+  taskType: 'personal_reminder' | 'assignment';
+  visibility: 'private_to_author' | 'shared_with_target';
 }
 
 export interface Message {

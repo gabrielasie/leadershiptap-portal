@@ -82,7 +82,7 @@ export default function AddTaskDashboardDialog({ clients, coaches, trigger }: Pr
 
     const result = await dashboardCreateTaskAction({
       title: title.trim(),
-      description: description.trim() || undefined,
+      notes: description.trim() || undefined,
       dueDate: dueDate || undefined,
       assignedToPersonId: assignTo === PERSONAL_VALUE ? undefined : assignTo,
     })
@@ -130,9 +130,9 @@ export default function AddTaskDashboardDialog({ clients, coaches, trigger }: Pr
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="add-task-desc">Description</Label>
+              <Label htmlFor="add-task-notes">Notes</Label>
               <Textarea
-                id="add-task-desc"
+                id="add-task-notes"
                 placeholder="Optional details…"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}

@@ -49,9 +49,10 @@ export async function dashboardDeleteTaskAction(
 
 export async function dashboardCreateTaskAction(data: {
   title: string
-  description?: string
+  notes?: string
   dueDate?: string
   assignedToPersonId?: string   // undefined → self-assign (personal_reminder)
+  clientId?: string
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const userRecord = await getCurrentUserRecord()
@@ -60,8 +61,9 @@ export async function dashboardCreateTaskAction(data: {
     }
     await createTask({
       title: data.title,
-      description: data.description,
+      notes: data.notes,
       dueDate: data.dueDate,
+      clientId: data.clientId ?? data.assignedToPersonId,
       createdByPersonId: userRecord.airtableId,
       assignedToPersonId: data.assignedToPersonId ?? userRecord.airtableId,
     })
@@ -121,9 +123,11 @@ export async function dashboardLogNoteAction(params: {
       revalidatePath(`/users/${params.clientId}`)
     } else {
       await createNote({
-        body: params.content,
+        content: params.content,
         authorPersonId: userRecord.airtableId,
+        coachName: userRecord.name || undefined,
         subjectPersonId: params.clientId,
+        clientId: params.clientId,
       })
     }
     revalidatePath('/dashboard')
@@ -144,9 +148,11 @@ export async function dashboardSaveNoteAction(
       return { success: false, error: 'Could not resolve your coach record.' }
     }
     await createNote({
-      body: content,
+      content,
       authorPersonId: userRecord.airtableId,
+      coachName: userRecord.name || undefined,
       subjectPersonId: clientId,
+      clientId,
     })
     revalidatePath('/dashboard')
     return { success: true }

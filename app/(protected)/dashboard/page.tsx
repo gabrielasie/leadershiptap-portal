@@ -155,7 +155,7 @@ export default async function DashboardPage() {
 
   // Meeting record IDs that already have a note — used for card badge
   const notedMeetingIds = new Set(
-    coachNotes.map((n) => n.meetingId).filter(Boolean) as string[],
+    coachNotes.map((n) => n.meetingId).filter(Boolean),
   )
 
   // For coaches: only show calendar events whose Relationship Context ID is
@@ -273,10 +273,10 @@ export default async function DashboardPage() {
     const assignedUser = task.assignedToPersonId ? (idToUser.get(task.assignedToPersonId) ?? null) : null
     return {
       id: task.id,
-      name: task.name,
+      title: task.title,
       status: task.status,
       dueDate: task.dueDate ?? null,
-      description: task.description ?? null,
+      notes: task.notes ?? null,
       assignedToPersonId: task.assignedToPersonId ?? null,
       assignedToName: assignedUser ? getDisplayName(assignedUser) : null,
       createdByPersonId: task.createdByPersonId ?? null,
@@ -294,9 +294,10 @@ export default async function DashboardPage() {
 
   const notesByClient = new Map<string, Array<{ id: string; body: string; createdAt: string }>>()
   for (const note of allRecentNotes) {
-    if (!note.subjectPersonId) continue
-    if (!notesByClient.has(note.subjectPersonId)) notesByClient.set(note.subjectPersonId, [])
-    notesByClient.get(note.subjectPersonId)!.push({ id: note.id, body: note.body, createdAt: note.createdAt })
+    const personId = note.subjectPersonId ?? note.clientId
+    if (!personId) continue
+    if (!notesByClient.has(personId)) notesByClient.set(personId, [])
+    notesByClient.get(personId)!.push({ id: note.id, body: note.content, createdAt: note.date })
   }
 
   // ── Client activity ────────────────────────────────────────────────────────
@@ -643,7 +644,7 @@ export default async function DashboardPage() {
           <h2 className="text-sm font-semibold text-slate-900 mb-3">All Recent Activity</h2>
           <div className="space-y-2">
             {allRecentNotes.slice(0, 20).map((note) => {
-              const client = note.subjectPersonId ? (idToUser.get(note.subjectPersonId) ?? null) : null
+              const client = (note.subjectPersonId ?? note.clientId) ? (idToUser.get(note.subjectPersonId ?? note.clientId ?? '') ?? null) : null
               return (
                 <div
                   key={note.id}
@@ -660,10 +661,10 @@ export default async function DashboardPage() {
                     ) : (
                       <span>Unknown client</span>
                     )}
-                    {note.createdAt && (
+                    {note.date && (
                       <>
                         {' · '}
-                        {new Date(note.createdAt).toLocaleDateString('en-US', {
+                        {new Date(note.date).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
                         })}
@@ -671,7 +672,7 @@ export default async function DashboardPage() {
                     )}
                   </p>
                   <p className="text-sm text-slate-700 line-clamp-2 leading-relaxed">
-                    {note.body}
+                    {note.content}
                   </p>
                 </div>
               )

@@ -9,10 +9,10 @@ import type { TaskStatus } from '@/lib/types'
 
 export interface DashboardTask {
   id: string
-  name: string
+  title: string
   status: TaskStatus
   dueDate: string | null
-  description: string | null
+  notes: string | null
   assignedToPersonId: string | null
   assignedToName: string | null   // resolved from users map
   createdByPersonId: string | null
@@ -26,13 +26,13 @@ export default function DashboardTaskItem({ task }: { task: DashboardTask }) {
   const [error, setError] = useState('')
   const [editOpen, setEditOpen] = useState(false)
 
-  const isDone = optimisticStatus === 'Complete'
+  const isDone = optimisticStatus === 'completed'
   const isOverdue =
     task.dueDate && !isDone && new Date(task.dueDate + 'T23:59:59') < new Date()
 
   async function toggle() {
     const prev = optimisticStatus
-    const next: TaskStatus = isDone ? 'Not Started' : 'Complete'
+    const next: TaskStatus = isDone ? 'not started' : 'completed'
     setOptimisticStatus(next)
     setError('')
     setLoading(true)
@@ -74,7 +74,7 @@ export default function DashboardTaskItem({ task }: { task: DashboardTask }) {
               isDone ? 'line-through text-slate-400' : 'text-slate-800'
             }`}
           >
-            {task.name}
+            {task.title}
           </p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             {task.taskType === 'assignment' && task.assignedToName && (

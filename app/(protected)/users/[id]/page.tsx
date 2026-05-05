@@ -14,6 +14,7 @@ import {
   Heart,
   Clock,
   UserCheck,
+  Users,
 } from 'lucide-react'
 import { getUserById } from '@/lib/services/usersService'
 import { getMeetingsForUser } from '@/lib/services/meetingsService'
@@ -26,7 +27,8 @@ import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import { getPermissionLevel, canWrite } from '@/lib/auth/permissions'
 import { getCoachPersonContext } from '@/lib/airtable/coachPersonContext'
 import { getRecentCoachSessionsForPerson } from '@/lib/airtable/coachSessions'
-import { getRelationshipContext, getDownstreamPeople } from '@/lib/airtable/relationships'
+import { getRelationshipContext, getDirectReports } from '@/lib/airtable/relationships'
+import type { DirectReport } from '@/lib/airtable/relationships'
 import { formatEastern } from '@/lib/utils/dateFormat'
 import PlaceholderSection from '@/components/ui/PlaceholderSection'
 import UserActionsBar from './UserActionsBar'
@@ -40,6 +42,7 @@ import type { User, Meeting, Message, Note, Task } from '@/lib/types'
 
 interface Props {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ trail?: string }>
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -229,8 +232,23 @@ function MessageRow({ msg, userId }: { msg: Message; userId: string }) {
 
 // ── page ──────────────────────────────────────────────────────────────────────
 
-export default async function UserDetailPage({ params }: Props) {
+export default async function UserDetailPage({ params, searchParams }: Props) {
   const { id } = await params
+  const { trail: trailParam } = await searchParams
+
+  // Parse breadcrumb trail: comma-separated "recID:Name" pairs
+  const trailEntries: Array<{ id: string; name: string }> = (trailParam ?? '')
+    .split(',')
+    .filter(Boolean)
+    .map((seg) => {
+      const idx = seg.indexOf(':')
+      return idx > 0
+        ? { id: seg.slice(0, idx), name: decodeURIComponent(seg.slice(idx + 1)) }
+        : { id: seg, name: seg }
+    })
+  const currentDepth = trailEntries.length  // 0 = top-level, 1 = one hop, etc.
+  const MAX_DRILL_DEPTH = 3
+
   const [user, sessionUser, currentUserRecord] = await Promise.all([
     getUserById(id),
     getSessionUser(),
@@ -265,7 +283,7 @@ export default async function UserDetailPage({ params }: Props) {
     relationshipContext,
     recentCoachSessions,
     portalSessionEvents,
-    downstreamPeople,
+    theirTeamReports,
   ] = await Promise.all([
     getMeetingsForUser(contactEmail, sessionUser, id, currentUserRecord.email || undefined),
     getUserMessages(id),
@@ -287,10 +305,10 @@ export default async function UserDetailPage({ params }: Props) {
     contactEmail
       ? getPortalEventsByClientEmail(contactEmail, currentUserRecord.email || undefined).catch(() => [])
       : Promise.resolve([]),
-    getDownstreamPeople(id, 1).catch(() => [] as User[]),
+    getDirectReports(id).catch(() => [] as DirectReport[]),
   ])
 
-  const directReports = downstreamPeople
+  const directReports = theirTeamReports
   const teamMembers = teamMemberResults.filter((u): u is User => u !== null)
 
   const permissionLevel = await getPermissionLevel(
@@ -313,6 +331,12 @@ export default async function UserDetailPage({ params }: Props) {
 
   const name = getDisplayName(user)
   const initials = getInitials(user)
+
+  // Build the next trail segment for downstream drill-down links
+  const nextTrail = [...trailEntries, { id, name }]
+    .map((e) => `${e.id}:${encodeURIComponent(e.name)}`)
+    .join(',')
+  const canDrillDeeper = currentDepth < MAX_DRILL_DEPTH
 
   // Never show raw Airtable record IDs to the user
   const isRecordId = (v: string) => /^rec[A-Za-z0-9]{8,}$/.test(v)
@@ -374,6 +398,31 @@ export default async function UserDetailPage({ params }: Props) {
         <ArrowLeft className="h-4 w-4" />
         Back to Clients
       </Link>
+
+      {/* Breadcrumb trail for downstream navigation */}
+      {trailEntries.length > 0 && (
+        <nav className="flex items-center gap-1 text-sm text-slate-500 flex-wrap" aria-label="Org trail">
+          {trailEntries.map((entry, i) => {
+            // Build partial trail up to this entry
+            const partialTrail = trailEntries
+              .slice(0, i)
+              .map((e) => `${e.id}:${encodeURIComponent(e.name)}`)
+              .join(',')
+            return (
+              <span key={entry.id} className="flex items-center gap-1">
+                <Link
+                  href={`/users/${entry.id}${partialTrail ? `?trail=${partialTrail}` : ''}`}
+                  className="text-[hsl(213,70%,30%)] hover:underline font-medium"
+                >
+                  {entry.name}
+                </Link>
+                <ChevronRight className="h-3.5 w-3.5 text-slate-300 flex-shrink-0" />
+              </span>
+            )
+          })}
+          <span className="font-semibold text-slate-900">{name}</span>
+        </nav>
+      )}
 
       {/* ── Relationship context badge ────────────────────────────────────── */}
       {currentUserRecord.role !== 'admin' && (
@@ -787,19 +836,20 @@ export default async function UserDetailPage({ params }: Props) {
             )}
           </div>
 
-          {/* Direct Reports */}
+          {/* Direct Reports (summary count — full cards below) */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
-              Direct Reports{directReports.length > 0 && ` (${directReports.length})`}
+              Direct Reports
             </p>
             {directReports.length === 0 ? (
               <p className="text-sm text-slate-300">None</p>
             ) : (
-              <div className="space-y-2">
-                {directReports.map((report) => (
-                  <OrgPersonLink key={report.id} user={report} />
-                ))}
-              </div>
+              <p className="text-sm text-slate-600">
+                {directReports.length} direct report{directReports.length !== 1 ? 's' : ''}{' '}
+                <a href="#their-team" className="text-[hsl(213,70%,30%)] hover:underline text-xs font-medium">
+                  View below
+                </a>
+              </p>
             )}
           </div>
 
@@ -819,6 +869,84 @@ export default async function UserDetailPage({ params }: Props) {
 
         </div>
       </div>
+
+      {/* ── Their Team (direct reports from Relationship Contexts) ──────── */}
+      {directReports.length > 0 && (
+        <div id="their-team" className="bg-white rounded-xl shadow-sm p-4 md:p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="h-5 w-5 text-slate-400" />
+            <h2 className="text-lg font-semibold text-slate-900">
+              Their Team ({directReports.length})
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {directReports.map((report) => {
+              const reportInitials = report.name
+                .split(/\s+/)
+                .map((w) => w[0])
+                .join('')
+                .toUpperCase()
+                .slice(0, 2)
+
+              if (!canDrillDeeper) {
+                // At max depth — render card without drill-down link
+                return (
+                  <div
+                    key={report.personId}
+                    className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50"
+                  >
+                    {report.photoUrl ? (
+                      <img
+                        src={report.photoUrl}
+                        alt={report.name}
+                        className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-xs font-semibold flex-shrink-0 select-none">
+                        {reportInitials}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-900 truncate">{report.name}</p>
+                      {report.title && (
+                        <p className="text-xs text-slate-500 truncate">{report.title}</p>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-400 flex-shrink-0">View in org chart</span>
+                  </div>
+                )
+              }
+
+              return (
+                <Link
+                  key={report.personId}
+                  href={`/users/${report.personId}?trail=${nextTrail}`}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors group"
+                >
+                  {report.photoUrl ? (
+                    <img
+                      src={report.photoUrl}
+                      alt={report.name}
+                      className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-xs font-semibold flex-shrink-0 select-none">
+                      {reportInitials}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-900 truncate">{report.name}</p>
+                    {report.title && (
+                      <p className="text-xs text-slate-500 truncate">{report.title}</p>
+                    )}
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0 transition-colors" />
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Meetings ─────────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">

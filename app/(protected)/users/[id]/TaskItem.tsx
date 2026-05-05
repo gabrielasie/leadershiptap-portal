@@ -6,17 +6,17 @@ import { updateTaskStatusAction } from './actions'
 import type { Task, TaskStatus } from '@/lib/types'
 
 const STATUS_STYLES: Record<TaskStatus, string> = {
-  'Not Started': 'bg-slate-100 text-slate-500',
-  'In Progress': 'bg-blue-50 text-blue-700',
-  'Complete':    'bg-emerald-50 text-emerald-700',
-  'Cancelled':   'bg-rose-50 text-rose-500',
+  'not started': 'bg-slate-100 text-slate-500',
+  'in progress': 'bg-blue-50 text-blue-700',
+  'completed':   'bg-emerald-50 text-emerald-700',
+  'cancelled':   'bg-rose-50 text-rose-500',
 }
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
-  'Not Started': 'Not Started',
-  'In Progress': 'In Progress',
-  'Complete':    'Done',
-  'Cancelled':   'Cancelled',
+  'not started': 'Not Started',
+  'in progress': 'In Progress',
+  'completed':   'Done',
+  'cancelled':   'Cancelled',
 }
 
 function formatDue(dateStr: string): string {
@@ -33,7 +33,7 @@ export default function TaskItem({ task }: { task: Task }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const isDone = optimisticStatus === 'Complete'
+  const isDone = optimisticStatus === 'completed'
   const isOverdue =
     task.dueDate &&
     !isDone &&
@@ -41,7 +41,7 @@ export default function TaskItem({ task }: { task: Task }) {
 
   async function toggle() {
     const prev = optimisticStatus
-    const next: TaskStatus = isDone ? 'Not Started' : 'Complete'
+    const next: TaskStatus = isDone ? 'not started' : 'completed'
     setOptimisticStatus(next)
     setError('')
     setLoading(true)
@@ -76,7 +76,7 @@ export default function TaskItem({ task }: { task: Task }) {
         <p className={`text-sm font-medium ${
           isDone ? 'line-through text-slate-400' : 'text-slate-900'
         }`}>
-          {task.name}
+          {task.title}
         </p>
         {task.dueDate && (
           <p className={`text-xs mt-0.5 ${
@@ -85,8 +85,8 @@ export default function TaskItem({ task }: { task: Task }) {
             {isOverdue ? 'Overdue · ' : 'Due '}{formatDue(task.dueDate)}
           </p>
         )}
-        {task.description && (
-          <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{task.description}</p>
+        {task.notes && (
+          <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{task.notes}</p>
         )}
         {error && (
           <p className="text-xs text-rose-500 mt-0.5">{error}</p>

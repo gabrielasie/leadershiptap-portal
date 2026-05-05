@@ -15,14 +15,13 @@ import {
 const NOTE_TYPES = [
   { value: 'general_context', label: 'General Context' },
   { value: 'meeting_note', label: 'Meeting Note' },
-  { value: 'observation', label: 'Observation' },
-  { value: 'action_item', label: 'Action Item' },
+  { value: 'follow_up', label: 'Follow Up' },
+  { value: 'private_observation', label: 'Private Observation' },
 ] as const
 
 interface Client {
   id: string
   name: string
-  relationshipContextId?: string
 }
 
 interface Props {
@@ -30,8 +29,6 @@ interface Props {
   clients?: Client[]
   /** Pre-selected client when accessed from a meeting card. */
   clientAirtableId?: string
-  /** Pre-resolved relationship context ID (set when a client is pre-selected). */
-  relationshipContextId?: string
   /** Airtable record ID of the associated Meeting. Omit for standalone notes. */
   meetingId?: string
   /** Default note type — 'meeting_note' when accessed from a meeting card. */
@@ -43,7 +40,6 @@ interface Props {
 export default function NoteForm({
   clients,
   clientAirtableId,
-  relationshipContextId: initialContextId,
   meetingId,
   defaultNoteType,
   redirectTo,
@@ -57,13 +53,6 @@ export default function NoteForm({
   const [saved, setSaved] = useState(false)
 
   const showClientDropdown = !clientAirtableId && Array.isArray(clients) && clients.length > 0
-
-  // Resolve the relationship context ID for the currently selected client
-  const resolvedContextId =
-    initialContextId ??
-    (selectedClientId
-      ? clients?.find((c) => c.id === selectedClientId)?.relationshipContextId
-      : undefined)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -85,9 +74,9 @@ export default function NoteForm({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          body: body.trim(),
+          content: body.trim(),
           subjectPersonId: resolvedClientId || undefined,
-          relationshipContextId: resolvedContextId || undefined,
+          clientId: resolvedClientId || undefined,
           meetingId: meetingId || undefined,
           noteType,
         }),
@@ -121,7 +110,7 @@ export default function NoteForm({
       {showClientDropdown && (
         <div className="space-y-1.5">
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Client
+            About
           </label>
           <Select value={selectedClientId} onValueChange={setSelectedClientId}>
             <SelectTrigger>
