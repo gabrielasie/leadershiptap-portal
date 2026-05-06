@@ -117,17 +117,38 @@ export async function getAllMeetings(ownerEmail?: string): Promise<Meeting[]> {
   return (data.records ?? []).map(mapRecord);
 }
 
-// Meetings where Participant Emails contains the given address.
-// ownerEmail: when provided, also filters by {Calendar Owner} so Coach A never
-// sees Coach B's events for the same client.
-export async function getMeetingsByUserEmail(email: string, ownerEmail?: string): Promise<Meeting[]> {
+// Meetings where Attendees contains the given email OR Client Name contains
+// the given displayName. Both checks are case-insensitive substring matches.
+//
+// We accept either or both because the data has two write paths:
+//   - Calendar sync writes Client Name (per the RC lookup) but historically
+//     hasn't always written Attendees. Until every meeting has Attendees
+//     populated, the email-only query misses sessions the Clients list shows.
+//   - Manual sessions now write both, so they'll match either way.
+//
+// ownerEmail: when provided, scopes results to one coach's calendar.
+export async function getMeetingsByUserEmail(
+  email: string,
+  ownerEmail?: string,
+  displayName?: string,
+): Promise<Meeting[]> {
   const { apiKey, baseId } = getCredentials();
   const safeEmail = email.toLowerCase().trim().replace(/"/g, '\\"');
-  const participantFilter = `SEARCH("${safeEmail}", LOWER({${FIELDS.MEETINGS.ATTENDEES}}))`;
+  const matchClauses: string[] = []
+  if (safeEmail) {
+    matchClauses.push(`SEARCH("${safeEmail}", LOWER({${FIELDS.MEETINGS.ATTENDEES}}))`)
+  }
+  if (displayName && displayName.trim()) {
+    const safeName = displayName.toLowerCase().trim().replace(/"/g, '\\"')
+    matchClauses.push(`SEARCH("${safeName}", LOWER({${FIELDS.MEETINGS.CLIENT_NAME}}))`)
+  }
+  if (matchClauses.length === 0) return []
+  const matchFilter = matchClauses.length === 1 ? matchClauses[0] : `OR(${matchClauses.join(', ')})`
+
   const safeOwner = ownerEmail ? ownerEmail.toLowerCase().replace(/"/g, '\\"') : null;
   const formula = safeOwner
-    ? `AND(${participantFilter}, LOWER({${FIELDS.MEETINGS.CALENDAR_OWNER}}) = "${safeOwner}")`
-    : participantFilter;
+    ? `AND(${matchFilter}, LOWER({${FIELDS.MEETINGS.CALENDAR_OWNER}}) = "${safeOwner}")`
+    : matchFilter;
   const res = await fetch(
     `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${encodeURIComponent(formula)}&sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.MEETINGS.START)}&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=100`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: "no-store" },
@@ -177,8 +198,12 @@ export async function updatePortalEventNotes(
 
 // Meetings for a client's profile page — same as getMeetingsByUserEmail
 // (kept as a named alias for clarity at the call site)
-export async function getPortalEventsByClientEmail(email: string, ownerEmail?: string): Promise<Meeting[]> {
-  return getMeetingsByUserEmail(email, ownerEmail);
+export async function getPortalEventsByClientEmail(
+  email: string,
+  ownerEmail?: string,
+  displayName?: string,
+): Promise<Meeting[]> {
+  return getMeetingsByUserEmail(email, ownerEmail, displayName);
 }
 
 // ── Manual meeting creation ──────────────────────────────────────────────────

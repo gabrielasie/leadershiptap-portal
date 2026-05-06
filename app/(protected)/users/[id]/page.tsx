@@ -77,6 +77,10 @@ export default async function UserDetailPage({ params, searchParams }: Props) {
   const coachId = user.coachIds?.[0] ?? null
   const teamLeadId = user.teamLeadIds?.[0] ?? null
   const teamMemberIdList = user.teamMemberIds ?? []
+  // Resolved display name — passed to getMeetingsForUser so the lookup can
+  // also match meetings via the {Client Name} field (set by sync), not just
+  // by email substring in {Attendees}. Belt-and-suspenders for sparse data.
+  const displayName = getDisplayName(user)
 
   const [
     { upcoming, past },
@@ -92,7 +96,7 @@ export default async function UserDetailPage({ params, searchParams }: Props) {
     portalSessionEvents,
     theirTeamReports,
   ] = await Promise.all([
-    getMeetingsForUser(contactEmail, sessionUser, id, currentUserRecord.email || undefined),
+    getMeetingsForUser(contactEmail, sessionUser, id, currentUserRecord.email || undefined, displayName),
     getUserMessages(id),
     getNotesByUser(id).catch(() => [] as Note[]),
     getTasksByUser(id).catch(() => [] as Task[]),
@@ -107,7 +111,7 @@ export default async function UserDetailPage({ params, searchParams }: Props) {
       ? getRelationshipContext(currentUserRecord.airtableId, id).catch(() => null)
       : Promise.resolve(null),
     contactEmail
-      ? getPortalEventsByClientEmail(contactEmail, currentUserRecord.email || undefined).catch(() => [])
+      ? getPortalEventsByClientEmail(contactEmail, currentUserRecord.email || undefined, displayName).catch(() => [])
       : Promise.resolve([]),
     getDirectReports(id).catch(() => []),
   ])

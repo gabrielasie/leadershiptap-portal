@@ -57,13 +57,16 @@ export async function getMeetingsForUser(
   sessionUser?: SessionUser | null,
   userId?: string,
   ownerEmail?: string,
+  displayName?: string,
 ): Promise<SplitMeetings> {
   if (sessionUser && userId) {
     const allowed = await canAccessUser(userId, sessionUser);
     if (!allowed) return { upcoming: [], past: [] };
   }
 
-  const meetings = deduplicateMeetings(await getMeetingsByUserEmail(userEmail, ownerEmail));
+  const meetings = deduplicateMeetings(
+    await getMeetingsByUserEmail(userEmail, ownerEmail, displayName),
+  );
   const now = new Date();
 
   const upcoming: Meeting[] = [];
