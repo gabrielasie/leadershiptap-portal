@@ -16,7 +16,9 @@
  * Usage: npx tsx scripts/backfill-rc-start-dates.ts
  */
 
-import 'dotenv/config'
+import { config } from 'dotenv'
+config({ path: '.env.local' })
+config()
 
 const apiKey = process.env.AIRTABLE_API_KEY
 const baseId = process.env.AIRTABLE_BASE_ID

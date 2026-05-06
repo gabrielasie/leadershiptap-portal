@@ -12,7 +12,10 @@
  * Usage: npx tsx scripts/audit-users-duplicates.ts
  */
 
-import 'dotenv/config'
+import { config } from 'dotenv'
+// Next.js convention: real credentials live in .env.local. Fall back to .env.
+config({ path: '.env.local' })
+config()
 
 const apiKey = process.env.AIRTABLE_API_KEY
 const baseId = process.env.AIRTABLE_BASE_ID

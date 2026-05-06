@@ -8,7 +8,9 @@
  * Requires AIRTABLE_API_KEY and AIRTABLE_BASE_ID in .env.local (or env).
  */
 
-import 'dotenv/config'
+import { config } from 'dotenv'
+config({ path: '.env.local' })
+config()
 
 const API_BASE = 'https://api.airtable.com/v0'
 const NOTES_TABLE = 'Notes'
