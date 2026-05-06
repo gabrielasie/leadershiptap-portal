@@ -6,6 +6,8 @@ export interface UpcomingItem {
   title: string
   startTime: string
   endTime?: string
+  /** IANA timezone of the source calendar event. Used by the dashboard to compute "today". */
+  timezone: string
   weekday: string
   day: number
   month: string

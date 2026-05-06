@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { MessageSquare } from 'lucide-react'
 import LogNoteDialog from './LogNoteDialog'
+import LogSessionDialog from './LogSessionDialog'
 import AddTaskDialog from './AddTaskDialog'
 
 interface UserActionsBarProps {
@@ -21,6 +22,7 @@ export default function UserActionsBar({ userId }: UserActionsBarProps) {
       </Button>
 
       <LogNoteDialog userId={userId} />
+      <LogSessionDialog userId={userId} />
       <AddTaskDialog userId={userId} />
     </div>
   )

@@ -281,6 +281,7 @@ export interface UserProfileFields {
   'Work Cell Number'?: string
   'Personal Cell Number'?: string
   'Role'?: string
+  'Internal Notes'?: string
   // NOTE: Quick Notes and Family Details are coach-specific — write to
   // Coach-Person Context table via upsertCoachPersonContext, not here.
   // Linked record fields — arrays of record IDs

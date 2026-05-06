@@ -1,4 +1,5 @@
 import { currentUser } from '@clerk/nextjs/server'
+import { log } from '@/lib/utils/logger'
 
 export interface CurrentUserRecord {
   clerkId: string
@@ -50,10 +51,10 @@ export async function getCurrentUserRecord(): Promise<CurrentUserRecord> {
       | undefined
 
     if (match) {
-      console.log(`[getCurrentUserRecord] found via formula email=${searchEmail} airtableId=${match.id}`)
+      log.debug(`[getCurrentUserRecord] found via formula email=${searchEmail} airtableId=${match.id}`)
     } else {
       // ── Step 2: paginated scan fallback (catches records past position 100) ─
-      console.warn(`[getCurrentUserRecord] formula returned nothing for ${searchEmail} — falling back to paginated scan`)
+      log.warn(`[getCurrentUserRecord] formula returned nothing for ${searchEmail} — falling back to paginated scan`)
       let offset: string | undefined
       let firstRecordLogged = false
       scan: do {
@@ -65,7 +66,7 @@ export async function getCurrentUserRecord(): Promise<CurrentUserRecord> {
         const pageData = await pageRes.json()
         // Log field names from the first record once — shows exact Airtable field names
         if (!firstRecordLogged && pageData.records?.length > 0) {
-          console.log('[getCurrentUserRecord] Airtable Users field names:', Object.keys(pageData.records[0].fields))
+          log.debug('[getCurrentUserRecord] Airtable Users field names:', Object.keys(pageData.records[0].fields))
           firstRecordLogged = true
         }
         for (const r of pageData.records ?? []) {
@@ -80,7 +81,7 @@ export async function getCurrentUserRecord(): Promise<CurrentUserRecord> {
             const matchingFields = Object.entries(fields)
               .filter(([, v]) => typeof v === 'string' && v.toLowerCase().trim() === searchEmail)
               .map(([k]) => k)
-            console.log(`[getCurrentUserRecord] found via paginated scan email=${searchEmail} airtableId=${match.id} matched fields=${matchingFields.join(', ')}`)
+            log.debug(`[getCurrentUserRecord] found via paginated scan email=${searchEmail} airtableId=${match.id} matched fields=${matchingFields.join(', ')}`)
             break scan
           }
         }
@@ -88,12 +89,12 @@ export async function getCurrentUserRecord(): Promise<CurrentUserRecord> {
       } while (offset)
 
       if (!match) {
-        console.log(`[getCurrentUserRecord] email=${searchEmail} airtableId=NOT FOUND`)
+        log.debug(`[getCurrentUserRecord] email=${searchEmail} airtableId=NOT FOUND`)
       }
     }
 
     if (!match) {
-      console.warn('[getCurrentUserRecord] No Airtable record found for:', searchEmail)
+      log.warn('[getCurrentUserRecord] No Airtable record found for:', searchEmail)
       // Fall back to Clerk role; default admin prevents blank portal during setup
       const clerkRole = (clerkUser.publicMetadata as { role?: string })?.role
       const role = clerkRole === 'admin' ? 'admin' : clerkRole === 'coach' ? 'coach' : 'admin'
@@ -114,7 +115,7 @@ export async function getCurrentUserRecord(): Promise<CurrentUserRecord> {
       name,
     }
   } catch (err) {
-    console.error('[getCurrentUserRecord] error:', err)
+    log.error('[getCurrentUserRecord] error:', err)
     return { clerkId: '', email: '', airtableId: null, role: 'admin', name: '' }
   }
 }

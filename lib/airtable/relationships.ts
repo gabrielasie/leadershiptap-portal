@@ -1,4 +1,5 @@
 import { TABLES, FIELDS } from '@/lib/airtable/constants'
+import { log } from '@/lib/utils/logger'
 
 const API_BASE = 'https://api.airtable.com/v0'
 const TABLE = encodeURIComponent(TABLES.RELATIONSHIP_CONTEXTS)
@@ -111,7 +112,7 @@ export async function getRelationshipContexts(
   ])
 
   if (!res.ok) {
-    console.warn('[getRelationshipContexts] fetch failed:', res.status, await res.text())
+    log.warn('[getRelationshipContexts] fetch failed:', res.status, await res.text())
     return []
   }
 
@@ -122,7 +123,7 @@ export async function getRelationshipContexts(
       (r: RelationshipContext | null): r is RelationshipContext =>
         r !== null && r.leadId === leadAirtableId,
     )
-  console.log(`[RC] found ${results.length} active contexts for lead ${leadAirtableId}`)
+  log.debug(`[RC] found ${results.length} active contexts for lead ${leadAirtableId}`)
   return results
 }
 
@@ -158,7 +159,7 @@ export async function getUpstreamContexts(
   ])
 
   if (!res.ok) {
-    console.warn('[getUpstreamContexts] fetch failed:', res.status, await res.text())
+    log.warn('[getUpstreamContexts] fetch failed:', res.status, await res.text())
     return []
   }
 
@@ -381,17 +382,42 @@ export async function resolveContextForSubject(
   coachId: string,
   subjectPersonId: string,
 ): Promise<RelationshipContext | null> {
-  // 1. Direct
-  const direct = await getRelationshipContext(coachId, subjectPersonId)
+  const { apiKey, baseId } = getCredentials()
+  const formula = encodeURIComponent(
+    `LOWER({${FIELDS.RELATIONSHIP_CONTEXTS.STATUS}}) = "active"`,
+  )
+
+  const [res, nameMap] = await Promise.all([
+    fetch(
+      `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${formula}&maxRecords=2000`,
+      { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+    ),
+    buildNameMap(apiKey, baseId),
+  ])
+
+  if (!res.ok) return null
+
+  const data = await res.json()
+  const allActive = (data.records ?? [])
+    .map((r: { id: string; fields: Record<string, unknown> }) => mapRecord(r, nameMap))
+    .filter((r: RelationshipContext | null): r is RelationshipContext => r !== null)
+
+  // Index by lead → RCs
+  const byLead = new Map<string, RelationshipContext[]>()
+  for (const rc of allActive) {
+    const list = byLead.get(rc.leadId) ?? []
+    list.push(rc)
+    byLead.set(rc.leadId, list)
+  }
+
+  // 1. Direct: coach → subject
+  const direct = byLead.get(coachId)?.find((c) => c.personId === subjectPersonId)
   if (direct) return direct
 
-  // 2. One-hop: coach → intermediate person → subject
-  const coachContexts = await getRelationshipContexts(coachId)
-  for (const rc of coachContexts) {
-    const downstream = await getRelationshipContexts(rc.personId)
-    if (downstream.some((d) => d.personId === subjectPersonId)) {
-      return rc // the coach's upstream RC
-    }
+  // 2. One-hop: coach → intermediate → subject. Return the coach's upstream RC.
+  for (const rc of byLead.get(coachId) ?? []) {
+    const downstream = byLead.get(rc.personId) ?? []
+    if (downstream.some((d) => d.personId === subjectPersonId)) return rc
   }
 
   return null

@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Pencil } from 'lucide-react'
 import { updateSessionNotesAction } from './actions'
 import type { Meeting } from '@/lib/types'
-import type { CoachSession } from '@/lib/airtable/coachSessions'
+import type { Note } from '@/lib/airtable/notes'
 
 import { formatEastern } from '@/lib/utils/dateFormat'
 
@@ -22,13 +22,14 @@ function formatMeetingDate(iso: string): string {
 interface Props {
   meeting: Meeting | null
   userId: string
-  coachSession: CoachSession | null
+  meetingNotes: Note[]
 }
 
-export default function MostRecentSessionNotes({ meeting, userId, coachSession }: Props) {
+export default function MostRecentSessionNotes({ meeting, userId, meetingNotes }: Props) {
   const router = useRouter()
   const [mode, setMode] = useState<'view' | 'edit'>('view')
-  const [notes, setNotes] = useState(coachSession?.sessionNotes ?? '')
+  const existingContent = meetingNotes[0]?.content ?? ''
+  const [notes, setNotes] = useState(existingContent)
   const [savedFlash, setSavedFlash] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [errorMsg, setErrorMsg] = useState('')
@@ -51,7 +52,7 @@ export default function MostRecentSessionNotes({ meeting, userId, coachSession }
   function handleCancel() {
     setErrorMsg('')
     // Reset textarea to last-saved value so cancel truly discards changes
-    setNotes(coachSession?.sessionNotes ?? '')
+    setNotes(existingContent)
     setMode('view')
   }
 
@@ -119,10 +120,14 @@ export default function MostRecentSessionNotes({ meeting, userId, coachSession }
         </div>
 
         {mode === 'view' ? (
-          notes ? (
-            <p className="text-base text-slate-800 whitespace-pre-wrap leading-relaxed">
-              {notes}
-            </p>
+          meetingNotes.length > 0 ? (
+            <div className="space-y-3">
+              {meetingNotes.map((n) => (
+                <p key={n.id} className="text-base text-slate-800 whitespace-pre-wrap leading-relaxed">
+                  {n.content}
+                </p>
+              ))}
+            </div>
           ) : (
             <p className="text-sm text-slate-400 italic">
               No session notes yet — click Log a Note or Add Notes to add some.
@@ -162,18 +167,6 @@ export default function MostRecentSessionNotes({ meeting, userId, coachSession }
           </div>
         )}
       </div>
-
-      {/* Action Items — shown when present */}
-      {coachSession?.actionItems && (
-        <div className="mx-5 mb-5 bg-white/80 rounded-lg border border-blue-100 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
-            Action Items
-          </p>
-          <p className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
-            {coachSession.actionItems}
-          </p>
-        </div>
-      )}
 
     </div>
   )

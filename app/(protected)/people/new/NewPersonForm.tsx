@@ -176,7 +176,14 @@ export default function NewPersonForm({ coaches, allUsers, companies }: Props) {
   const [lastName, setLastName] = useState('')
   const [jobTitle, setJobTitle] = useState('')
   const [workEmail, setWorkEmail] = useState('')
-  const [companyId, setCompanyId] = useState(NO_COMPANY)
+  const [companyId, setCompanyIdRaw] = useState(NO_COMPANY)
+
+  function setCompanyId(next: string) {
+    setCompanyIdRaw(next)
+    // Clear org-fenced selections when company changes
+    setReportsTo([])
+    setDirectReports([])
+  }
 
   const [selectedCoaches, setSelectedCoaches] = useState<Person[]>([])
   const [reportsTo, setReportsTo] = useState<Person[]>([])
@@ -185,11 +192,10 @@ export default function NewPersonForm({ coaches, allUsers, companies }: Props) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  // Filter Reports To options by same company when a company is selected
-  const reportsToOptions =
-    companyId !== NO_COMPANY
-      ? allUsers.filter((u) => u.companyId === companyId)
-      : allUsers
+  const hasCompany = companyId !== NO_COMPANY
+  const orgUsers = hasCompany
+    ? allUsers.filter((u) => u.companyId === companyId)
+    : []
 
   const canSubmit = firstName.trim().length > 0 && lastName.trim().length > 0 && !saving
 
@@ -328,11 +334,11 @@ export default function NewPersonForm({ coaches, allUsers, companies }: Props) {
         </h2>
         <PersonPicker
           label="Who does this person report to?"
-          hint="Their direct manager(s)."
-          options={reportsToOptions}
+          hint={hasCompany ? 'Their direct manager(s).' : 'Pick a company above to see who they could report to.'}
+          options={orgUsers}
           selected={reportsTo}
           onChange={setReportsTo}
-          placeholder="Search people…"
+          placeholder={hasCompany ? 'Search people…' : 'Select a company first'}
         />
       </section>
 
@@ -343,11 +349,11 @@ export default function NewPersonForm({ coaches, allUsers, companies }: Props) {
         </h2>
         <PersonPicker
           label="Who reports to this person?"
-          hint="Usually populated for senior leaders."
-          options={allUsers}
+          hint={hasCompany ? 'Usually populated for senior leaders.' : 'Pick a company above to see who they could report to.'}
+          options={orgUsers}
           selected={directReports}
           onChange={setDirectReports}
-          placeholder="Search people…"
+          placeholder={hasCompany ? 'Search people…' : 'Select a company first'}
         />
       </section>
 

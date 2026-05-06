@@ -155,6 +155,7 @@ export default function EditProfileDialog({ user, coachContext }: Props) {
   const [teamLeadId, setTeamLeadId] = useState('')
 
   // ── Coaching Context ─────────────────────────────────────────────────────────
+  const [internalNotes, setInternalNotes] = useState('')
   const [quickNotes, setQuickNotes] = useState('')
   const [familyDetails, setFamilyDetails] = useState('')
 
@@ -190,6 +191,7 @@ export default function EditProfileDialog({ user, coachContext }: Props) {
     setRole(user.role ?? '')
     setCoachId(user.coachIds?.[0] ?? '')
     setTeamLeadId(user.teamLeadIds?.[0] ?? '')
+    setInternalNotes(user.internalNotes ?? '')
     setQuickNotes(coachContext?.quickNotes ?? '')
     setFamilyDetails(coachContext?.familyDetails ?? '')
     setEnneagramId(user.enneagramIds?.[0] ?? '')
@@ -282,6 +284,7 @@ export default function EditProfileDialog({ user, coachContext }: Props) {
     if (workCellNumber !== (user.workCellNumber ?? '')) patch['Work Cell Number'] = workCellNumber
     if (personalCellNumber !== (user.personalCellNumber ?? '')) patch['Personal Cell Number'] = personalCellNumber
     if (role !== (user.role ?? '')) patch['Role'] = role
+    if (internalNotes !== (user.internalNotes ?? '')) patch['Internal Notes'] = internalNotes
 
     // Linked single-record fields — only if changed and non-empty
     if (companyId && companyId !== (user.companyLinkedIds?.[0] ?? '')) patch['Company'] = [companyId]
@@ -442,6 +445,10 @@ export default function EditProfileDialog({ user, coachContext }: Props) {
               {/* ── Section 4: Coaching Context ─────────────────────────── */}
               <Section title="Coaching Context">
                 <div className="space-y-3">
+                  <Field label="Internal Notes">
+                    <textarea className={`${inputCls} resize-none`} rows={3} value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} placeholder="Internal coaching notes about this client…" disabled={saving} />
+                    <p className="text-xs text-slate-400 mt-1">Only visible to coaches with an active relationship context.</p>
+                  </Field>
                   <Field label="Quick Context Notes">
                     <textarea className={`${inputCls} resize-none`} rows={3} value={quickNotes} onChange={(e) => setQuickNotes(e.target.value)} placeholder="Short context notes about this client…" disabled={saving} />
                   </Field>

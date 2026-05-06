@@ -1,40 +1,19 @@
-import Link from 'next/link'
-import { Calendar, Users, ChevronRight, Clock, CheckSquare, CalendarDays } from 'lucide-react'
-import { TABLES, FIELDS } from '@/lib/airtable/constants'
-import { getUsers, getClientsByRelationship, getPortalCoaches } from '@/lib/services/usersService'
-import { getRelationshipContexts } from '@/lib/airtable/relationships'
+import { Suspense } from 'react'
+import { getUsers, getClientsByRelationship } from '@/lib/services/usersService'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
-import { getAllMeetings, getAllUpcomingMeetings } from '@/lib/airtable/meetings'
-import { buildEmailToUserMap, findClientForMeeting, groupMeetingsByUser } from '@/lib/services/meetingsService'
-import { fetchAllMessages } from '@/lib/airtable/messages'
-import { getTasks } from '@/lib/airtable/tasks'
-import { getAllRecentNotes, getNotesByAuthor } from '@/lib/airtable/notes'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
-import DashboardQuickActions from './DashboardQuickActions'
-import UpcomingSessionsCard, { type UpcomingItem } from './UpcomingSessionsCard'
-import DashboardTaskItem, { type DashboardTask } from './DashboardTaskItem'
-import AddTaskDashboardDialog from './AddTaskDashboardDialog'
-import ClientRowWithNotes from './ClientRowWithNotes'
-import type { User, Meeting, Message } from '@/lib/types'
-
-// ── helpers ───────────────────────────────────────────────────────────────────
+import { getHourInTimezone } from '@/lib/utils/dateFormat'
+import ComingUpNextRegion from './regions/ComingUpNextRegion'
+import OpenTasksRegion from './regions/OpenTasksRegion'
+import YourClientsRegion from './regions/YourClientsRegion'
+import { ComingUpNextSkeleton, TasksSkeleton, ClientsSkeleton } from './regions/Skeletons'
+import type { User } from '@/lib/types'
 
 function getTimeOfDay(): string {
-  const h = new Date().getHours()
+  const h = getHourInTimezone()
   if (h < 12) return 'morning'
   if (h < 17) return 'afternoon'
   return 'evening'
-}
-
-function formatTimeUntil(iso: string, now: Date): string {
-  const diffMs = new Date(iso).getTime() - now.getTime()
-  if (diffMs <= 0) return 'starting now'
-  const diffMin = Math.floor(diffMs / 60000)
-  if (diffMin < 60) return `in ${diffMin} minute${diffMin === 1 ? '' : 's'}`
-  const diffHr = Math.floor(diffMin / 60)
-  if (diffHr < 24) return `in ${diffHr} hour${diffHr === 1 ? '' : 's'}`
-  const diffDay = Math.floor(diffHr / 24)
-  return `in ${diffDay} day${diffDay === 1 ? '' : 's'}`
 }
 
 function getDisplayName(user: User): string {
@@ -44,210 +23,17 @@ function getDisplayName(user: User): string {
   return user.preferredName ?? user.email
 }
 
-function getInitials(user: User): string {
-  const first = user.firstName ?? user.fullName?.split(' ')[0] ?? ''
-  const last = user.lastName ?? user.fullName?.split(' ').slice(-1)[0] ?? ''
-  return `${first[0] ?? ''}${last[0] ?? ''}`.toUpperCase() || user.email[0].toUpperCase()
-}
-
-const AVATAR_COLORS = [
-  'bg-blue-100 text-blue-700',
-  'bg-violet-100 text-violet-700',
-  'bg-emerald-100 text-emerald-700',
-  'bg-amber-100 text-amber-700',
-  'bg-rose-100 text-rose-700',
-  'bg-cyan-100 text-cyan-700',
-]
-
-function avatarColor(id: string): string {
-  let hash = 0
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length]
-}
-
-function formatSessionLabel(iso: string): string {
-  const weekday = new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short' })
-  const month = new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short' })
-  const day = new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', day: 'numeric' })
-  const time = new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', hour12: true })
-  return `${weekday} ${month} ${day} · ${time} ET`
-}
-
-// ── Meetings (was: Portal Calendar Events) ────────────────────────────────────
-
-interface PortalCalendarEvent {
-  id: string
-  subject: string
-  start: string
-  timezone: string
-}
-
-async function getUpcomingPortalEvents(ownerEmail: string): Promise<PortalCalendarEvent[]> {
-  const apiKey = process.env.AIRTABLE_API_KEY
-  const baseId = process.env.AIRTABLE_BASE_ID
-  if (!apiKey || !baseId) return []
-
-  const now = new Date()
-  const cutoff = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-  const safeOwner = ownerEmail.toLowerCase().replace(/"/g, '\\"')
-  const formula = encodeURIComponent(
-    `AND(IS_AFTER({${FIELDS.MEETINGS.START}}, "${now.toISOString()}"), IS_BEFORE({${FIELDS.MEETINGS.START}}, "${cutoff.toISOString()}"), LOWER({${FIELDS.MEETINGS.CALENDAR_OWNER}}) = "${safeOwner}")`,
-  )
-  try {
-    console.log('[debug] getUpcomingPortalEvents table:', TABLES.MEETINGS, 'filter:', decodeURIComponent(formula))
-    const res = await fetch(
-      `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(TABLES.MEETINGS)}?filterByFormula=${formula}&sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.MEETINGS.START)}&sort%5B0%5D%5Bdirection%5D=asc&maxRecords=10`,
-      { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
-    )
-    if (!res.ok) {
-      console.error('[debug] getUpcomingPortalEvents failed status:', res.status, await res.text())
-      return []
-    }
-    const data = await res.json()
-    return (data.records ?? []).map((r: { id: string; fields: Record<string, unknown> }) => ({
-      id: r.id,
-      subject: (r.fields[FIELDS.MEETINGS.TITLE] as string) ?? '(No Subject)',
-      start: (r.fields[FIELDS.MEETINGS.START] as string) ?? '',
-      timezone: (r.fields[FIELDS.MEETINGS.TIMEZONE] as string) || 'America/New_York',
-    })).filter((e: PortalCalendarEvent) => e.start)
-  } catch {
-    return []
-  }
-}
-
-// ── page ──────────────────────────────────────────────────────────────────────
-
 export default async function DashboardPage() {
   const sessionUser = await getSessionUser()
   const userRecord = await getCurrentUserRecord()
 
   const isAdmin = userRecord.role === 'admin'
-  // ownerEmail scopes all Portal Calendar Events queries to the logged-in coach's
-  // calendar — prevents Coach A from ever seeing Coach B's events.
-  const ownerEmail = userRecord.email || undefined
 
-  const [users, upcomingMeetings, allMeetings, allMessages, rawOpenTasks, allRecentNotes, portalEvents, coachContexts, coachNotes, coachUsers] = await Promise.all([
-    // Admins see all users; coaches see only clients with an active Relationship Context.
-    isAdmin || !userRecord.airtableId
-      ? getUsers(sessionUser)
-      : getClientsByRelationship(userRecord.airtableId),
-    getAllUpcomingMeetings(7, ownerEmail),
-    getAllMeetings(ownerEmail),
-    fetchAllMessages(),
-    userRecord.airtableId ? getTasks(userRecord.airtableId) : Promise.resolve([]),
-    getAllRecentNotes(100),
-    isAdmin && ownerEmail ? getUpcomingPortalEvents(ownerEmail) : Promise.resolve([]),
-    // Fetch active relationship context IDs so we can filter calendar events.
-    !isAdmin && userRecord.airtableId
-      ? getRelationshipContexts(userRecord.airtableId)
-      : Promise.resolve([]),
-    // Notes authored by this coach — used for "has note" indicator on meeting cards
-    userRecord.airtableId
-      ? getNotesByAuthor(userRecord.airtableId)
-      : Promise.resolve([]),
-    // Co-coaches for the task assignment dropdown (exclude current user)
-    getPortalCoaches(userRecord.airtableId ?? undefined),
-  ])
+  // Fetch just users for greeting — lightweight, fast
+  const users = await (isAdmin || !userRecord.airtableId
+    ? getUsers(sessionUser)
+    : getClientsByRelationship(userRecord.airtableId))
 
-  // Build email → user lookup (matches both email and workEmail, normalised)
-  const emailToUser = buildEmailToUserMap(users)
-  const now = new Date()
-
-  // Meeting record IDs that already have a note — used for card badge
-  const notedMeetingIds = new Set(
-    coachNotes.map((n) => n.meetingId).filter(Boolean),
-  )
-
-  // For coaches: only show calendar events whose Relationship Context ID is
-  // in their active contexts. Events with no context ID (internal meetings) are
-  // always shown. Admins skip this filter.
-  const activeContextIds = new Set(coachContexts.map((c) => c.id))
-  const ownershipFilteredUpcoming = isAdmin
-    ? upcomingMeetings
-    : upcomingMeetings.filter(
-        (m) => !m.relationshipContextId || activeContextIds.has(m.relationshipContextId),
-      )
-
-  // Dedup upcoming meetings — prefer Provider Event ID, fall back to title+startTime
-  const seenById = new Set<string>()
-  const seenKeys = new Set<string>()
-  const dedupedUpcoming = ownershipFilteredUpcoming.filter((m) => {
-    if (m.providerEventId) {
-      if (seenById.has(m.providerEventId)) return false
-      seenById.add(m.providerEventId)
-      return true
-    }
-    const key = `${m.title ?? ''}|${m.startTime ?? ''}`
-    if (seenKeys.has(key)) return false
-    seenKeys.add(key)
-    return true
-  })
-
-  // Build serializable items for the UpcomingSessionsCard client component
-  const coachEmail = sessionUser?.email?.toLowerCase() ?? ''
-  const upcomingItems: UpcomingItem[] = dedupedUpcoming.map((meeting) => {
-    // Check participantEmails first, then fall back to senderEmail
-    const client =
-      findClientForMeeting(meeting, emailToUser) ??
-      (meeting.senderEmail
-        ? (emailToUser.get(meeting.senderEmail.toLowerCase().trim()) ?? null)
-        : null)
-    const d = new Date(meeting.startTime)
-    const tz = meeting.timezone || 'America/New_York'
-    const fmt = (iso: string) =>
-      new Date(iso).toLocaleString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true })
-    const timeRange = meeting.endTime
-      ? `${fmt(meeting.startTime)} – ${fmt(meeting.endTime)} ET`
-      : `${fmt(meeting.startTime)} ET`
-
-    // External (non-internal, non-coach) participants — used only in the unmatched modal
-    const externalEmails = meeting.participantEmails.filter(
-      (e) => e && !e.toLowerCase().includes('leadershiptap.com') && e.toLowerCase() !== coachEmail,
-    )
-
-    return {
-      meetingId: meeting.id,
-      providerEventId: meeting.providerEventId ?? null,
-      title: meeting.title,
-      startTime: meeting.startTime,
-      endTime: meeting.endTime,
-      weekday: new Date(meeting.startTime).toLocaleString('en-US', { timeZone: tz, weekday: 'short' }),
-      day: parseInt(new Date(meeting.startTime).toLocaleString('en-US', { timeZone: tz, day: 'numeric' }), 10),
-      month: new Date(meeting.startTime).toLocaleString('en-US', { timeZone: tz, month: 'short' }),
-      timeRange,
-      clientId: client?.id ?? null,
-      // Prefer the name stored on the calendar event (set during sync from the
-      // Relationship Context lookup) over the runtime email-match fallback.
-      clientName: meeting.clientName ?? (client ? getDisplayName(client) : null),
-      displayLabel: client ? null : (() => {
-        const allEmails = [meeting.senderEmail, ...meeting.participantEmails]
-          .filter(Boolean)
-          .map((e) => e!.trim().toLowerCase())
-          .filter((e) => e && !e.includes('leadershiptap') && e !== coachEmail)
-        const domains = [...new Set(
-          allEmails
-            .map((e) => e.split('@')[1]?.replace(/\.(com|net|org|io)$/, '') ?? '')
-            .filter(Boolean),
-        )]
-        return domains.slice(0, 2).join(', ') || null
-      })(),
-      participantEmails: externalEmails,
-      hasNote: notedMeetingIds.has(meeting.id),
-    }
-  })
-
-  // ── Today section ──────────────────────────────────────────────────────────
-
-  const todayStr = now.toISOString().slice(0, 10)
-  const todayItems = upcomingItems.filter(
-    (item) => new Date(item.startTime).toISOString().slice(0, 10) === todayStr,
-  )
-  // Next upcoming meeting (soonest after now, across all 7 days)
-  const nextItem = upcomingItems.find((item) => new Date(item.startTime) > now) ?? null
-  // Additional today sessions beyond the "Coming Up Next" one
-  const otherTodayItems = todayItems.filter((item) => item !== nextItem)
-
-  // Coach first name for greeting
   const coachUser = users.find(
     (u) =>
       u.email?.toLowerCase() === sessionUser?.email?.toLowerCase() ||
@@ -257,130 +43,9 @@ export default async function DashboardPage() {
     coachUser?.preferredName ??
     coachUser?.firstName ??
     coachUser?.fullName?.split(' ')[0] ??
-    (userRecord.name.split(' ')[0] || null) ??  // Clerk first name via getCurrentUserRecord
+    (userRecord.name.split(' ')[0] || null) ??
     sessionUser?.email?.split('@')[0] ??
     'Coach'
-
-  // Client user record for Coming Up Next avatar
-  const nextClient = nextItem?.clientId
-    ? (users.find((u) => u.id === nextItem.clientId) ?? null)
-    : null
-
-  // ── Open tasks ─────────────────────────────────────────────────────────────
-
-  const idToUser = new Map(users.map((u) => [u.id, u]))
-  const openTasks: DashboardTask[] = rawOpenTasks.map((task) => {
-    const assignedUser = task.assignedToPersonId ? (idToUser.get(task.assignedToPersonId) ?? null) : null
-    return {
-      id: task.id,
-      title: task.title,
-      status: task.status,
-      dueDate: task.dueDate ?? null,
-      notes: task.notes ?? null,
-      assignedToPersonId: task.assignedToPersonId ?? null,
-      assignedToName: assignedUser ? getDisplayName(assignedUser) : null,
-      createdByPersonId: task.createdByPersonId ?? null,
-      taskType: task.taskType ?? null,
-    }
-  })
-
-  // ── Relationship type per client (for labels + grouping) ─────────────────
-  const contextByPersonId = new Map(coachContexts.map((c) => [c.personId, c]))
-  const hasReportingRelationships = coachContexts.some((c) => c.relationshipType === 'reports_to')
-  const hasCoachingRelationships = coachContexts.some((c) => c.relationshipType === 'coaching')
-  const showRelationshipGroups = hasReportingRelationships && hasCoachingRelationships
-
-  // ── Notes grouped by client ────────────────────────────────────────────────
-
-  const notesByClient = new Map<string, Array<{ id: string; body: string; createdAt: string }>>()
-  for (const note of allRecentNotes) {
-    const personId = note.subjectPersonId ?? note.clientId
-    if (!personId) continue
-    if (!notesByClient.has(personId)) notesByClient.set(personId, [])
-    notesByClient.get(personId)!.push({ id: note.id, body: note.content, createdAt: note.date })
-  }
-
-  // ── Client activity ────────────────────────────────────────────────────────
-
-  // Group meetings by user.id (via normalised email match, service layer)
-  const meetingsByUser = groupMeetingsByUser(allMeetings, users)
-
-  // Group messages by user.id (via linked record IDs)
-  const messagesByUser = new Map<string, Message[]>()
-  for (const msg of allMessages) {
-    for (const uid of msg.userIds ?? []) {
-      if (!messagesByUser.has(uid)) messagesByUser.set(uid, [])
-      messagesByUser.get(uid)!.push(msg)
-    }
-  }
-
-  interface ClientActivity {
-    user: User
-    lastMeeting: Meeting | null
-    nextMeeting: Meeting | null
-    lastMessage: Message | null
-    lastActivityDate: Date | null
-  }
-
-  const clientActivity: ClientActivity[] = users.map((user) => {
-    const userMeetings = meetingsByUser.get(user.id) ?? []
-
-    // Most recent past meeting
-    const lastMeeting =
-      userMeetings
-        .filter((m) => m.startTime && new Date(m.startTime) < now)
-        .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())[0] ??
-      null
-
-    // Next upcoming meeting
-    const nextMeeting =
-      userMeetings
-        .filter((m) => m.startTime && new Date(m.startTime) >= now)
-        .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())[0] ??
-      null
-
-    // Most recent message (by Created date)
-    const lastMessage =
-      [...(messagesByUser.get(user.id) ?? [])].sort((a, b) => {
-        if (!a.created && !b.created) return 0
-        if (!a.created) return 1
-        if (!b.created) return -1
-        return new Date(b.created).getTime() - new Date(a.created).getTime()
-      })[0] ?? null
-
-    const activityDates = [
-      lastMeeting?.startTime ? new Date(lastMeeting.startTime) : null,
-      lastMessage?.created ? new Date(lastMessage.created) : null,
-    ].filter((d): d is Date => d !== null)
-
-    const lastActivityDate =
-      activityDates.length > 0 ? activityDates.reduce((a, b) => (a > b ? a : b)) : null
-
-    return { user, lastMeeting, nextMeeting, lastMessage, lastActivityDate }
-  })
-
-  // Diagnostic: log meeting match counts per client
-  clientActivity.forEach(({ user, lastMeeting }) => {
-    const email = user.workEmail ?? user.email ?? '(no email)'
-    const count = meetingsByUser.get(user.id)?.length ?? 0
-    console.log(`[dashboard] ${getDisplayName(user)} | email: ${email} | meetings matched: ${count}${lastMeeting ? ` | last: ${lastMeeting.startTime.slice(0,10)}` : ''}`)
-  })
-
-  // Sort by most recent activity, nulls last — show top 5
-  clientActivity.sort((a, b) => {
-    if (!a.lastActivityDate && !b.lastActivityDate) return 0
-    if (!a.lastActivityDate) return 1
-    if (!b.lastActivityDate) return -1
-    return b.lastActivityDate.getTime() - a.lastActivityDate.getTime()
-  })
-  const recentClients = clientActivity.slice(0, 5)
-
-  // Client list for quick-action dialogs (id + display name)
-  const clientsForActions = users.map((u) => ({ id: u.id, name: getDisplayName(u) }))
-  // Co-coaches for task assignment dropdown
-  const coachesForActions = coachUsers.map((u) => ({ id: u.id, name: getDisplayName(u) }))
-
-  // ── render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="p-4 md:p-6 lg:p-8">
@@ -391,295 +56,24 @@ export default async function DashboardPage() {
           Good {getTimeOfDay()}, {firstName} 👋
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          {todayItems.length > 0
-            ? `You have ${todayItems.length} session${todayItems.length === 1 ? '' : 's'} today`
-            : 'No sessions scheduled for today'}
+          Here&apos;s your coaching dashboard
         </p>
       </div>
 
-      {/* ── Coming Up Next ───────────────────────────────────────────────────── */}
-      {nextItem && (
-        <div className="bg-[hsl(213,60%,97%)] border border-[hsl(213,50%,88%)] rounded-xl p-5 mb-4 md:mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Clock className="h-4 w-4 text-[hsl(213,70%,45%)]" />
-            <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(213,70%,45%)]">
-              Coming Up Next
-            </span>
-            <span className="ml-auto text-xs font-semibold text-[hsl(213,70%,45%)]">
-              {formatTimeUntil(nextItem.startTime, now)}
-            </span>
-          </div>
+      {/* ── Coming Up Next + Today + Quick Actions + Upcoming This Week ────── */}
+      <Suspense fallback={<ComingUpNextSkeleton />}>
+        <ComingUpNextRegion userRecord={userRecord} />
+      </Suspense>
 
-          <div className="flex items-start gap-4">
-            {/* Client avatar */}
-            {nextClient && (nextClient.profilePhoto ?? nextClient.avatarUrl) ? (
-              <img
-                src={(nextClient.profilePhoto ?? nextClient.avatarUrl)!}
-                alt={nextItem.clientName ?? ''}
-                className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-              />
-            ) : nextClient ? (
-              <div
-                className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0 ${avatarColor(nextClient.id)}`}
-              >
-                {getInitials(nextClient)}
-              </div>
-            ) : null}
+      {/* ── Open Tasks ─────────────────────────────────────────────────────── */}
+      <Suspense fallback={<TasksSkeleton />}>
+        <OpenTasksRegion userRecord={userRecord} />
+      </Suspense>
 
-            <div className="flex-1 min-w-0">
-              {nextItem.clientName && (
-                <p className="text-sm font-semibold text-[hsl(213,70%,30%)] mb-0.5">
-                  {nextItem.clientName}
-                </p>
-              )}
-              <p className="text-base font-bold text-slate-900 leading-snug">
-                {nextItem.title || 'Untitled Meeting'}
-              </p>
-              <p className="text-sm text-slate-500 mt-0.5">{nextItem.timeRange}</p>
-            </div>
-          </div>
-
-          {nextItem.clientId && (
-            <div className="mt-4">
-              <Link
-                href={`/users/${nextItem.clientId}`}
-                className="inline-flex items-center justify-center gap-1.5 h-12 px-6 w-full md:w-auto rounded-lg bg-[hsl(213,70%,30%)] text-white text-base font-medium hover:bg-[hsl(213,70%,25%)] transition-colors"
-              >
-                Open Client Profile
-                <ChevronRight className="h-4 w-4" />
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Other today sessions — chip row ──────────────────────────────────── */}
-      {otherTodayItems.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-1 mb-4 md:mb-6 scrollbar-none">
-          {otherTodayItems.map((item) => {
-            const inner = (
-              <span className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1.5 rounded-full bg-white border border-slate-200 text-sm hover:border-[hsl(213,60%,70%)] hover:text-[hsl(213,70%,30%)] transition-colors">
-                <span className="text-slate-400 text-xs font-medium">{item.timeRange}</span>
-                <span className="text-slate-700 font-medium">
-                  {item.clientName ?? item.title}
-                </span>
-              </span>
-            )
-            return item.clientId ? (
-              <Link key={item.meetingId} href={`/users/${item.clientId}`}>
-                {inner}
-              </Link>
-            ) : (
-              <div key={item.meetingId}>{inner}</div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* ── Quick Actions ─────────────────────────────────────────────────────── */}
-      <DashboardQuickActions clients={clientsForActions} coaches={coachesForActions} />
-
-      {/* ── Open Tasks ───────────────────────────────────────────────────────── */}
-      <div className="mb-4 md:mb-6 bg-white rounded-xl shadow-sm p-4 md:p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <CheckSquare className="h-5 w-5 text-slate-400" />
-          <h2 className="text-lg font-semibold text-slate-900">Open Tasks</h2>
-          {openTasks.length > 0 && (
-            <span className="ml-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">
-              {openTasks.length}
-            </span>
-          )}
-          <div className="ml-auto">
-            <AddTaskDashboardDialog clients={clientsForActions} coaches={coachesForActions} />
-          </div>
-        </div>
-        {openTasks.length === 0 ? (
-          <p className="text-sm text-slate-400">No open tasks. Use the button above to add one.</p>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {openTasks.map((task) => (
-              <DashboardTaskItem key={task.id} task={task} />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── Upcoming Sessions (from Calendar) ────────────────────────────────── */}
-      {isAdmin && portalEvents.length > 0 && (
-        <div className="mb-4 md:mb-6 bg-white rounded-xl shadow-sm p-4 md:p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <CalendarDays className="h-5 w-5 text-slate-400" />
-            <h2 className="text-lg font-semibold text-slate-900">Upcoming Sessions (from Calendar)</h2>
-            <span className="ml-auto text-xs text-slate-400 font-medium">
-              {portalEvents.length} {portalEvents.length === 1 ? 'event' : 'events'}
-            </span>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {portalEvents.map((event) => (
-              <div key={event.id} className="py-3 flex items-center gap-3">
-                <div className="flex-shrink-0 text-center w-10">
-                  <p className="text-xs font-medium text-slate-400 uppercase">
-                    {new Date(event.start).toLocaleString('en-US', { timeZone: event.timezone, month: 'short' })}
-                  </p>
-                  <p className="text-lg font-bold text-slate-900 leading-none">
-                    {new Date(event.start).toLocaleString('en-US', { timeZone: event.timezone, day: 'numeric' })}
-                  </p>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900 truncate">{event.subject}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {new Date(event.start).toLocaleString('en-US', {
-                      timeZone: event.timezone,
-                      weekday: 'short',
-                      hour: 'numeric',
-                      minute: '2-digit',
-                      hour12: true,
-                    })} ET
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Main grid ─────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
-
-        {/* LEFT: Upcoming This Week */}
-        <div id="upcoming" className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-          <div className="flex items-center gap-2 mb-5">
-            <Calendar className="h-5 w-5 text-slate-400" />
-            <h2 className="text-lg font-semibold text-slate-900">Upcoming This Week</h2>
-            {upcomingItems.length > 0 && (() => {
-              const clientCount = upcomingItems.filter((i) => i.clientId).length
-              return (
-                <span className="ml-auto text-xs text-slate-400 font-medium">
-                  {clientCount > 0
-                    ? `${clientCount} client ${clientCount === 1 ? 'meeting' : 'meetings'}`
-                    : `${upcomingItems.length} ${upcomingItems.length === 1 ? 'meeting' : 'meetings'}`}
-                </span>
-              )
-            })()}
-          </div>
-          <UpcomingSessionsCard items={upcomingItems} />
-        </div>
-
-        {/* RIGHT: Recent Clients with inline notes */}
-        <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Users className="h-5 w-5 text-slate-400" />
-            <h2 className="text-lg font-semibold text-slate-900">Your Clients</h2>
-            <Link
-              href="/users"
-              className="ml-auto text-xs text-[hsl(213,70%,30%)] hover:underline font-medium"
-            >
-              View all {users.length}
-            </Link>
-          </div>
-
-          {recentClients.length === 0 ? (
-            <p className="text-sm text-slate-400">No clients yet.</p>
-          ) : (() => {
-            const coachingClients = showRelationshipGroups
-              ? recentClients.filter(({ user }) => contextByPersonId.get(user.id)?.relationshipType !== 'reports_to')
-              : recentClients
-            const reportingClients = showRelationshipGroups
-              ? recentClients.filter(({ user }) => contextByPersonId.get(user.id)?.relationshipType === 'reports_to')
-              : []
-
-            function renderClientRow({ user, lastMeeting, nextMeeting }: typeof recentClients[0]) {
-              const ctx = contextByPersonId.get(user.id)
-              const relationshipLabel = showRelationshipGroups
-                ? null  // label redundant when section headers are shown
-                : ctx?.relationshipType === 'reports_to'
-                  ? 'Reports to you'
-                  : ctx?.relationshipType === 'coaching'
-                    ? null  // coaching is the default — no label needed when only one type
-                    : null
-              const subtitle = [user.title ?? user.jobTitle, user.companyName].filter(Boolean).join(' · ') || null
-              const clientNotes = notesByClient.get(user.id) ?? []
-              return (
-                <ClientRowWithNotes
-                  key={user.id}
-                  clientId={user.id}
-                  clientName={getDisplayName(user)}
-                  subtitle={subtitle}
-                  initials={getInitials(user)}
-                  avatarColorClass={avatarColor(user.id)}
-                  profilePhoto={user.profilePhoto ?? user.avatarUrl ?? null}
-                  notes={clientNotes}
-                  totalNoteCount={clientNotes.length}
-                  nextSessionLabel={nextMeeting ? formatSessionLabel(nextMeeting.startTime) : null}
-                  lastSessionLabel={lastMeeting ? formatSessionLabel(lastMeeting.startTime) : null}
-                  relationshipLabel={relationshipLabel}
-                />
-              )
-            }
-
-            return (
-              <div>
-                {showRelationshipGroups && coachingClients.length > 0 && (
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 px-1 mb-2">
-                    Coaching
-                  </p>
-                )}
-                {coachingClients.map(renderClientRow)}
-                {showRelationshipGroups && reportingClients.length > 0 && (
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 px-1 mt-4 mb-2">
-                    Reports to you
-                  </p>
-                )}
-                {reportingClients.map(renderClientRow)}
-              </div>
-            )
-          })()}
-        </div>
-
-      </div>
-
-      {/* ── Admin: All Recent Activity ─────────────────────────────────────── */}
-      {isAdmin && allRecentNotes.length > 0 && (
-        <div className="mt-4 md:mt-6 bg-white rounded-xl shadow-sm p-4 md:p-6">
-          <h2 className="text-sm font-semibold text-slate-900 mb-3">All Recent Activity</h2>
-          <div className="space-y-2">
-            {allRecentNotes.slice(0, 20).map((note) => {
-              const client = (note.subjectPersonId ?? note.clientId) ? (idToUser.get(note.subjectPersonId ?? note.clientId ?? '') ?? null) : null
-              return (
-                <div
-                  key={note.id}
-                  className="rounded-lg border border-slate-100 p-3"
-                >
-                  <p className="text-xs text-slate-400 mb-1">
-                    {client ? (
-                      <Link
-                        href={`/users/${client.id}`}
-                        className="text-[hsl(213,70%,30%)] hover:underline font-medium"
-                      >
-                        {getDisplayName(client)}
-                      </Link>
-                    ) : (
-                      <span>Unknown client</span>
-                    )}
-                    {note.date && (
-                      <>
-                        {' · '}
-                        {new Date(note.date).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </>
-                    )}
-                  </p>
-                  <p className="text-sm text-slate-700 line-clamp-2 leading-relaxed">
-                    {note.content}
-                  </p>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+      {/* ── Your Clients + Admin Activity ──────────────────────────────────── */}
+      <Suspense fallback={<ClientsSkeleton />}>
+        <YourClientsRegion userRecord={userRecord} />
+      </Suspense>
 
     </div>
   )

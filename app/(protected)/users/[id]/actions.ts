@@ -14,8 +14,6 @@ import {
   getAllUsers,
 } from '@/lib/airtable/users'
 import { upsertCoachPersonContext } from '@/lib/airtable/coachPersonContext'
-import { upsertCoachSession } from '@/lib/airtable/coachSessions'
-import { updatePortalEventNotes } from '@/lib/airtable/meetings'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import { resolveContextForSubject } from '@/lib/airtable/relationships'
 
@@ -199,13 +197,24 @@ export async function updateSessionNotesAction(
   try {
     const userRecord = await getCurrentUserRecord()
     if (!userRecord.airtableId) {
-      // Fall back to patching the Calendar Event if the coach record can't be resolved
-      await updatePortalEventNotes(meetingId, notes)
-    } else {
-      await upsertCoachSession(userRecord.airtableId, meetingId, userId, {
-        sessionNotes: notes,
-      })
+      return { success: false, error: 'Could not resolve your coach record.' }
     }
+
+    const rc = await resolveContextForSubject(userRecord.airtableId, userId)
+    if (!rc) {
+      return { success: false, error: 'No active coaching or reporting relationship reaches this person.' }
+    }
+
+    await createNote({
+      content: notes,
+      authorPersonId: userRecord.airtableId,
+      coachName: userRecord.name || undefined,
+      subjectPersonId: userId,
+      clientId: userId,
+      relationshipContextId: rc.id,
+      meetingId,
+      noteType: 'meeting_note',
+    })
     revalidatePath(`/users/${userId}`)
     return { success: true }
   } catch (err) {
@@ -255,4 +264,56 @@ export async function saveTaskAction(
     assignedToPersonId: subjectPersonId,
   })
   revalidatePath(`/users/${subjectPersonId}`)
+}
+
+// ── Log Manual Session ────────────────────────────────────────────────────────
+
+export async function logManualSessionAction(params: {
+  subjectPersonId: string
+  startIso: string
+  durationMinutes: number
+  notes?: string
+}): Promise<void> {
+  const userRecord = await getCurrentUserRecord()
+  if (!userRecord.airtableId) throw new Error('SAVE_FAILED')
+
+  const rc = await resolveContextForSubject(userRecord.airtableId, params.subjectPersonId)
+  if (!rc) throw new Error('NO_RELATIONSHIP')
+
+  const { getUserById } = await import('@/lib/services/usersService')
+  const subject = await getUserById(params.subjectPersonId)
+  const subjectName = subject
+    ? subject.fullName || [subject.firstName, subject.lastName].filter(Boolean).join(' ')
+    : 'Unknown'
+
+  const coachFirst = userRecord.name.split(' ')[0] || 'Coach'
+
+  const start = new Date(params.startIso)
+  const end = new Date(start.getTime() + params.durationMinutes * 60_000)
+
+  const { createManualMeeting } = await import('@/lib/airtable/meetings')
+  const meetingId = await createManualMeeting({
+    title: `${coachFirst} / ${subjectName} — Manual Session`,
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+    timezone: 'America/New_York',
+    calendarOwnerEmail: userRecord.email,
+    relationshipContextId: rc.id,
+    clientName: subjectName,
+  })
+
+  if (params.notes && params.notes.trim().length > 0) {
+    await createNote({
+      content: params.notes.trim(),
+      authorPersonId: userRecord.airtableId,
+      coachName: userRecord.name || undefined,
+      subjectPersonId: params.subjectPersonId,
+      clientId: params.subjectPersonId,
+      relationshipContextId: rc.id,
+      meetingId,
+      noteType: 'meeting_note',
+    })
+  }
+
+  revalidatePath(`/users/${params.subjectPersonId}`)
 }

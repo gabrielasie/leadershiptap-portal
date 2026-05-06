@@ -4,8 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createTask, updateTask, updateTaskStatus, deleteTask, type UpdateTaskData } from '@/lib/airtable/tasks'
 import type { TaskStatus } from '@/lib/types'
 import { createNote, updateNote, deleteNote } from '@/lib/airtable/notes'
-import { getMeetingsByUserEmail, updatePortalEventNotes } from '@/lib/airtable/meetings'
-import { upsertCoachSession } from '@/lib/airtable/coachSessions'
+import { getMeetingsByUserEmail } from '@/lib/airtable/meetings'
 import { getUserById } from '@/lib/services/usersService'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import { resolveContextForSubject } from '@/lib/airtable/relationships'
@@ -120,25 +119,18 @@ export async function dashboardLogNoteAction(params: {
       return { success: false, error: 'No active coaching or reporting relationship reaches this person.' }
     }
 
-    if (params.meetingId) {
-      await upsertCoachSession(
-        userRecord.airtableId,
-        params.meetingId,
-        params.clientId,
-        { sessionNotes: params.content },
-      )
-      revalidatePath(`/users/${params.clientId}`)
-    } else {
-      await createNote({
-        content: params.content,
-        authorPersonId: userRecord.airtableId,
-        coachName: userRecord.name || undefined,
-        subjectPersonId: params.clientId,
-        clientId: params.clientId,
-        relationshipContextId: rc.id,
-      })
-    }
+    await createNote({
+      content: params.content,
+      authorPersonId: userRecord.airtableId,
+      coachName: userRecord.name || undefined,
+      subjectPersonId: params.clientId,
+      clientId: params.clientId,
+      relationshipContextId: rc.id,
+      meetingId: params.meetingId,
+      noteType: params.meetingId ? 'meeting_note' : 'general_context',
+    })
     revalidatePath('/dashboard')
+    if (params.meetingId) revalidatePath(`/users/${params.clientId}`)
     return { success: true }
   } catch (err) {
     console.error('[dashboardLogNoteAction]', err)
@@ -203,12 +195,33 @@ export async function dashboardDeleteNoteAction(
 }
 
 export async function savePortalEventNotesAction(
-  recordId: string,
+  meetingId: string,
   notes: string,
+  clientId: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await updatePortalEventNotes(recordId, notes)
+    const userRecord = await getCurrentUserRecord()
+    if (!userRecord.airtableId) {
+      return { success: false, error: 'Could not resolve your coach record.' }
+    }
+
+    const rc = await resolveContextForSubject(userRecord.airtableId, clientId)
+    if (!rc) {
+      return { success: false, error: 'No active coaching or reporting relationship reaches this person.' }
+    }
+
+    await createNote({
+      content: notes,
+      authorPersonId: userRecord.airtableId,
+      coachName: userRecord.name || undefined,
+      subjectPersonId: clientId,
+      clientId,
+      relationshipContextId: rc.id,
+      meetingId,
+      noteType: 'meeting_note',
+    })
     revalidatePath('/dashboard')
+    revalidatePath(`/users/${clientId}`)
     return { success: true }
   } catch (err) {
     console.error('[savePortalEventNotesAction]', err)

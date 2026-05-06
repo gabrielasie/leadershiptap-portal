@@ -68,7 +68,11 @@ export default function SessionNotePanel({
   async function handleSave() {
     if (!event || saving) return
     setSaving(true)
-    const result = await savePortalEventNotesAction(event.meetingId, notes)
+    if (!event.clientId) {
+      toast.error('No client linked to this event')
+      return
+    }
+    const result = await savePortalEventNotesAction(event.meetingId, notes, event.clientId)
     setSaving(false)
     if (!result.success) {
       toast.error('Failed to save notes')
