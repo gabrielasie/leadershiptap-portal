@@ -344,11 +344,16 @@ export interface ProfileOption {
 async function fetchTableOptions(
   tableName: string,
   nameField: string,
+  filterFormula?: string,
 ): Promise<ProfileOption[]> {
   try {
     const { apiKey, baseId } = getCredentials()
+    const params = new URLSearchParams()
+    params.append('fields[]', nameField)
+    params.set('maxRecords', '200')
+    if (filterFormula) params.set('filterByFormula', filterFormula)
     const res = await fetch(
-      `${API_BASE}/${baseId}/${encodeURIComponent(tableName)}?fields[]=${encodeURIComponent(nameField)}&maxRecords=200`,
+      `${API_BASE}/${baseId}/${encodeURIComponent(tableName)}?${params}`,
       { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
     )
     if (!res.ok) {
@@ -380,7 +385,9 @@ export async function fetchProfileOptions(allUsers: User[]): Promise<{
 }> {
   const [companies, enneagrams, mbtis, conflictPostures, apologyLanguages, strengths] =
     await Promise.all([
-      fetchTableOptions('Companies', 'Name'),
+      // Companies primary field is "Company Name", not "Name". Restrict to
+      // Active orgs only — spec Section 5 Table 2.
+      fetchTableOptions('Companies', 'Company Name', '{Status}="Active"'),
       fetchTableOptions('Enneagram', 'Name'),
       fetchTableOptions('16Personalities', 'Name'),
       fetchTableOptions('Conflict Postures', 'Conflict Posture'),

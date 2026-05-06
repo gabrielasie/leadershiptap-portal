@@ -238,43 +238,58 @@ interface GraphEvent {
   attendees?: GraphAttendee[]
 }
 
+// Sync window: how far back and forward we ask Microsoft Graph for events.
+// Past events are needed so coaches can attach notes to sessions that have
+// already happened. Tunable via SYNC_PAST_DAYS / SYNC_FUTURE_DAYS env vars.
+const PAST_DAYS = parseInt(process.env.SYNC_PAST_DAYS ?? '90', 10)
+const FUTURE_DAYS = parseInt(process.env.SYNC_FUTURE_DAYS ?? '60', 10)
+
 async function fetchEvents(token: string, email: string): Promise<GraphEvent[]> {
   const now = new Date()
-  const end = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000)
+  const start = new Date(now.getTime() - PAST_DAYS * 24 * 60 * 60 * 1000)
+  const end = new Date(now.getTime() + FUTURE_DAYS * 24 * 60 * 60 * 1000)
 
+  const all: GraphEvent[] = []
+  // Microsoft Graph caps $top at 1000; paginate via @odata.nextLink for
+  // long historical windows.
   const params = new URLSearchParams({
-    startDateTime: now.toISOString(),
+    startDateTime: start.toISOString(),
     endDateTime: end.toISOString(),
     $select: 'id,subject,isCancelled,iCalUId,start,end,attendees',
     $top: '500',
+    $orderby: 'start/dateTime asc',
   })
+  let url: string | null =
+    `${GRAPH_API}/users/${encodeURIComponent(email)}/calendarView?${params}`
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 15_000)
-  let res: Response
-  try {
-    res = await fetch(
-      `${GRAPH_API}/users/${encodeURIComponent(email)}/calendarView?${params}`,
-      {
+  while (url) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15_000)
+    let res: Response
+    try {
+      res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
         cache: 'no-store',
-      },
-    )
-  } catch (err) {
-    if ((err as Error).name === 'AbortError') throw new Error(`Graph calendar timeout for ${email}`)
-    throw err
-  } finally {
-    clearTimeout(timeout)
+      })
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') throw new Error(`Graph calendar timeout for ${email}`)
+      throw err
+    } finally {
+      clearTimeout(timeout)
+    }
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`Graph calendarView failed for ${email} (${res.status}): ${text}`)
+    }
+
+    const data = await res.json()
+    all.push(...((data.value ?? []) as GraphEvent[]))
+    url = (data['@odata.nextLink'] as string | undefined) ?? null
   }
 
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Graph calendarView failed for ${email} (${res.status}): ${text}`)
-  }
-
-  const data = await res.json()
-  return (data.value ?? []) as GraphEvent[]
+  return all
 }
 
 // ── Event pre-filter ──────────────────────────────────────────────────────────
@@ -320,6 +335,10 @@ async function upsertMeeting(
   const end = event.end.dateTime ?? event.end.date
   if (!start || !end) throw new Error(`Event ${event.id} has no start/end`)
 
+  // Past events get Status=Completed; future events get Status=Scheduled.
+  // Cancelled events are handled separately upstream and never reach this path.
+  const meetingStatus = new Date(end).getTime() < Date.now() ? 'Completed' : 'Scheduled'
+
   const fields: Record<string, unknown> = {
     [FIELDS.MEETINGS.TITLE]: `${coachFirstName} / ${personName} — ${event.subject ?? '(No Subject)'}`,
     [FIELDS.MEETINGS.RELATIONSHIP_CONTEXT]: [contextId],
@@ -328,7 +347,7 @@ async function upsertMeeting(
     [FIELDS.MEETINGS.PROVIDER_EVENT_ID]: event.id,
     [FIELDS.MEETINGS.CALENDAR_OWNER]: coachEmail,
     [FIELDS.MEETINGS.CLIENT_NAME]: personName,
-    [FIELDS.MEETINGS.MEETING_STATUS]: 'Scheduled',
+    [FIELDS.MEETINGS.MEETING_STATUS]: meetingStatus,
     [FIELDS.MEETINGS.CALENDAR_PROVIDER]: 'Outlook',
     [FIELDS.MEETINGS.TIMEZONE]: event.start.timeZone ?? 'America/New_York',
   }
