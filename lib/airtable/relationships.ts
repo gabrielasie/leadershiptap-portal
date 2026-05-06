@@ -215,30 +215,6 @@ export async function getAllRelationshipContexts(): Promise<RelationshipContext[
     .filter((r: RelationshipContext | null): r is RelationshipContext => r !== null)
 }
 
-// ── Permission Profile cache ──────────────────────────────────────────────────
-
-// Module-level cache — the 'standard' profile ID never changes between deploys.
-let _standardProfileId: string | null | undefined = undefined
-
-async function getStandardPermissionProfileId(
-  apiKey: string,
-  baseId: string,
-): Promise<string | null> {
-  if (_standardProfileId !== undefined) return _standardProfileId
-  const res = await fetch(
-    `${API_BASE}/${baseId}/${encodeURIComponent(TABLES.PERMISSION_PROFILES)}` +
-      `?filterByFormula=${encodeURIComponent('{Profile Name}="standard"')}&maxRecords=1`,
-    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
-  )
-  if (!res.ok) {
-    _standardProfileId = null
-    return null
-  }
-  const data = await res.json()
-  _standardProfileId = (data.records?.[0]?.id as string) ?? null
-  return _standardProfileId
-}
-
 // ── Downstream traversal ──────────────────────────────────────────────────────
 
 export interface DirectReport {
@@ -490,7 +466,6 @@ export async function generateRelationshipRows(data: OnboardingData): Promise<vo
     person: string
     lead: string
     type: 'coaching' | 'reports_to'
-    useStandardProfile: boolean
   }
 
   const rows: RowSpec[] = [
@@ -498,19 +473,16 @@ export async function generateRelationshipRows(data: OnboardingData): Promise<vo
       person: newPersonId,
       lead: leadId,
       type: 'coaching' as const,
-      useStandardProfile: true,
     })),
     ...reportsTo.map((leadId) => ({
       person: newPersonId,
       lead: leadId,
       type: 'reports_to' as const,
-      useStandardProfile: false,
     })),
     ...directReports.map((personId) => ({
       person: personId,
       lead: newPersonId,
       type: 'reports_to' as const,
-      useStandardProfile: false,
     })),
   ]
 
@@ -519,14 +491,11 @@ export async function generateRelationshipRows(data: OnboardingData): Promise<vo
   // Determine all unique person IDs we need to check for existing rows
   const personIds = [...new Set(rows.map((r) => r.person))]
 
-  const [existingByPerson, standardProfileId] = await Promise.all([
-    Promise.all(
-      personIds.map((pid) =>
-        fetchExistingPairs(apiKey, baseId, pid).then((pairs) => ({ pid, pairs })),
-      ),
+  const existingByPerson = await Promise.all(
+    personIds.map((pid) =>
+      fetchExistingPairs(apiKey, baseId, pid).then((pairs) => ({ pid, pairs })),
     ),
-    getStandardPermissionProfileId(apiKey, baseId),
-  ])
+  )
 
   // Build a Set of "personId|leadId|type" keys that already exist
   const existingKeys = new Set<string>()
@@ -543,14 +512,16 @@ export async function generateRelationshipRows(data: OnboardingData): Promise<vo
       continue
     }
 
+    // Permission Level intentionally omitted: the Airtable column is a
+    // single-select with values like "full_access", but the app's permission
+    // model is RC-existence-based (see lib/auth/permissions.ts) and does not
+    // read this field. Writing a record-ID array to a single-select column
+    // silently fails. Leave it for the architecture migration.
     const fields: Record<string, unknown> = {
       [FIELDS.RELATIONSHIP_CONTEXTS.PERSON]: [row.person],
       [FIELDS.RELATIONSHIP_CONTEXTS.LEAD]: [row.lead],
       [FIELDS.RELATIONSHIP_CONTEXTS.TYPE]: row.type,
       [FIELDS.RELATIONSHIP_CONTEXTS.STATUS]: 'Active',
-    }
-    if (row.useStandardProfile && standardProfileId) {
-      fields[FIELDS.RELATIONSHIP_CONTEXTS.PERMISSION_LEVEL] = [standardProfileId]
     }
 
     const res = await fetch(`${API_BASE}/${baseId}/${TABLE}`, {

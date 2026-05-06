@@ -50,6 +50,14 @@ export default function TeamSection({
   teamMemberIdList,
   userCanWrite,
 }: Props) {
+  const hasManager = !!manager
+  const hasDirectReports = directReports.length > 0
+  const hasTeamMembers = teamMembers.length > 0
+  const hasAnyTeam = hasManager || hasDirectReports || hasTeamMembers
+
+  // Hide the entire section for read-only users with nothing to show.
+  if (!hasAnyTeam && !userCanWrite) return null
+
   return (
     <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
       <div className="flex items-center justify-between gap-2 mb-4">
@@ -64,49 +72,53 @@ export default function TeamSection({
           />
         )}
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
 
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
-            Manager
-          </p>
-          {manager ? (
-            <OrgPersonLink user={manager} />
-          ) : (
-            <p className="text-sm text-slate-300">None</p>
-          )}
-        </div>
+      {!hasAnyTeam ? (
+        <p className="text-sm text-slate-400">
+          No team relationships yet. Use Add Team Member above, or capture a Reports To
+          relationship via the New Person flow.
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
 
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
-            Direct Reports
-          </p>
-          {directReports.length === 0 ? (
-            <p className="text-sm text-slate-300">None</p>
-          ) : (
-            <p className="text-sm text-slate-600">
-              {directReports.length} direct report{directReports.length !== 1 ? 's' : ''}{' '}
-              <a href="#their-team" className="text-[hsl(213,70%,30%)] hover:underline text-xs font-medium">
-                View below
-              </a>
-            </p>
-          )}
-        </div>
-
-        {teamMembers.length > 0 && (
-          <div className="sm:col-span-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
-              Team Members ({teamMembers.length})
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {teamMembers.map((member) => (
-                <OrgPersonLink key={member.id} user={member} />
-              ))}
+          {hasManager && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+                Manager
+              </p>
+              <OrgPersonLink user={manager} />
             </div>
-          </div>
-        )}
+          )}
 
-      </div>
+          {hasDirectReports && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+                Direct Reports
+              </p>
+              <p className="text-sm text-slate-600">
+                {directReports.length} direct report{directReports.length !== 1 ? 's' : ''}{' '}
+                <a href="#their-team" className="text-[hsl(213,70%,30%)] hover:underline text-xs font-medium">
+                  View below
+                </a>
+              </p>
+            </div>
+          )}
+
+          {hasTeamMembers && (
+            <div className="sm:col-span-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+                Team Members ({teamMembers.length})
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {teamMembers.map((member) => (
+                  <OrgPersonLink key={member.id} user={member} />
+                ))}
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
     </div>
   )
 }
