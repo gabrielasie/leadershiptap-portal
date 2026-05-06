@@ -6,17 +6,17 @@ import { updateTaskStatusAction } from './actions'
 import type { Task, TaskStatus } from '@/lib/types'
 
 const STATUS_STYLES: Record<TaskStatus, string> = {
-  'not started': 'bg-slate-100 text-slate-500',
-  'in progress': 'bg-blue-50 text-blue-700',
-  'completed':   'bg-emerald-50 text-emerald-700',
-  'cancelled':   'bg-rose-50 text-rose-500',
+  'Not Started': 'bg-slate-100 text-slate-500',
+  'In Progress': 'bg-blue-50 text-blue-700',
+  'Complete':    'bg-emerald-50 text-emerald-700',
+  'Cancelled':   'bg-rose-50 text-rose-500',
 }
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
-  'not started': 'Not Started',
-  'in progress': 'In Progress',
-  'completed':   'Done',
-  'cancelled':   'Cancelled',
+  'Not Started': 'Not Started',
+  'In Progress': 'In Progress',
+  'Complete':    'Done',
+  'Cancelled':   'Cancelled',
 }
 
 function formatDue(dateStr: string): string {
@@ -33,7 +33,7 @@ export default function TaskItem({ task }: { task: Task }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const isDone = optimisticStatus === 'completed'
+  const isDone = optimisticStatus === 'Complete'
   const isOverdue =
     task.dueDate &&
     !isDone &&
@@ -41,7 +41,7 @@ export default function TaskItem({ task }: { task: Task }) {
 
   async function toggle() {
     const prev = optimisticStatus
-    const next: TaskStatus = isDone ? 'not started' : 'completed'
+    const next: TaskStatus = isDone ? 'Not Started' : 'Complete'
     setOptimisticStatus(next)
     setError('')
     setLoading(true)

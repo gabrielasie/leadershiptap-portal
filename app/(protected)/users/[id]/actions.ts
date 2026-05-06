@@ -17,6 +17,7 @@ import { upsertCoachPersonContext } from '@/lib/airtable/coachPersonContext'
 import { upsertCoachSession } from '@/lib/airtable/coachSessions'
 import { updatePortalEventNotes } from '@/lib/airtable/meetings'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
+import { resolveContextForSubject } from '@/lib/airtable/relationships'
 
 // ── Edit Profile ──────────────────────────────────────────────────────────────
 
@@ -113,6 +114,10 @@ export async function saveNoteAction(
 ): Promise<void> {
   const userRecord = await getCurrentUserRecord()
   if (!userRecord.airtableId) throw new Error('SAVE_FAILED')
+
+  const rc = await resolveContextForSubject(userRecord.airtableId, subjectPersonId)
+  if (!rc) throw new Error('NO_RELATIONSHIP')
+
   try {
     await createNote({
       content: content.trim(),
@@ -120,6 +125,7 @@ export async function saveNoteAction(
       coachName: userRecord.name || undefined,
       subjectPersonId,
       clientId: subjectPersonId,
+      relationshipContextId: rc.id,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

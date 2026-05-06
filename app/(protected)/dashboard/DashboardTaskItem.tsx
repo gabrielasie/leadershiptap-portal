@@ -26,13 +26,13 @@ export default function DashboardTaskItem({ task }: { task: DashboardTask }) {
   const [error, setError] = useState('')
   const [editOpen, setEditOpen] = useState(false)
 
-  const isDone = optimisticStatus === 'completed'
+  const isDone = optimisticStatus === 'Complete'
   const isOverdue =
     task.dueDate && !isDone && new Date(task.dueDate + 'T23:59:59') < new Date()
 
   async function toggle() {
     const prev = optimisticStatus
-    const next: TaskStatus = isDone ? 'not started' : 'completed'
+    const next: TaskStatus = isDone ? 'Not Started' : 'Complete'
     setOptimisticStatus(next)
     setError('')
     setLoading(true)

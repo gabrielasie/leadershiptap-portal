@@ -322,7 +322,7 @@ async function upsertMeeting(
 
   const fields: Record<string, unknown> = {
     [FIELDS.MEETINGS.TITLE]: `${coachFirstName} / ${personName} — ${event.subject ?? '(No Subject)'}`,
-    [FIELDS.MEETINGS.REL_CONTEXT_ID]: contextId,
+    [FIELDS.MEETINGS.RELATIONSHIP_CONTEXT]: [contextId],
     [FIELDS.MEETINGS.START]: start,
     [FIELDS.MEETINGS.END]: end,
     [FIELDS.MEETINGS.PROVIDER_EVENT_ID]: event.id,
@@ -341,14 +341,17 @@ async function upsertMeeting(
   const findRes = await fetch(
     `${AIRTABLE_API}/${baseId}/${MEETINGS_TABLE}?filterByFormula=${formula}&maxRecords=50` +
       `&fields[]=${encodeURIComponent(FIELDS.MEETINGS.PROVIDER_EVENT_ID)}` +
-      `&fields[]=${encodeURIComponent(FIELDS.MEETINGS.REL_CONTEXT_ID)}`,
+      `&fields[]=${encodeURIComponent(FIELDS.MEETINGS.RELATIONSHIP_CONTEXT)}`,
     { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
   )
   const findData = findRes.ok ? await findRes.json() : { records: [] }
 
   const existingRecord = (findData.records ?? []).find(
     (r: { id: string; fields: Record<string, unknown> }) => {
-      return (r.fields[FIELDS.MEETINGS.REL_CONTEXT_ID] as string | undefined) === contextId
+      const linkedIds = Array.isArray(r.fields[FIELDS.MEETINGS.RELATIONSHIP_CONTEXT])
+        ? (r.fields[FIELDS.MEETINGS.RELATIONSHIP_CONTEXT] as string[])
+        : []
+      return linkedIds[0] === contextId
     },
   )
 

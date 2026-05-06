@@ -66,6 +66,8 @@ export default function LogNoteDialog({ userId }: LogNoteDialogProps) {
       const code = err instanceof Error ? err.message : ''
       if (code === 'NOTES_TABLE_MISSING') {
         setSaveError('Notes table not configured. Contact your administrator.')
+      } else if (code === 'NO_RELATIONSHIP') {
+        setSaveError('No active coaching or reporting relationship reaches this person.')
       } else {
         setSaveError('Failed to save note. Please try again.')
       }

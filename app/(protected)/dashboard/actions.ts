@@ -8,6 +8,7 @@ import { getMeetingsByUserEmail, updatePortalEventNotes } from '@/lib/airtable/m
 import { upsertCoachSession } from '@/lib/airtable/coachSessions'
 import { getUserById } from '@/lib/services/usersService'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
+import { resolveContextForSubject } from '@/lib/airtable/relationships'
 
 export async function dashboardUpdateTaskStatusAction(
   taskId: string,
@@ -113,6 +114,12 @@ export async function dashboardLogNoteAction(params: {
     if (!userRecord.airtableId) {
       return { success: false, error: 'Could not resolve your coach record.' }
     }
+
+    const rc = await resolveContextForSubject(userRecord.airtableId, params.clientId)
+    if (!rc) {
+      return { success: false, error: 'No active coaching or reporting relationship reaches this person.' }
+    }
+
     if (params.meetingId) {
       await upsertCoachSession(
         userRecord.airtableId,
@@ -128,6 +135,7 @@ export async function dashboardLogNoteAction(params: {
         coachName: userRecord.name || undefined,
         subjectPersonId: params.clientId,
         clientId: params.clientId,
+        relationshipContextId: rc.id,
       })
     }
     revalidatePath('/dashboard')
@@ -147,12 +155,19 @@ export async function dashboardSaveNoteAction(
     if (!userRecord.airtableId) {
       return { success: false, error: 'Could not resolve your coach record.' }
     }
+
+    const rc = await resolveContextForSubject(userRecord.airtableId, clientId)
+    if (!rc) {
+      return { success: false, error: 'No active coaching or reporting relationship reaches this person.' }
+    }
+
     await createNote({
       content,
       authorPersonId: userRecord.airtableId,
       coachName: userRecord.name || undefined,
       subjectPersonId: clientId,
       clientId,
+      relationshipContextId: rc.id,
     })
     revalidatePath('/dashboard')
     return { success: true }

@@ -102,7 +102,7 @@ export interface Note {
   visibility: 'private_to_author';
 }
 
-export type TaskStatus = 'not started' | 'in progress' | 'completed' | 'cancelled'
+export type TaskStatus = 'Not Started' | 'In Progress' | 'Complete' | 'Cancelled'
 
 export interface Task {
   id: string;

@@ -366,6 +366,37 @@ export async function getDownstreamPeople(
   return direct
 }
 
+// ── RC resolver for notes ─────────────────────────────────────────────────────
+
+/**
+ * Resolves the Relationship Context that connects a coach to a subject person.
+ *
+ * 1. Direct match: coach is Lead, subject is Person → return that RC.
+ * 2. One-hop downstream: for each direct RC (Lead = coach), check if that
+ *    person leads the subject via their own RCs. Return the *coach's* RC
+ *    (the upstream coaching context), not the downstream row.
+ * 3. No match → return null.
+ */
+export async function resolveContextForSubject(
+  coachId: string,
+  subjectPersonId: string,
+): Promise<RelationshipContext | null> {
+  // 1. Direct
+  const direct = await getRelationshipContext(coachId, subjectPersonId)
+  if (direct) return direct
+
+  // 2. One-hop: coach → intermediate person → subject
+  const coachContexts = await getRelationshipContexts(coachId)
+  for (const rc of coachContexts) {
+    const downstream = await getRelationshipContexts(rc.personId)
+    if (downstream.some((d) => d.personId === subjectPersonId)) {
+      return rc // the coach's upstream RC
+    }
+  }
+
+  return null
+}
+
 // ── Write: onboarding row generation ─────────────────────────────────────────
 
 /**

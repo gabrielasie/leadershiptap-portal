@@ -13,19 +13,19 @@ function getCredentials() {
 
 type AirtableRecord = { id: string; fields: Record<string, unknown> }
 
-const OPEN_STATUSES: TaskStatus[] = ['not started', 'in progress']
+const OPEN_STATUSES: TaskStatus[] = ['Not Started', 'In Progress']
 
 function firstLinkedId(val: unknown): string | undefined {
   return Array.isArray(val) && val.length > 0 ? (val[0] as string) : undefined
 }
 
 function mapTaskRecord(r: AirtableRecord): Task {
-  const rawStatus = ((r.fields[FIELDS.TASKS.STATUS] as string) ?? '').toLowerCase().trim()
+  const rawStatus = ((r.fields[FIELDS.TASKS.STATUS] as string) ?? '').trim().toLowerCase()
   const status: TaskStatus =
-    rawStatus === 'completed' ? 'completed' :
-    rawStatus === 'in progress' ? 'in progress' :
-    rawStatus === 'cancelled' ? 'cancelled' :
-    'not started'
+    rawStatus === 'complete' || rawStatus === 'completed' ? 'Complete' :
+    rawStatus === 'in progress' ? 'In Progress' :
+    rawStatus === 'cancelled' ? 'Cancelled' :
+    'Not Started'
 
   const createdById = firstLinkedId(r.fields[FIELDS.TASKS.CREATED_BY_PERSON])
   const assignedToId = firstLinkedId(r.fields[FIELDS.TASKS.ASSIGNED_TO_PERSON])
@@ -186,7 +186,7 @@ export async function createTask(data: CreateTaskData): Promise<string> {
 
   const fields: Record<string, unknown> = {
     [FIELDS.TASKS.TITLE]: data.title,
-    [FIELDS.TASKS.STATUS]: 'not started',
+    [FIELDS.TASKS.STATUS]: 'Not Started',
     [FIELDS.TASKS.TASK_TYPE]: taskType,
     [FIELDS.TASKS.VISIBILITY]: visibility,
     [FIELDS.TASKS.CREATED_BY_PERSON]: [data.createdByPersonId],

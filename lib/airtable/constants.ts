@@ -29,7 +29,7 @@ export const FIELDS = {
     ATTENDEES: 'Attendees',
     CALENDAR_OWNER: 'Calendar Owner',
     CLIENT_NAME: 'Client Name',
-    REL_CONTEXT_ID: 'Relationship Context ID',
+    RELATIONSHIP_CONTEXT: 'Relationship Context',
     TIMEZONE: 'Timezone',
     MEETING_STATUS: 'Meeting Status',
     CALENDAR_PROVIDER: 'Calendar Provider',
@@ -44,6 +44,7 @@ export const FIELDS = {
     MEETING: 'Meeting',
     NOTE_TYPE: 'Note Type',
     VISIBILITY: 'Visibility',
+    RELATIONSHIP_CONTEXT: 'Relationship Context',
   },
   TASKS: {
     TITLE: 'Title',

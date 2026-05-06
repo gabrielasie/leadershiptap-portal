@@ -11,6 +11,10 @@ function getCredentials() {
   return { apiKey, baseId };
 }
 
+function firstLinkedId(val: unknown): string | undefined {
+  return Array.isArray(val) && val.length > 0 ? (val[0] as string) : undefined;
+}
+
 function parseEmails(raw: unknown): string[] {
   if (!raw) return [];
   const items: string[] = Array.isArray(raw)
@@ -36,7 +40,7 @@ function mapRecord(record: { id: string; fields: Record<string, unknown> }): Mee
     sessionStatus: null,
     actionItems: null,
     clientName: (record.fields[FIELDS.MEETINGS.CLIENT_NAME] as string) || undefined,
-    relationshipContextId: (record.fields[FIELDS.MEETINGS.REL_CONTEXT_ID] as string) || undefined,
+    relationshipContextId: firstLinkedId(record.fields[FIELDS.MEETINGS.RELATIONSHIP_CONTEXT]),
   };
 }
 

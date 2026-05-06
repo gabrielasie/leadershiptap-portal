@@ -23,6 +23,7 @@ export interface Note {
   authorPersonId?: string
   subjectPersonId?: string
   meetingId?: string
+  relationshipContextId?: string
   noteType?: NoteType
   visibility: 'private_to_author'
 }
@@ -41,6 +42,7 @@ function mapRecord(r: AirtableRecord): Note {
     authorPersonId: firstLinkedId(r.fields[FIELDS.NOTES.AUTHOR_PERSON]),
     subjectPersonId: firstLinkedId(r.fields[FIELDS.NOTES.SUBJECT_PERSON]),
     meetingId: firstLinkedId(r.fields[FIELDS.NOTES.MEETING]),
+    relationshipContextId: firstLinkedId(r.fields[FIELDS.NOTES.RELATIONSHIP_CONTEXT]),
     noteType: (r.fields[FIELDS.NOTES.NOTE_TYPE] as NoteType) || undefined,
     visibility: 'private_to_author',
   }
@@ -130,6 +132,30 @@ export async function getNotesByMeetingId(meetingId: string): Promise<Note[]> {
     .filter((n: Note) => n.meetingId === meetingId)
 }
 
+/**
+ * Fetch notes linked to a specific Relationship Context, authored by a specific person.
+ * JS-filtered on both linked fields.
+ */
+export async function getNotesByRelationshipContext(
+  rcId: string,
+  authorPersonId: string,
+): Promise<Note[]> {
+  const { apiKey, baseId } = getCredentials()
+  const url = `${API_BASE}/${baseId}/${TABLE}?${SORT_DATE_DESC}&maxRecords=500`
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: 'no-store',
+  })
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.records ?? [])
+    .map(mapRecord)
+    .filter(
+      (n: Note) =>
+        n.relationshipContextId === rcId && n.authorPersonId === authorPersonId,
+    )
+}
+
 // Alias for backward compatibility — callers that used getNotesByUser
 export const getNotesByUser = getNotesByClient
 
@@ -142,6 +168,7 @@ export interface CreateNoteData {
   authorPersonId?: string
   subjectPersonId?: string
   meetingId?: string
+  relationshipContextId?: string
   coachName?: string
   noteType?: NoteType
 }
@@ -158,6 +185,7 @@ export async function createNote(data: CreateNoteData): Promise<Note> {
   if (data.authorPersonId) fields[FIELDS.NOTES.AUTHOR_PERSON] = [data.authorPersonId]
   if (data.subjectPersonId) fields[FIELDS.NOTES.SUBJECT_PERSON] = [data.subjectPersonId]
   if (data.meetingId) fields[FIELDS.NOTES.MEETING] = [data.meetingId]
+  if (data.relationshipContextId) fields[FIELDS.NOTES.RELATIONSHIP_CONTEXT] = [data.relationshipContextId]
   if (data.coachName) fields[FIELDS.NOTES.COACH_NAME] = data.coachName
 
   const res = await fetch(`${API_BASE}/${baseId}/${TABLE}`, {

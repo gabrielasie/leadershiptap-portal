@@ -144,10 +144,10 @@ export default function EditTaskDialog({ task, open, onOpenChange, onSuccess }: 
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="not started">Not Started</SelectItem>
-                      <SelectItem value="in progress">In Progress</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                      <SelectItem value="Not Started">Not Started</SelectItem>
+                      <SelectItem value="In Progress">In Progress</SelectItem>
+                      <SelectItem value="Complete">Complete</SelectItem>
+                      <SelectItem value="Cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
