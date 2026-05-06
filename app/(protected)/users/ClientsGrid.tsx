@@ -222,6 +222,7 @@ export default function ClientsGrid({ users, coaches, companies }: Props) {
   const [query, setQuery] = useState('')
   const [selectedRole, setSelectedRole] = useState('all')
   const [selectedCoach, setSelectedCoach] = useState('all')
+  const [selectedCompany, setSelectedCompany] = useState('all')
   const [sortBy, setSortBy] = useState('recent')
   const [viewMode, setViewMode] = useState<ViewMode>('clients')
 
@@ -244,7 +245,11 @@ export default function ClientsGrid({ users, coaches, companies }: Props) {
     return [...found].sort()
   }, [users])
 
-  const hasFilters = query.trim() !== '' || selectedRole !== 'all' || selectedCoach !== 'all'
+  const hasFilters =
+    query.trim() !== '' ||
+    selectedRole !== 'all' ||
+    selectedCoach !== 'all' ||
+    selectedCompany !== 'all'
 
   const filtered = useMemo(() => {
     let result = [...users]
@@ -269,6 +274,18 @@ export default function ClientsGrid({ users, coaches, companies }: Props) {
       result = result.filter(({ user }) => user.coachIds?.includes(selectedCoach))
     }
 
+    // Company filter — match by linked company record IDs (reliable) with a
+    // fallback to Company Name string-match for users whose linked field
+    // wasn't populated correctly (lookup-as-string bug, see audit doc).
+    if (selectedCompany !== 'all') {
+      const companyName = companies.find((c) => c.id === selectedCompany)?.name
+      result = result.filter(({ user }) => {
+        if (user.companyLinkedIds?.includes(selectedCompany)) return true
+        if (companyName && user.companyName === companyName) return true
+        return false
+      })
+    }
+
     // Sort
     if (sortBy === 'name-asc') {
       result.sort((a, b) => getDisplayName(a.user).localeCompare(getDisplayName(b.user)))
@@ -279,7 +296,7 @@ export default function ClientsGrid({ users, coaches, companies }: Props) {
     }
 
     return result
-  }, [users, query, selectedRole, selectedCoach, sortBy])
+  }, [users, query, selectedRole, selectedCoach, selectedCompany, sortBy, companies])
 
   // Group by company for company view
   const groupedByCompany = useMemo(() => {
@@ -300,6 +317,7 @@ export default function ClientsGrid({ users, coaches, companies }: Props) {
     setQuery('')
     setSelectedRole('all')
     setSelectedCoach('all')
+    setSelectedCompany('all')
     setSortBy('recent')
   }
 
@@ -335,6 +353,16 @@ export default function ClientsGrid({ users, coaches, companies }: Props) {
           <FilterSelect value={selectedCoach} onChange={setSelectedCoach}>
             <option value="all">All Coaches</option>
             {coaches.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </FilterSelect>
+        )}
+
+        {/* Company filter */}
+        {companies.length > 1 && (
+          <FilterSelect value={selectedCompany} onChange={setSelectedCompany}>
+            <option value="all">All Companies</option>
+            {companies.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </FilterSelect>

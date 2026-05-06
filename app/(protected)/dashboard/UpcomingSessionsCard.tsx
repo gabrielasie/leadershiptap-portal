@@ -24,12 +24,16 @@ export interface UpcomingItem {
 
 interface Props {
   items: UpcomingItem[]
+  /** Override empty state copy. Defaults to upcoming-meeting wording. */
+  emptyMessage?: string
 }
 
-export default function UpcomingSessionsCard({ items }: Props) {
+export default function UpcomingSessionsCard({ items, emptyMessage }: Props) {
   if (items.length === 0) {
     return (
-      <p className="text-sm text-slate-400">No meetings scheduled in the next 7 days.</p>
+      <p className="text-sm text-slate-400">
+        {emptyMessage ?? 'No meetings scheduled in the next 7 days.'}
+      </p>
     )
   }
 
@@ -38,7 +42,14 @@ export default function UpcomingSessionsCard({ items }: Props) {
       {items.map((item) => (
         <Link
           key={item.meetingId}
-          href={`/sessions/${item.meetingId}`}
+          // Link to the user-scoped session page when we matched a client —
+          // gives the coach the right context for taking notes. Otherwise
+          // fall back to the generic session detail.
+          href={
+            item.clientId
+              ? `/users/${item.clientId}/sessions/${item.meetingId}`
+              : `/sessions/${item.meetingId}`
+          }
           className="flex items-center gap-4 px-4 py-4 min-h-[64px] rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors"
         >
           {/* Date block */}

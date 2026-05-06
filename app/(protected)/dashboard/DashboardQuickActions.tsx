@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { FileText, CheckSquare, Calendar } from 'lucide-react'
+import { FileText, CheckSquare, Calendar, History } from 'lucide-react'
 import AddTaskDashboardDialog from './AddTaskDashboardDialog'
+import LogSessionDashboardDialog from './LogSessionDashboardDialog'
 
 interface Client {
   id: string
@@ -57,7 +58,7 @@ export default function DashboardQuickActions({ clients, coaches }: Props) {
   return (
     <div className="bg-white rounded-xl shadow-sm p-4 md:p-6 mb-4 md:mb-6">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Quick Actions</p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <ActionCard
           icon={<FileText className="w-5 h-5 text-blue-600" />}
           iconBg="bg-blue-100"
@@ -70,6 +71,20 @@ export default function DashboardQuickActions({ clients, coaches }: Props) {
           />
         </ActionCard>
 
+        <LogSessionDashboardDialog
+          clients={clients}
+          trigger={
+            <ActionCard
+              icon={<History className="w-5 h-5 text-amber-600" />}
+              iconBg="bg-amber-100"
+              label="Log Session"
+              description="Record a session manually"
+            >
+              <button className="w-full min-h-[72px] rounded-xl border border-slate-200 bg-white hover:border-amber-200 hover:bg-amber-50/40 transition-colors" />
+            </ActionCard>
+          }
+        />
+
         <AddTaskDashboardDialog
           clients={clients}
           coaches={coaches}
@@ -78,7 +93,7 @@ export default function DashboardQuickActions({ clients, coaches }: Props) {
               icon={<CheckSquare className="w-5 h-5 text-emerald-600" />}
               iconBg="bg-emerald-100"
               label="Add Task"
-              description="Assign a follow-up to a client"
+              description="Assign a follow-up"
             >
               <button className="w-full min-h-[72px] rounded-xl border border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/40 transition-colors" />
             </ActionCard>

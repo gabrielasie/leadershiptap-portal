@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Users } from 'lucide-react'
+import { Users, Plus } from 'lucide-react'
 import { getUsers, getClientsByRelationship } from '@/lib/services/usersService'
 import { getRelationshipContexts } from '@/lib/airtable/relationships'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
@@ -181,16 +181,40 @@ export default async function YourClientsRegion({ userRecord }: Props) {
       <div className="flex items-center gap-2 mb-4">
         <Users className="h-5 w-5 text-slate-400" />
         <h2 className="text-lg font-semibold text-slate-900">Your Clients</h2>
-        <Link
-          href="/users"
-          className="ml-auto text-xs text-[hsl(213,70%,30%)] hover:underline font-medium"
-        >
-          View all {users.length}
-        </Link>
+        <div className="ml-auto flex items-center gap-3">
+          <Link
+            href="/people/new"
+            className="inline-flex items-center gap-1 text-xs font-medium text-[hsl(213,70%,30%)] hover:underline"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Person
+          </Link>
+          <Link
+            href="/users"
+            className="text-xs text-[hsl(213,70%,30%)] hover:underline font-medium"
+          >
+            View all {users.length}
+          </Link>
+        </div>
       </div>
 
       {recentClients.length === 0 ? (
-        <p className="text-sm text-slate-400">No clients yet.</p>
+        <div className="flex flex-col items-center text-center py-6">
+          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+            <Users className="w-5 h-5 text-slate-400" />
+          </div>
+          <p className="text-sm font-medium text-slate-700 mb-1">No clients yet</p>
+          <p className="text-xs text-slate-400 mb-4">
+            Add your first person to start tracking sessions, notes, and tasks.
+          </p>
+          <Link
+            href="/people/new"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[hsl(213,70%,30%)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[hsl(213,70%,25%)] transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Person
+          </Link>
+        </div>
       ) : (
         <div>
           {showRelationshipGroups && coachingClients.length > 0 && (

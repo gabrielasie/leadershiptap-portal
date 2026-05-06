@@ -70,6 +70,31 @@ export async function getAllUpcomingMeetings(daysAhead = 7, ownerEmail?: string)
   return (data.records ?? []).map(mapRecord);
 }
 
+// Past meetings within the last N days, sorted by Start desc.
+// Used by the dashboard "Recent Sessions" widget to surface meetings the
+// coach may need to log notes for. Filters on Calendar Owner so Coach A
+// never sees Coach B's events.
+export async function getRecentPastMeetings(daysBack = 14, ownerEmail?: string): Promise<Meeting[]> {
+  const { apiKey, baseId } = getCredentials();
+  const nowIso = new Date().toISOString();
+  const earliestIso = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
+  const timeFilter = `AND(IS_AFTER({${FIELDS.MEETINGS.START}}, "${earliestIso}"), IS_BEFORE({${FIELDS.MEETINGS.START}}, "${nowIso}"))`;
+  const safeOwner = ownerEmail ? ownerEmail.toLowerCase().replace(/"/g, '\\"') : null;
+  const formula = safeOwner
+    ? `AND(${timeFilter}, LOWER({${FIELDS.MEETINGS.CALENDAR_OWNER}}) = "${safeOwner}")`
+    : timeFilter;
+  const res = await fetch(
+    `${API_BASE}/${baseId}/${TABLE}?filterByFormula=${encodeURIComponent(formula)}&sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.MEETINGS.START)}&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=100`,
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: "no-store" },
+  );
+  if (!res.ok) {
+    log.error('[getRecentPastMeetings] failed status:', res.status, 'body:', await res.text());
+    return [];
+  }
+  const data = await res.json();
+  return (data.records ?? []).map(mapRecord);
+}
+
 // All meetings sorted by Start desc (used by dashboard client activity section)
 // ownerEmail: when provided, only returns events where {Calendar Owner} matches this email.
 export async function getAllMeetings(ownerEmail?: string): Promise<Meeting[]> {

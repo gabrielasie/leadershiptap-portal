@@ -4,9 +4,15 @@ import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getCurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import { getHourInTimezone } from '@/lib/utils/dateFormat'
 import ComingUpNextRegion from './regions/ComingUpNextRegion'
+import RecentSessionsRegion from './regions/RecentSessionsRegion'
 import OpenTasksRegion from './regions/OpenTasksRegion'
 import YourClientsRegion from './regions/YourClientsRegion'
-import { ComingUpNextSkeleton, TasksSkeleton, ClientsSkeleton } from './regions/Skeletons'
+import {
+  ComingUpNextSkeleton,
+  RecentSessionsSkeleton,
+  TasksSkeleton,
+  ClientsSkeleton,
+} from './regions/Skeletons'
 import type { User } from '@/lib/types'
 
 function getTimeOfDay(): string {
@@ -63,6 +69,11 @@ export default async function DashboardPage() {
       {/* ── Coming Up Next + Today + Quick Actions + Upcoming This Week ────── */}
       <Suspense fallback={<ComingUpNextSkeleton />}>
         <ComingUpNextRegion userRecord={userRecord} />
+      </Suspense>
+
+      {/* ── Recent Sessions (last 14 days) ─────────────────────────────────── */}
+      <Suspense fallback={<RecentSessionsSkeleton />}>
+        <RecentSessionsRegion userRecord={userRecord} />
       </Suspense>
 
       {/* ── Open Tasks ─────────────────────────────────────────────────────── */}

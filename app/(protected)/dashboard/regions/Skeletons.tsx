@@ -1,4 +1,4 @@
-import { Clock, CheckSquare, Users } from 'lucide-react'
+import { Clock, CheckSquare, Users, History } from 'lucide-react'
 
 function Pulse({ className }: { className: string }) {
   return <div className={`animate-pulse bg-slate-100 rounded ${className}`} />
@@ -63,6 +63,29 @@ export function TasksSkeleton() {
               <Pulse className="h-3 w-24" />
             </div>
             <Pulse className="h-5 w-16 rounded-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function RecentSessionsSkeleton() {
+  return (
+    <div className="mb-4 md:mb-6 bg-white rounded-xl shadow-sm p-4 md:p-6">
+      <div className="flex items-center gap-2 mb-5">
+        <History className="h-5 w-5 text-slate-400" />
+        <span className="text-lg font-semibold text-slate-900">Recent Sessions</span>
+      </div>
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center gap-3 p-3 border border-slate-100 rounded-lg">
+            <Pulse className="w-10 h-12 rounded-lg flex-shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <Pulse className="h-4 w-36" />
+              <Pulse className="h-3 w-24" />
+            </div>
+            <Pulse className="h-3 w-16" />
           </div>
         ))}
       </div>
