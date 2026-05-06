@@ -34,6 +34,23 @@ export interface OnboardingData {
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 /**
+ * Normalises a Relationship Type cell value into the two canonical spec values.
+ * Tolerates legacy / freeform Airtable values like "Executive Coaching", "Coach",
+ * "Reports to", "Direct Report", "manager", etc. Anything that mentions "report"
+ * or "manager" maps to reports_to; anything that mentions "coach" maps to
+ * coaching; anything else falls back to coaching (and is logged so we notice).
+ */
+function normalizeRelationshipType(raw: unknown): 'coaching' | 'reports_to' {
+  const s = (typeof raw === 'string' ? raw : '').toLowerCase().trim()
+  if (!s) return 'coaching'
+  if (s === 'coaching' || s === 'reports_to') return s
+  if (s.includes('report') || s.includes('manager')) return 'reports_to'
+  if (s.includes('coach')) return 'coaching'
+  console.warn(`[RC] non-spec Relationship Type "${raw}" — defaulting to coaching`)
+  return 'coaching'
+}
+
+/**
  * Fetches a name map for all Users (ID → display name).
  * Used to populate personName / leadName without per-record lookups.
  */
@@ -77,8 +94,7 @@ function mapRecord(
     personName: nameMap.get(personId) ?? personId,
     leadId,
     leadName: nameMap.get(leadId) ?? leadId,
-    relationshipType:
-      (r.fields[FIELDS.RELATIONSHIP_CONTEXTS.TYPE] as 'coaching' | 'reports_to') ?? 'coaching',
+    relationshipType: normalizeRelationshipType(r.fields[FIELDS.RELATIONSHIP_CONTEXTS.TYPE]),
     status: (r.fields[FIELDS.RELATIONSHIP_CONTEXTS.STATUS] as string) ?? '',
     organizationId: undefined,
     startDate: (r.fields[FIELDS.RELATIONSHIP_CONTEXTS.START_DATE] as string) ?? undefined,
@@ -260,8 +276,7 @@ export async function getDirectReports(
   const personIds: string[] = []
   for (const r of data.records ?? []) {
     const f = r.fields as Record<string, unknown>
-    const type = (f[FIELDS.RELATIONSHIP_CONTEXTS.TYPE] as string) ?? ''
-    if (type !== 'reports_to') continue
+    if (normalizeRelationshipType(f[FIELDS.RELATIONSHIP_CONTEXTS.TYPE]) !== 'reports_to') continue
     const leadIds = Array.isArray(f[FIELDS.RELATIONSHIP_CONTEXTS.LEAD])
       ? (f[FIELDS.RELATIONSHIP_CONTEXTS.LEAD] as string[])
       : []
@@ -453,7 +468,7 @@ async function fetchExistingPairs(
           ? (r.fields[FIELDS.RELATIONSHIP_CONTEXTS.LEAD] as string[])[0]
           : ''
       ) ?? '',
-      type: (r.fields[FIELDS.RELATIONSHIP_CONTEXTS.TYPE] as string) ?? '',
+      type: normalizeRelationshipType(r.fields[FIELDS.RELATIONSHIP_CONTEXTS.TYPE]),
     }))
 }
 

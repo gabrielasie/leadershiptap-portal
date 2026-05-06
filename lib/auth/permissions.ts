@@ -7,7 +7,8 @@ export type PermissionLevel = 'internal_admin' | 'coach_owner' | 'read_only'
  *
  * - internal_admin: Clerk role === 'admin'
  * - coach_owner: the user has an active Relationship Context with this client
- *   where relationship_type === 'coach'
+ *   where relationship_type === 'coaching' (normalised from any "coach"-ish
+ *   Airtable value via lib/airtable/relationships.ts)
  * - read_only: everyone else (managers, sponsors, unrelated users)
  */
 export async function getPermissionLevel(
