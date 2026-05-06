@@ -191,6 +191,9 @@ export interface CreateManualMeetingData {
   calendarOwnerEmail: string
   relationshipContextId: string
   clientName: string
+  /** Comma-joined participant emails (excluding coach). Required for the
+   *  profile page email-match query to pick up this meeting. */
+  attendeeEmails?: string
 }
 
 export async function createManualMeeting(data: CreateManualMeetingData): Promise<string> {
@@ -203,6 +206,7 @@ export async function createManualMeeting(data: CreateManualMeetingData): Promis
     [FIELDS.MEETINGS.MEETING_STATUS]: 'Completed',
     [FIELDS.MEETINGS.CALENDAR_PROVIDER]: 'Manual',
     [FIELDS.MEETINGS.CALENDAR_OWNER]: data.calendarOwnerEmail,
+    [FIELDS.MEETINGS.ATTENDEES]: data.attendeeEmails ?? '',
     [FIELDS.MEETINGS.RELATIONSHIP_CONTEXT]: [data.relationshipContextId],
     [FIELDS.MEETINGS.CLIENT_NAME]: data.clientName,
   }

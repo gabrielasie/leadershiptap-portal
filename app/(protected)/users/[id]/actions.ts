@@ -291,6 +291,10 @@ export async function logManualSessionAction(params: {
   const start = new Date(params.startIso)
   const end = new Date(start.getTime() + params.durationMinutes * 60_000)
 
+  // Populate Attendees so the profile-page email-match query picks this
+  // session up. Without it, manual sessions don't appear under the client.
+  const subjectEmail = subject?.workEmail ?? subject?.email ?? ''
+
   const { createManualMeeting } = await import('@/lib/airtable/meetings')
   const meetingId = await createManualMeeting({
     title: `${coachFirst} / ${subjectName} — Manual Session`,
@@ -300,6 +304,7 @@ export async function logManualSessionAction(params: {
     calendarOwnerEmail: userRecord.email,
     relationshipContextId: rc.id,
     clientName: subjectName,
+    attendeeEmails: subjectEmail || undefined,
   })
 
   if (params.notes && params.notes.trim().length > 0) {

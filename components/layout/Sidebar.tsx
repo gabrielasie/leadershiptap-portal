@@ -3,11 +3,12 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useUser, useClerk } from '@clerk/nextjs'
-import { Users, LayoutDashboard, Settings, LogOut, Network } from 'lucide-react'
+import { Users, LayoutDashboard, Settings, LogOut, Network, Calendar } from 'lucide-react'
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', enabled: true },
   { href: '/users', icon: Users, label: 'Clients', enabled: true },
+  { href: '/sessions', icon: Calendar, label: 'Sessions', enabled: true },
   { href: '/settings', icon: Settings, label: 'Settings', enabled: true },
 ]
 

@@ -103,11 +103,11 @@ export default function DashboardQuickActions({ clients, coaches }: Props) {
         <ActionCard
           icon={<Calendar className="w-5 h-5 text-violet-600" />}
           iconBg="bg-violet-100"
-          label="My Schedule"
-          description="Jump to upcoming sessions"
+          label="All Sessions"
+          description="Browse past and upcoming"
         >
-          <a
-            href="#upcoming"
+          <Link
+            href="/sessions?filter=upcoming"
             className="block w-full min-h-[72px] rounded-xl border border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/40 transition-colors"
           />
         </ActionCard>

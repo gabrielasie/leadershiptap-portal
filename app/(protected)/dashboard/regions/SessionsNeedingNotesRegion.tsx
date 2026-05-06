@@ -66,9 +66,13 @@ export default async function SessionsNeedingNotesRegion({ userRecord }: Props) 
       <div className="flex items-center gap-2 mb-3">
         <FileText className="h-5 w-5 text-amber-500" />
         <h2 className="text-lg font-semibold text-slate-900">Sessions Needing Notes</h2>
-        <span className="ml-auto text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+        <Link
+          href="/sessions?filter=needs-notes"
+          className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 px-2 py-0.5 rounded-full transition-colors"
+        >
           {items.length} pending
-        </span>
+          <ChevronRight className="h-3 w-3" />
+        </Link>
       </div>
       <ul className="divide-y divide-slate-100">
         {visible.map((item) => {
@@ -105,9 +109,12 @@ export default async function SessionsNeedingNotesRegion({ userRecord }: Props) 
         })}
       </ul>
       {overflow > 0 && (
-        <p className="text-xs text-slate-400 mt-3 pl-1">
-          and {overflow} more session{overflow === 1 ? '' : 's'} from the last {DAYS_BACK} days
-        </p>
+        <Link
+          href="/sessions?filter=needs-notes"
+          className="inline-flex items-center gap-1 text-xs font-medium text-[hsl(213,70%,30%)] hover:underline mt-3 pl-1"
+        >
+          View all {items.length} →
+        </Link>
       )}
     </div>
   )

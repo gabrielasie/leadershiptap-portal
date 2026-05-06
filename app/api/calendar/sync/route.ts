@@ -339,6 +339,15 @@ async function upsertMeeting(
   // Cancelled events are handled separately upstream and never reach this path.
   const meetingStatus = new Date(end).getTime() < Date.now() ? 'Completed' : 'Scheduled'
 
+  // Build the Attendees value (comma-joined participant emails, coach
+  // excluded). Required for the profile-page email-match query to find
+  // this meeting under the client.
+  const coachLower = coachEmail.toLowerCase()
+  const attendeesString = (event.attendees ?? [])
+    .map((a) => a.emailAddress.address.trim())
+    .filter((e) => e && e.toLowerCase() !== coachLower)
+    .join(', ')
+
   const fields: Record<string, unknown> = {
     [FIELDS.MEETINGS.TITLE]: `${coachFirstName} / ${personName} — ${event.subject ?? '(No Subject)'}`,
     [FIELDS.MEETINGS.RELATIONSHIP_CONTEXT]: [contextId],
@@ -347,6 +356,7 @@ async function upsertMeeting(
     [FIELDS.MEETINGS.PROVIDER_EVENT_ID]: event.id,
     [FIELDS.MEETINGS.CALENDAR_OWNER]: coachEmail,
     [FIELDS.MEETINGS.CLIENT_NAME]: personName,
+    [FIELDS.MEETINGS.ATTENDEES]: attendeesString,
     [FIELDS.MEETINGS.MEETING_STATUS]: meetingStatus,
     [FIELDS.MEETINGS.CALENDAR_PROVIDER]: 'Outlook',
     [FIELDS.MEETINGS.TIMEZONE]: event.start.timeZone ?? 'America/New_York',

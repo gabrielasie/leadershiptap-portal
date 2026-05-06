@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Calendar } from 'lucide-react'
 import { getUsers, getClientsByRelationship } from '@/lib/services/usersService'
 import { getRelationshipContexts } from '@/lib/airtable/relationships'
@@ -59,11 +60,19 @@ export default async function UpcomingThisWeekRegion({ userRecord }: Props) {
       <div className="flex items-center gap-2 mb-5">
         <Calendar className="h-5 w-5 text-slate-400" />
         <h2 className="text-lg font-semibold text-slate-900">Upcoming This Week</h2>
-        <span className="ml-auto text-xs text-slate-400 font-medium">
-          {clientCount > 0
-            ? `${clientCount} client ${clientCount === 1 ? 'meeting' : 'meetings'}`
-            : `${items.length} ${items.length === 1 ? 'meeting' : 'meetings'}`}
-        </span>
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-xs text-slate-400 font-medium">
+            {clientCount > 0
+              ? `${clientCount} client ${clientCount === 1 ? 'meeting' : 'meetings'}`
+              : `${items.length} ${items.length === 1 ? 'meeting' : 'meetings'}`}
+          </span>
+          <Link
+            href="/sessions?filter=upcoming"
+            className="text-xs font-medium text-[hsl(213,70%,30%)] hover:underline"
+          >
+            View all →
+          </Link>
+        </div>
       </div>
       <UpcomingSessionsCard items={items} />
     </div>
