@@ -1,16 +1,16 @@
 import Link from 'next/link'
-import { Calendar, ChevronRight, Clock, CalendarDays } from 'lucide-react'
+import { ChevronRight, Clock, CalendarDays, FileText } from 'lucide-react'
 import { TABLES, FIELDS } from '@/lib/airtable/constants'
 import { log } from '@/lib/utils/logger'
 import { getUsers, getClientsByRelationship, getPortalCoaches } from '@/lib/services/usersService'
 import { getRelationshipContexts } from '@/lib/airtable/relationships'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
-import { getAllUpcomingMeetings } from '@/lib/airtable/meetings'
-import { buildEmailToUserMap, findClientForMeeting } from '@/lib/services/meetingsService'
+import { getAllUpcomingMeetings, getRecentPastMeetings } from '@/lib/airtable/meetings'
+import { buildEmailToUserMap } from '@/lib/services/meetingsService'
 import { getNotesByAuthor } from '@/lib/airtable/notes'
-import { getDateInTimezone, getHourInTimezone } from '@/lib/utils/dateFormat'
-import UpcomingSessionsCard, { type UpcomingItem } from '../UpcomingSessionsCard'
+import { getDateInTimezone } from '@/lib/utils/dateFormat'
 import DashboardQuickActions from '../DashboardQuickActions'
+import { meetingsToUpcomingItems } from './meetingMappers'
 import type { CurrentUserRecord } from '@/lib/auth/getCurrentUserRecord'
 import type { User } from '@/lib/types'
 
@@ -72,7 +72,6 @@ async function getUpcomingPortalEvents(ownerEmail: string): Promise<PortalCalend
     `AND(IS_AFTER({${FIELDS.MEETINGS.START}}, "${now.toISOString()}"), IS_BEFORE({${FIELDS.MEETINGS.START}}, "${cutoff.toISOString()}"), LOWER({${FIELDS.MEETINGS.CALENDAR_OWNER}}) = "${safeOwner}")`,
   )
   try {
-    log.debug('[getUpcomingPortalEvents] table:', TABLES.MEETINGS, 'filter:', decodeURIComponent(formula))
     const res = await fetch(
       `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(TABLES.MEETINGS)}?filterByFormula=${formula}&sort%5B0%5D%5Bfield%5D=${encodeURIComponent(FIELDS.MEETINGS.START)}&sort%5B0%5D%5Bdirection%5D=asc&maxRecords=10`,
       { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
@@ -102,104 +101,53 @@ export default async function ComingUpNextRegion({ userRecord }: Props) {
   const isAdmin = userRecord.role === 'admin'
   const ownerEmail = userRecord.email || undefined
 
-  const [users, upcomingMeetings, coachContexts, coachNotes, portalEvents, coachUsers] = await Promise.all([
-    isAdmin || !userRecord.airtableId
-      ? getUsers(sessionUser)
-      : getClientsByRelationship(userRecord.airtableId),
-    getAllUpcomingMeetings(7, ownerEmail),
-    !isAdmin && userRecord.airtableId
-      ? getRelationshipContexts(userRecord.airtableId)
-      : Promise.resolve([]),
-    userRecord.airtableId
-      ? getNotesByAuthor(userRecord.airtableId)
-      : Promise.resolve([]),
-    isAdmin && ownerEmail ? getUpcomingPortalEvents(ownerEmail) : Promise.resolve([]),
-    getPortalCoaches(userRecord.airtableId ?? undefined),
-  ])
+  // Fetch upcoming AND last 24 hours so we can show today's past sessions in
+  // the same Today chip row.
+  const [users, upcomingMeetings, pastDay, coachContexts, coachNotes, portalEvents, coachUsers] =
+    await Promise.all([
+      isAdmin || !userRecord.airtableId
+        ? getUsers(sessionUser)
+        : getClientsByRelationship(userRecord.airtableId),
+      getAllUpcomingMeetings(7, ownerEmail),
+      getRecentPastMeetings(1, ownerEmail),
+      !isAdmin && userRecord.airtableId
+        ? getRelationshipContexts(userRecord.airtableId)
+        : Promise.resolve([]),
+      userRecord.airtableId
+        ? getNotesByAuthor(userRecord.airtableId)
+        : Promise.resolve([]),
+      isAdmin && ownerEmail ? getUpcomingPortalEvents(ownerEmail) : Promise.resolve([]),
+      getPortalCoaches(userRecord.airtableId ?? undefined),
+    ])
 
   const emailToUser = buildEmailToUserMap(users)
   const now = new Date()
-
-  const notedMeetingIds = new Set(
-    coachNotes.map((n) => n.meetingId).filter(Boolean),
-  )
-
-  const activeContextIds = new Set(coachContexts.map((c) => c.id))
-  const ownershipFilteredUpcoming = isAdmin
-    ? upcomingMeetings
-    : upcomingMeetings.filter(
-        (m) => !m.relationshipContextId || activeContextIds.has(m.relationshipContextId),
-      )
-
-  // Dedup
-  const seenById = new Set<string>()
-  const seenKeys = new Set<string>()
-  const dedupedUpcoming = ownershipFilteredUpcoming.filter((m) => {
-    if (m.providerEventId) {
-      if (seenById.has(m.providerEventId)) return false
-      seenById.add(m.providerEventId)
-      return true
-    }
-    const key = `${m.title ?? ''}|${m.startTime ?? ''}`
-    if (seenKeys.has(key)) return false
-    seenKeys.add(key)
-    return true
-  })
-
+  const notedMeetingIds = new Set(coachNotes.map((n) => n.meetingId).filter(Boolean) as string[])
+  const activeContextIds = isAdmin ? null : new Set(coachContexts.map((c) => c.id))
   const coachEmail = sessionUser?.email?.toLowerCase() ?? ''
-  const upcomingItems: UpcomingItem[] = dedupedUpcoming.map((meeting) => {
-    const client =
-      findClientForMeeting(meeting, emailToUser) ??
-      (meeting.senderEmail
-        ? (emailToUser.get(meeting.senderEmail.toLowerCase().trim()) ?? null)
-        : null)
-    const tz = meeting.timezone || 'America/New_York'
-    const fmt = (iso: string) =>
-      new Date(iso).toLocaleString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true })
-    const timeRange = meeting.endTime
-      ? `${fmt(meeting.startTime)} – ${fmt(meeting.endTime)} ET`
-      : `${fmt(meeting.startTime)} ET`
 
-    const externalEmails = meeting.participantEmails.filter(
-      (e) => e && !e.toLowerCase().includes('leadershiptap.com') && e.toLowerCase() !== coachEmail,
-    )
-
-    return {
-      meetingId: meeting.id,
-      providerEventId: meeting.providerEventId ?? null,
-      title: meeting.title,
-      startTime: meeting.startTime,
-      endTime: meeting.endTime,
-      timezone: tz,
-      weekday: new Date(meeting.startTime).toLocaleString('en-US', { timeZone: tz, weekday: 'short' }),
-      day: parseInt(new Date(meeting.startTime).toLocaleString('en-US', { timeZone: tz, day: 'numeric' }), 10),
-      month: new Date(meeting.startTime).toLocaleString('en-US', { timeZone: tz, month: 'short' }),
-      timeRange,
-      clientId: client?.id ?? null,
-      clientName: meeting.clientName ?? (client ? getDisplayName(client) : null),
-      displayLabel: client ? null : (() => {
-        const allEmails = [meeting.senderEmail, ...meeting.participantEmails]
-          .filter(Boolean)
-          .map((e) => e!.trim().toLowerCase())
-          .filter((e) => e && !e.includes('leadershiptap') && e !== coachEmail)
-        const domains = [...new Set(
-          allEmails
-            .map((e) => e.split('@')[1]?.replace(/\.(com|net|org|io)$/, '') ?? '')
-            .filter(Boolean),
-        )]
-        return domains.slice(0, 2).join(', ') || null
-      })(),
-      participantEmails: externalEmails,
-      hasNote: notedMeetingIds.has(meeting.id),
-    }
-  })
+  const mapOpts = { emailToUser, notedMeetingIds, coachEmail, activeContextIds }
+  const upcomingItems = meetingsToUpcomingItems(upcomingMeetings, mapOpts)
+  const pastDayItems = meetingsToUpcomingItems(pastDay, mapOpts)
 
   const todayStr = getDateInTimezone(now.toISOString())
-  const todayItems = upcomingItems.filter(
+  const futureToday = upcomingItems.filter(
     (item) => getDateInTimezone(item.startTime, item.timezone || undefined) === todayStr,
   )
+  const pastToday = pastDayItems.filter(
+    (item) => getDateInTimezone(item.startTime, item.timezone || undefined) === todayStr,
+  )
+
   const nextItem = upcomingItems.find((item) => new Date(item.startTime) > now) ?? null
-  const otherTodayItems = todayItems.filter((item) => item !== nextItem)
+
+  // Combine: past today first, then future today (chronological is fine since
+  // past dot indicator differentiates). Exclude the "Coming Up Next" hero item.
+  const allTodayItems = [
+    ...pastToday.map((i) => ({ ...i, isPast: true })),
+    ...futureToday
+      .filter((i) => i !== nextItem)
+      .map((i) => ({ ...i, isPast: false })),
+  ]
 
   const nextClient = nextItem?.clientId
     ? (users.find((u) => u.id === nextItem.clientId) ?? null)
@@ -265,33 +213,50 @@ export default async function ComingUpNextRegion({ userRecord }: Props) {
         </div>
       )}
 
-      {/* ── Other today sessions — chip row ──────────────────────────────────── */}
-      {otherTodayItems.length > 0 && (
+      {/* ── Today: past + future chips ───────────────────────────────────────── */}
+      {allTodayItems.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1 mb-4 md:mb-6 scrollbar-none">
-          {otherTodayItems.map((item) => {
+          {allTodayItems.map((item) => {
+            const needsNotes = item.isPast && !item.hasNote
             const inner = (
-              <span className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1.5 rounded-full bg-white border border-slate-200 text-sm hover:border-[hsl(213,60%,70%)] hover:text-[hsl(213,70%,30%)] transition-colors">
-                <span className="text-slate-400 text-xs font-medium">{item.timeRange}</span>
-                <span className="text-slate-700 font-medium">
-                  {item.clientName ?? item.title}
+              <span
+                className={`inline-flex items-center gap-2 whitespace-nowrap px-3 py-1.5 rounded-full text-sm transition-colors border ${
+                  item.isPast
+                    ? needsNotes
+                      ? 'bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100'
+                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                    : 'bg-white border-slate-200 hover:border-[hsl(213,60%,70%)] hover:text-[hsl(213,70%,30%)]'
+                }`}
+                title={item.title}
+              >
+                <span className={`text-xs font-medium ${item.isPast ? 'text-slate-400' : 'text-slate-400'}`}>
+                  {item.timeRange}
                 </span>
+                <span className="font-medium">{item.clientName ?? item.title}</span>
+                {needsNotes && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide">
+                    <FileText className="h-3 w-3" />
+                    Note
+                  </span>
+                )}
               </span>
             )
-            return item.clientId ? (
-              <Link key={item.meetingId} href={`/users/${item.clientId}`}>
+            const href = item.clientId
+              ? `/users/${item.clientId}/sessions/${item.meetingId}`
+              : `/sessions/${item.meetingId}`
+            return (
+              <Link key={item.meetingId} href={href}>
                 {inner}
               </Link>
-            ) : (
-              <div key={item.meetingId}>{inner}</div>
             )
           })}
         </div>
       )}
 
-      {/* ── Quick Actions ─────────────────────────────────────────────────────── */}
+      {/* ── Quick Actions ────────────────────────────────────────────────────── */}
       <DashboardQuickActions clients={clientsForActions} coaches={coachesForActions} />
 
-      {/* ── Upcoming Sessions (from Calendar) — admin only ────────────────────── */}
+      {/* ── Upcoming Sessions (admin only, from Calendar) ────────────────────── */}
       {isAdmin && portalEvents.length > 0 && (
         <div className="mb-4 md:mb-6 bg-white rounded-xl shadow-sm p-4 md:p-6">
           <div className="flex items-center gap-2 mb-4">
@@ -329,25 +294,6 @@ export default async function ComingUpNextRegion({ userRecord }: Props) {
           </div>
         </div>
       )}
-
-      {/* ── Upcoming This Week ────────────────────────────────────────────────── */}
-      <div id="upcoming" className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-        <div className="flex items-center gap-2 mb-5">
-          <Calendar className="h-5 w-5 text-slate-400" />
-          <h2 className="text-lg font-semibold text-slate-900">Upcoming This Week</h2>
-          {upcomingItems.length > 0 && (() => {
-            const clientCount = upcomingItems.filter((i) => i.clientId).length
-            return (
-              <span className="ml-auto text-xs text-slate-400 font-medium">
-                {clientCount > 0
-                  ? `${clientCount} client ${clientCount === 1 ? 'meeting' : 'meetings'}`
-                  : `${upcomingItems.length} ${upcomingItems.length === 1 ? 'meeting' : 'meetings'}`}
-              </span>
-            )
-          })()}
-        </div>
-        <UpcomingSessionsCard items={upcomingItems} />
-      </div>
     </>
   )
 }

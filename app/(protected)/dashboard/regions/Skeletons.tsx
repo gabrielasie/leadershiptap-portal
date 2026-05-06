@@ -1,4 +1,4 @@
-import { Clock, CheckSquare, Users, History } from 'lucide-react'
+import { Clock, CheckSquare, Users, FileText, Calendar } from 'lucide-react'
 
 function Pulse({ className }: { className: string }) {
   return <div className={`animate-pulse bg-slate-100 rounded ${className}`} />
@@ -6,42 +6,62 @@ function Pulse({ className }: { className: string }) {
 
 export function ComingUpNextSkeleton() {
   return (
-    <div>
-      {/* Coming Up Next card */}
-      <div className="bg-[hsl(213,60%,97%)] border border-[hsl(213,50%,88%)] rounded-xl p-5 mb-4 md:mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Clock className="h-4 w-4 text-[hsl(213,70%,45%)]" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(213,70%,45%)]">
-            Coming Up Next
-          </span>
-        </div>
-        <div className="flex items-start gap-4">
-          <Pulse className="w-12 h-12 rounded-full flex-shrink-0" />
-          <div className="flex-1 space-y-2">
-            <Pulse className="h-4 w-32" />
-            <Pulse className="h-5 w-48" />
-            <Pulse className="h-3 w-28" />
-          </div>
+    <div className="bg-[hsl(213,60%,97%)] border border-[hsl(213,50%,88%)] rounded-xl p-5 mb-4 md:mb-6">
+      <div className="flex items-center gap-2 mb-3">
+        <Clock className="h-4 w-4 text-[hsl(213,70%,45%)]" />
+        <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(213,70%,45%)]">
+          Coming Up Next
+        </span>
+      </div>
+      <div className="flex items-start gap-4">
+        <Pulse className="w-12 h-12 rounded-full flex-shrink-0" />
+        <div className="flex-1 space-y-2">
+          <Pulse className="h-4 w-32" />
+          <Pulse className="h-5 w-48" />
+          <Pulse className="h-3 w-28" />
         </div>
       </div>
+    </div>
+  )
+}
 
-      {/* Upcoming This Week placeholder */}
-      <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-        <div className="flex items-center gap-2 mb-5">
-          <Pulse className="h-5 w-5 rounded" />
-          <Pulse className="h-5 w-40" />
-        </div>
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center gap-3 p-3 border border-slate-100 rounded-lg">
-              <Pulse className="w-10 h-12 rounded-lg flex-shrink-0" />
-              <div className="flex-1 space-y-1.5">
-                <Pulse className="h-4 w-36" />
-                <Pulse className="h-3 w-24" />
-              </div>
+export function SessionsNeedingNotesSkeleton() {
+  return (
+    <div className="mb-4 md:mb-6 bg-white rounded-xl shadow-sm p-4 md:p-6">
+      <div className="flex items-center gap-2 mb-3">
+        <FileText className="h-5 w-5 text-amber-500" />
+        <span className="text-lg font-semibold text-slate-900">Sessions Needing Notes</span>
+      </div>
+      <div className="divide-y divide-slate-100">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center gap-3 py-2.5 px-1">
+            <Pulse className="h-3 w-16 flex-shrink-0" />
+            <Pulse className="h-4 flex-1" />
+            <Pulse className="h-3 w-16 flex-shrink-0" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function UpcomingThisWeekSkeleton() {
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-4 md:p-6 mb-4 md:mb-6">
+      <div className="flex items-center gap-2 mb-5">
+        <Calendar className="h-5 w-5 text-slate-400" />
+        <span className="text-lg font-semibold text-slate-900">Upcoming This Week</span>
+      </div>
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center gap-3 p-3 border border-slate-100 rounded-lg">
+            <Pulse className="w-10 h-12 rounded-lg flex-shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <Pulse className="h-4 w-36" />
+              <Pulse className="h-3 w-24" />
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -70,28 +90,6 @@ export function TasksSkeleton() {
   )
 }
 
-export function RecentSessionsSkeleton() {
-  return (
-    <div className="mb-4 md:mb-6 bg-white rounded-xl shadow-sm p-4 md:p-6">
-      <div className="flex items-center gap-2 mb-5">
-        <History className="h-5 w-5 text-slate-400" />
-        <span className="text-lg font-semibold text-slate-900">Recent Sessions</span>
-      </div>
-      <div className="space-y-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="flex items-center gap-3 p-3 border border-slate-100 rounded-lg">
-            <Pulse className="w-10 h-12 rounded-lg flex-shrink-0" />
-            <div className="flex-1 space-y-1.5">
-              <Pulse className="h-4 w-36" />
-              <Pulse className="h-3 w-24" />
-            </div>
-            <Pulse className="h-3 w-16" />
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 export function ClientsSkeleton() {
   return (
