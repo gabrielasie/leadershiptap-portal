@@ -13,6 +13,33 @@ Built with **Next.js 16 (App Router)**, **Clerk** authentication, **Airtable** a
 
 ---
 
+## Demo
+
+<!--
+  ▶ VIDEO PLACEHOLDER
+  GitHub plays video files (MP4/MOV) dropped directly into a README. To add yours:
+    1. Record a 1–3 min walkthrough (sign-in → dashboard → client profile → notes → calendar sync).
+    2. Edit this file on github.com and drag the video into the editor, OR open a draft issue,
+       drag the file in, and copy the generated https://github.com/user-attachments/assets/... URL.
+    3. Replace the linked thumbnail below with that URL (or paste the URL on its own line to embed).
+-->
+
+[![Watch the demo](https://placehold.co/960x420/0f172a/e2e8f0/png?text=%E2%96%B6%EF%B8%8E+Watch+the+2-min+demo)](https://example.com/replace-with-demo-video-url)
+
+> 📹 **Demo video coming soon** — replace the placeholder above with a screen-recorded walkthrough.
+
+### Screenshots
+
+<!-- Replace these placeholders with real captures (e.g. saved under docs/screenshots/). -->
+
+| Dashboard | Client profile |
+| :---: | :---: |
+| ![Dashboard](https://placehold.co/600x360/e2e8f0/475569/png?text=Dashboard) | ![Client profile](https://placehold.co/600x360/e2e8f0/475569/png?text=Client+Profile) |
+| **Session notes** | **Handwritten ink notes** |
+| ![Session notes](https://placehold.co/600x360/e2e8f0/475569/png?text=Session+Notes) | ![Ink notes](https://placehold.co/600x360/e2e8f0/475569/png?text=Ink+Note-Taking) |
+
+---
+
 ## Features
 
 - **Client directory & profiles** — searchable, filterable client list with rich profiles (role, company, team, personality assessments, relationship context, and coaching history).
@@ -97,6 +124,30 @@ Open [http://localhost:3000](http://localhost:3000). You will be redirected to `
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    User([Coach / Admin])
+    User --> Browser["Browser · React 19"]
+
+    Browser -->|authenticated request| MW["proxy.ts<br/>Clerk middleware"]
+    Clerk[("Clerk<br/>SSO + sessions")] -. verifies session .-> MW
+    MW --> App["Next.js 16 · App Router<br/>Server Components + Server Actions"]
+
+    App -->|read / write records| AT[("Airtable<br/>REST API")]
+    App -->|profile photo upload| Cloud[("Cloudinary")]
+
+    subgraph Sync["Calendar sync"]
+        Settings["Settings page"] -->|Clerk session| Endpoint["/api/calendar/sync"]
+        Cron["Render Cron · hourly"] -->|SYNC_SECRET| Endpoint
+        Endpoint -->|app-only token| Graph[("Microsoft<br/>Graph API")]
+        Endpoint -->|upsert events| AT
+    end
+
+    App --> Sync
+```
+
+> The browser never touches Airtable, Graph, or Cloudinary secrets — every external call is made server-side from route handlers and server actions.
+
 ### Airtable tables
 
 | Table | Purpose |
@@ -112,6 +163,19 @@ Open [http://localhost:3000](http://localhost:3000). You will be redirected to `
 | **Personality lookups** | Enneagram / 16Personalities / Conflict Postures / Apology Languages / Strengths. |
 
 > An older **Calendar Events** table exists as an archived, read-only snapshot and is never queried by the portal — all calendar reads/writes go through **Portal Calendar Events**.
+
+Core relationships (simplified):
+
+```mermaid
+erDiagram
+    USERS ||--o{ COACH_PERSON_CONTEXT : "coach + person"
+    USERS ||--o{ COACH_SESSION : "coach + focal person"
+    USERS ||--o{ TASKS : "client"
+    USERS ||--o{ MESSAGES : "recipient"
+    USERS ||--o{ NOTES : "author + subject"
+    USERS }o--|| COMPANIES : "belongs to"
+    PORTAL_CALENDAR_EVENTS ||--o{ COACH_SESSION : "linked event"
+```
 
 ### Auth layers
 
@@ -151,6 +215,24 @@ Coaches can toggle between **Coach View** (their own clients only) and **Admin V
 The sync can be triggered two ways:
 - **From the Settings page** (authenticated via the Clerk session), or
 - **By an hourly cron** — `render.yaml` defines a Render Cron job (`scripts/sync-calendar.mjs`) that calls the endpoint with a `SYNC_SECRET` header.
+
+```mermaid
+sequenceDiagram
+    participant T as Cron / Settings
+    participant API as /api/calendar/sync
+    participant G as Microsoft Graph
+    participant AT as Airtable
+    T->>API: POST (SYNC_SECRET or Clerk session)
+    API->>G: request app-only token
+    G-->>API: access token
+    API->>G: GET events (past/future window, paginated)
+    G-->>API: calendar events
+    loop each event
+        API->>AT: upsert by Provider Event ID
+    end
+    Note over API,AT: existing Notes are never overwritten
+    AT-->>API: created / updated counts
+```
 
 ---
 
