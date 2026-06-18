@@ -13,33 +13,6 @@ Built with **Next.js 16 (App Router)**, **Clerk** authentication, **Airtable** a
 
 ---
 
-## Demo
-
-<!--
-  ▶ VIDEO PLACEHOLDER
-  GitHub plays video files (MP4/MOV) dropped directly into a README. To add yours:
-    1. Record a 1–3 min walkthrough (sign-in → dashboard → client profile → notes → calendar sync).
-    2. Edit this file on github.com and drag the video into the editor, OR open a draft issue,
-       drag the file in, and copy the generated https://github.com/user-attachments/assets/... URL.
-    3. Replace the linked thumbnail below with that URL (or paste the URL on its own line to embed).
--->
-
-[![Watch the demo](https://placehold.co/960x420/0f172a/e2e8f0/png?text=%E2%96%B6%EF%B8%8E+Watch+the+2-min+demo)](https://example.com/replace-with-demo-video-url)
-
-> 📹 **Demo video coming soon** — replace the placeholder above with a screen-recorded walkthrough.
-
-### Screenshots
-
-<!-- Replace these placeholders with real captures (e.g. saved under docs/screenshots/). -->
-
-| Dashboard | Client profile |
-| :---: | :---: |
-| ![Dashboard](https://placehold.co/600x360/e2e8f0/475569/png?text=Dashboard) | ![Client profile](https://placehold.co/600x360/e2e8f0/475569/png?text=Client+Profile) |
-| **Session notes** | **Handwritten ink notes** |
-| ![Session notes](https://placehold.co/600x360/e2e8f0/475569/png?text=Session+Notes) | ![Ink notes](https://placehold.co/600x360/e2e8f0/475569/png?text=Ink+Note-Taking) |
-
----
-
 ## Features
 
 - **Client directory & profiles** — searchable, filterable client list with rich profiles (role, company, team, personality assessments, relationship context, and coaching history).
