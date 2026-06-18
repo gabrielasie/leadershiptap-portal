@@ -12,6 +12,11 @@ Built with **Next.js 16 (App Router)**, **Clerk** authentication, **Airtable** a
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-38BDF8?logo=tailwindcss&logoColor=white)
 
 ---
+## Demo Video
+
+https://github.com/user-attachments/assets/ce33bb29-c652-42c9-8f9d-060dc2afac3e
+
+
 
 ## Features
 
