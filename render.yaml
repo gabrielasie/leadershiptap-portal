@@ -1,0 +1,12 @@
+services:
+  - type: cron
+    name: calendar-sync-cron
+    runtime: node
+    schedule: "0 * * * *"
+    buildCommand: ""
+    startCommand: node scripts/sync-calendar.mjs
+    envVars:
+      - key: SYNC_SECRET
+        sync: false
+      - key: SYNC_HOST
+        value: portal-leadershiptap.com
